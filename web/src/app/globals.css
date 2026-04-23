@@ -1,0 +1,443 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Base Colors (OLED Default) */
+  --bg-main: #000000;
+  --bg-surface: #0d0d0d;
+  --text-main: #ffffff;
+  --text-muted: #9ca3af;
+  --text-inverted: #000000;
+
+  --border-color: rgba(255, 255, 255, 0.15);
+  --border-color-hover: rgba(255, 255, 255, 0.3);
+
+  --input-bg: #000000;
+  --grid-color: rgba(255, 255, 255, 0.05);
+  --dot-color: rgba(156, 163, 175, 0.22);
+
+  /* Accents (OLED - Vibrant) */
+  --col-red: #e63946;
+  --col-yellow: #ffc300;
+  --col-blue: #4361ee;
+  --col-purple: #8338ec;
+  --col-teal: #2ec4b6;
+  --col-pink: #ff006e;
+  --col-white: #ffffff;
+  --col-grey: #6c757d;
+}
+
+/* LOW CONTRAST THEME */
+[data-theme="low-contrast"] {
+  --bg-main: #121212;
+  --bg-surface: #1e1e1e;
+  --text-main: #e0e0e0;
+  --text-muted: #888888;
+  --text-inverted: #121212;
+
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-color-hover: rgba(255, 255, 255, 0.15);
+
+  --input-bg: #161616;
+  --grid-color: rgba(255, 255, 255, 0.03);
+  --dot-color: rgba(148, 163, 184, 0.18);
+
+  /* Accents (Muted / Desaturated) */
+  --col-red: #a64951;
+  --col-yellow: #cc9f00;
+  --col-blue: #4d62b5;
+  --col-purple: #6d4ca3;
+  --col-teal: #3d8c85;
+  --col-pink: #b54276;
+  --col-white: #c0c0c0;
+  --col-grey: #555555;
+}
+
+/* LIGHT MODE */
+[data-theme="light"] {
+  --bg-main: #f2f2f2;
+  --bg-surface: #ffffff;
+  --text-main: #1a1a1a;
+  --text-muted: #666666;
+  --text-inverted: #ffffff;
+
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-color-hover: rgba(0, 0, 0, 0.2);
+
+  --input-bg: #ffffff;
+  --grid-color: rgba(0, 0, 0, 0.05);
+  --dot-color: rgba(100, 116, 139, 0.18);
+
+  /* Accents (Darker for readability on light bg) */
+  --col-red: #c92a37;
+  --col-yellow: #e0a800;
+  --col-blue: #304bcf;
+  --col-purple: #6b23c9;
+  --col-teal: #1b8c80;
+  --col-pink: #d60058;
+  --col-white: #1a1a1a;
+  --col-grey: #999999;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-inter), sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.mono {
+  font-family: var(--font-mono), monospace;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333333;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--col-red);
+}
+
+/* Bauhaus grid pattern */
+.bauhaus-bg {
+  background-image: radial-gradient(circle at 1px 1px, var(--dot-color) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Rectangular Grid Pattern for Editor */
+.pattern-grid {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+}
+
+/* Standard text shadow glitch */
+.glitch-text {
+  position: relative;
+  text-shadow: 2px 0px 0px rgba(230, 57, 70, 0.7), -2px 0px 0px rgba(67, 97, 238, 0.7);
+}
+
+[data-theme="low-contrast"] .glitch-text {
+  text-shadow: none;
+}
+
+/* ADVANCED GLITCH ANIMATION */
+.glitch-anim {
+  position: relative;
+  animation: glitch-skew 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite;
+}
+
+.glitch-anim::before,
+.glitch-anim::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch-anim::before {
+  left: 2px;
+  text-shadow: -2px 0 var(--col-red);
+  clip: rect(44px, 450px, 56px, 0);
+  animation: glitch-anim-1 5s infinite linear alternate-reverse;
+}
+
+.glitch-anim::after {
+  left: -2px;
+  text-shadow: -2px 0 var(--col-blue);
+  clip: rect(44px, 450px, 56px, 0);
+  animation: glitch-anim-2 5s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-anim-1 {
+  0% {
+    clip: rect(26px, 9999px, 81px, 0);
+  }
+  5% {
+    clip: rect(63px, 9999px, 12px, 0);
+  }
+  10% {
+    clip: rect(39px, 9999px, 83px, 0);
+  }
+  15% {
+    clip: rect(5px, 9999px, 92px, 0);
+  }
+  20% {
+    clip: rect(78px, 9999px, 45px, 0);
+  }
+  25% {
+    clip: rect(15px, 9999px, 59px, 0);
+  }
+  30% {
+    clip: rect(89px, 9999px, 2px, 0);
+  }
+  35% {
+    clip: rect(32px, 9999px, 67px, 0);
+  }
+  40% {
+    clip: rect(11px, 9999px, 91px, 0);
+  }
+  45% {
+    clip: rect(54px, 9999px, 28px, 0);
+  }
+  50% {
+    clip: rect(96px, 9999px, 14px, 0);
+  }
+  55% {
+    clip: rect(22px, 9999px, 73px, 0);
+  }
+  60% {
+    clip: rect(68px, 9999px, 35px, 0);
+  }
+  65% {
+    clip: rect(3px, 9999px, 86px, 0);
+  }
+  70% {
+    clip: rect(41px, 9999px, 19px, 0);
+  }
+  75% {
+    clip: rect(82px, 9999px, 51px, 0);
+  }
+  80% {
+    clip: rect(18px, 9999px, 94px, 0);
+  }
+  85% {
+    clip: rect(57px, 9999px, 9px, 0);
+  }
+  90% {
+    clip: rect(93px, 9999px, 62px, 0);
+  }
+  95% {
+    clip: rect(7px, 9999px, 38px, 0);
+  }
+  100% {
+    clip: rect(49px, 9999px, 76px, 0);
+  }
+}
+
+@keyframes glitch-anim-2 {
+  0% {
+    clip: rect(61px, 9999px, 5px, 0);
+  }
+  5% {
+    clip: rect(29px, 9999px, 88px, 0);
+  }
+  10% {
+    clip: rect(92px, 9999px, 16px, 0);
+  }
+  15% {
+    clip: rect(44px, 9999px, 69px, 0);
+  }
+  20% {
+    clip: rect(8px, 9999px, 31px, 0);
+  }
+  25% {
+    clip: rect(76px, 9999px, 95px, 0);
+  }
+  30% {
+    clip: rect(13px, 9999px, 52px, 0);
+  }
+  35% {
+    clip: rect(58px, 9999px, 24px, 0);
+  }
+  40% {
+    clip: rect(91px, 9999px, 83px, 0);
+  }
+  45% {
+    clip: rect(37px, 9999px, 42px, 0);
+  }
+  50% {
+    clip: rect(72px, 9999px, 11px, 0);
+  }
+  55% {
+    clip: rect(4px, 9999px, 66px, 0);
+  }
+  60% {
+    clip: rect(53px, 9999px, 97px, 0);
+  }
+  65% {
+    clip: rect(85px, 9999px, 21px, 0);
+  }
+  70% {
+    clip: rect(19px, 9999px, 78px, 0);
+  }
+  75% {
+    clip: rect(64px, 9999px, 36px, 0);
+  }
+  80% {
+    clip: rect(97px, 9999px, 3px, 0);
+  }
+  85% {
+    clip: rect(25px, 9999px, 55px, 0);
+  }
+  90% {
+    clip: rect(79px, 9999px, 89px, 0);
+  }
+  95% {
+    clip: rect(10px, 9999px, 48px, 0);
+  }
+  100% {
+    clip: rect(46px, 9999px, 15px, 0);
+  }
+}
+
+@keyframes glitch-skew {
+  0% {
+    transform: skew(0deg);
+  }
+  10% {
+    transform: skew(-1deg);
+  }
+  20% {
+    transform: skew(1deg);
+  }
+  30% {
+    transform: skew(0deg);
+  }
+  40% {
+    transform: skew(-2deg);
+  }
+  50% {
+    transform: skew(2deg);
+  }
+  60% {
+    transform: skew(0deg);
+  }
+  70% {
+    transform: skew(-0.5deg);
+  }
+  80% {
+    transform: skew(0.5deg);
+  }
+  90% {
+    transform: skew(0deg);
+  }
+  100% {
+    transform: skew(0deg);
+  }
+}
+
+/* Reduce animation for low contrast/accessibility */
+[data-theme="low-contrast"] .glitch-anim::before,
+[data-theme="low-contrast"] .glitch-anim::after,
+[data-theme="low-contrast"] .glitch-anim {
+  animation: none;
+  clip: auto;
+  text-shadow: none;
+}
+
+.rich-content b,
+.rich-content strong {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.rich-content i,
+.rich-content em {
+  font-style: italic;
+}
+
+.rich-content u {
+  text-decoration: underline;
+}
+
+.rich-content ul {
+  list-style-type: square;
+  padding-left: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.rich-content li {
+  margin-bottom: 0.25rem;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-appear {
+  animation: appear 0.2s ease-out forwards;
+}
+
+@keyframes modalIn {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-modal-in {
+  animation: modalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Remove number arrows */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
