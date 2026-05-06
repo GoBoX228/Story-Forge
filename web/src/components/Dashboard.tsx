@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ICONS, COLORS } from '../constants';
 import { BaseCard } from './BaseCard';
-import { AddTile, Badge, Button } from './UI';
+import { AddTile, Button } from './UI';
 import { Campaign, Character, MapData, Scenario } from '../types';
 
 interface DashboardProps {
@@ -123,9 +123,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div>
                       <h4 className="mono text-sm uppercase font-black text-[var(--text-main)]">{scenario.title}</h4>
                       <p className="mono text-[10px] text-[var(--text-muted)] mt-1">Отредактировано: {formatDate(scenario.updatedAt ?? scenario.createdAt)}</p>
-                      <div className="mt-2 flex gap-2">
-                        <Badge color="var(--col-grey)">{`ГЛАВ ${scenario.chapters.length}`}</Badge>
-                      </div>
+                      <p className="mono text-[9px] text-[var(--text-muted)] mt-2 uppercase">Graph scenario</p>
                     </div>
                     <span className="text-[var(--text-main)]">{ICONS.ChevronRight}</span>
                   </div>

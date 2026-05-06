@@ -1,25 +1,11 @@
 ﻿import Script from 'next/script';
+import Image from 'next/image';
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://storyforge.example';
 const gaId = process.env.NEXT_PUBLIC_GA_ID;
 const yandexMetrikaId = process.env.NEXT_PUBLIC_YANDEX_METRIKA_ID;
-
-const inter = Inter({
-  subsets: ['latin', 'cyrillic'],
-  variable: '--font-inter',
-  weight: ['400', '500', '700'],
-  display: 'swap'
-});
-
-const jetbrains = JetBrains_Mono({
-  subsets: ['latin', 'cyrillic'],
-  variable: '--font-mono',
-  weight: ['400', '700', '800'],
-  display: 'swap'
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -89,7 +75,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru" data-theme="oled" className={`${inter.variable} ${jetbrains.variable}`}>
+    <html lang="ru" data-theme="oled">
       <body>
         {gaId ? (
           <>
@@ -120,8 +106,11 @@ ym(${yandexMetrikaId}, "init", {
             </Script>
             <noscript>
               <div>
-                <img
+                <Image
                   src={`https://mc.yandex.ru/watch/${yandexMetrikaId}`}
+                  width={1}
+                  height={1}
+                  unoptimized
                   style={{ position: 'absolute', left: '-9999px' }}
                   alt=""
                 />

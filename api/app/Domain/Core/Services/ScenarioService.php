@@ -58,7 +58,6 @@ class ScenarioService
     {
         /** @var Scenario $scenario */
         $scenario = $this->findOwnedModelAction->execute(Scenario::class, $user->id, $id);
-        $scenario->load(['chapters.blocks']);
 
         return $scenario;
     }
@@ -87,4 +86,3 @@ class ScenarioService
         $this->deleteModelAction->execute($scenario);
     }
 }
-

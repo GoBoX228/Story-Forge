@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { BaseCard } from './BaseCard';
 import { Button, Input, TextArea } from './UI';
 import { Camera, Image as ImageIcon, Edit3, User } from 'lucide-react';
@@ -220,7 +221,16 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({
 
       <div className="relative h-72 bg-[var(--bg-surface)] border-b border-[var(--border-color)] group overflow-hidden">
         {bannerUrl ? (
-          <img src={bannerUrl} alt="Шапка профиля пользователя" title="Шапка профиля" loading="eager" decoding="async" className="absolute inset-0 h-full w-full object-cover" />
+          <Image
+            src={bannerUrl}
+            alt="Шапка профиля пользователя"
+            title="Шапка профиля"
+            fill
+            sizes="100vw"
+            priority
+            unoptimized
+            className="object-cover"
+          />
         ) : (
           <div className="absolute inset-0 opacity-25 flex flex-wrap pointer-events-none">
             {Array.from({ length: 12 }).map((_, index) => (
@@ -260,7 +270,15 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({
               className="w-48 h-48 bg-[var(--bg-main)] border-4 border-[var(--col-red)] flex items-center justify-center relative overflow-hidden group/avatar shadow-[0_0_30px_rgba(0,0,0,0.5)]"
             >
               {avatarUrl ? (
-                <img src={avatarUrl} alt="Аватар пользователя" title="Аватар пользователя" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                <Image
+                  src={avatarUrl}
+                  alt="Аватар пользователя"
+                  title="Аватар пользователя"
+                  fill
+                  sizes="192px"
+                  unoptimized
+                  className="object-cover"
+                />
               ) : (
                 <div className="text-4xl font-black text-[var(--text-muted)]/40">{initials}</div>
               )}

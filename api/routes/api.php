@@ -10,16 +10,24 @@ use App\Http\Controllers\Admin\AdminLogsController;
 use App\Http\Controllers\Admin\AdminOverviewController;
 use App\Http\Controllers\Admin\AdminReportsController;
 use App\Http\Controllers\Admin\AdminUsersController;
+use App\Http\Controllers\AssetController;
 use App\Http\Controllers\BroadcastController;
-use App\Http\Controllers\BlockController;
 use App\Http\Controllers\CampaignController;
-use App\Http\Controllers\ChapterController;
 use App\Http\Controllers\CharacterController;
+use App\Http\Controllers\EntityLinkController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\FactionController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MapController;
+use App\Http\Controllers\PublicationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ScenarioController;
+use App\Http\Controllers\ScenarioNodeEntityLinkController;
+use App\Http\Controllers\ScenarioNodeController;
+use App\Http\Controllers\ScenarioTransitionController;
+use App\Http\Controllers\TagController;
+use App\Http\Controllers\WorldEventController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->middleware('throttle:auth')->group(function () {
@@ -54,14 +62,18 @@ Route::middleware(['auth:sanctum', 'active_user'])->group(function () {
     Route::patch('/scenarios/{id}', [ScenarioController::class, 'update']);
     Route::delete('/scenarios/{id}', [ScenarioController::class, 'destroy']);
 
-    Route::post('/scenarios/{id}/chapters', [ChapterController::class, 'store']);
-    Route::patch('/chapters/{id}', [ChapterController::class, 'update']);
-    Route::delete('/chapters/{id}', [ChapterController::class, 'destroy']);
+    Route::get('/scenarios/{id}/nodes', [ScenarioNodeController::class, 'index']);
+    Route::post('/scenarios/{id}/nodes', [ScenarioNodeController::class, 'store']);
+    Route::patch('/scenario-nodes/{id}', [ScenarioNodeController::class, 'update']);
+    Route::delete('/scenario-nodes/{id}', [ScenarioNodeController::class, 'destroy']);
+    Route::get('/scenario-nodes/{id}/entity-links', [ScenarioNodeEntityLinkController::class, 'index']);
+    Route::post('/scenario-nodes/{id}/entity-links', [ScenarioNodeEntityLinkController::class, 'store']);
+    Route::delete('/scenario-node-entity-links/{id}', [ScenarioNodeEntityLinkController::class, 'destroy']);
 
-    Route::post('/chapters/{id}/blocks', [BlockController::class, 'store']);
-    Route::patch('/blocks/{id}', [BlockController::class, 'update']);
-    Route::delete('/blocks/{id}', [BlockController::class, 'destroy']);
-    Route::post('/blocks/{id}/reorder', [BlockController::class, 'reorder']);
+    Route::get('/scenarios/{id}/transitions', [ScenarioTransitionController::class, 'index']);
+    Route::post('/scenarios/{id}/transitions', [ScenarioTransitionController::class, 'store']);
+    Route::patch('/scenario-transitions/{id}', [ScenarioTransitionController::class, 'update']);
+    Route::delete('/scenario-transitions/{id}', [ScenarioTransitionController::class, 'destroy']);
 
     Route::get('/maps', [MapController::class, 'index']);
     Route::post('/maps', [MapController::class, 'store']);
@@ -79,6 +91,48 @@ Route::middleware(['auth:sanctum', 'active_user'])->group(function () {
     Route::get('/items/{id}', [ItemController::class, 'show']);
     Route::patch('/items/{id}', [ItemController::class, 'update']);
     Route::delete('/items/{id}', [ItemController::class, 'destroy']);
+
+    Route::get('/assets', [AssetController::class, 'index']);
+    Route::post('/assets', [AssetController::class, 'store']);
+    Route::get('/assets/{id}', [AssetController::class, 'show']);
+    Route::patch('/assets/{id}', [AssetController::class, 'update']);
+    Route::delete('/assets/{id}', [AssetController::class, 'destroy']);
+
+    Route::get('/locations', [LocationController::class, 'index']);
+    Route::post('/locations', [LocationController::class, 'store']);
+    Route::get('/locations/{id}', [LocationController::class, 'show']);
+    Route::patch('/locations/{id}', [LocationController::class, 'update']);
+    Route::delete('/locations/{id}', [LocationController::class, 'destroy']);
+
+    Route::get('/factions', [FactionController::class, 'index']);
+    Route::post('/factions', [FactionController::class, 'store']);
+    Route::get('/factions/{id}', [FactionController::class, 'show']);
+    Route::patch('/factions/{id}', [FactionController::class, 'update']);
+    Route::delete('/factions/{id}', [FactionController::class, 'destroy']);
+
+    Route::get('/events', [WorldEventController::class, 'index']);
+    Route::post('/events', [WorldEventController::class, 'store']);
+    Route::get('/events/{id}', [WorldEventController::class, 'show']);
+    Route::patch('/events/{id}', [WorldEventController::class, 'update']);
+    Route::delete('/events/{id}', [WorldEventController::class, 'destroy']);
+
+    Route::get('/tags', [TagController::class, 'index']);
+    Route::post('/tags', [TagController::class, 'store']);
+    Route::patch('/tags/{id}', [TagController::class, 'update']);
+    Route::delete('/tags/{id}', [TagController::class, 'destroy']);
+    Route::get('/tag-targets/{type}/{id}/tags', [TagController::class, 'targetTags']);
+    Route::put('/tag-targets/{type}/{id}/tags', [TagController::class, 'replaceTargetTags']);
+
+    Route::get('/entity-links/{sourceType}/{sourceId}', [EntityLinkController::class, 'index']);
+    Route::post('/entity-links/{sourceType}/{sourceId}', [EntityLinkController::class, 'store']);
+    Route::patch('/entity-links/{id}', [EntityLinkController::class, 'update']);
+    Route::delete('/entity-links/{id}', [EntityLinkController::class, 'destroy']);
+
+    Route::get('/publications', [PublicationController::class, 'index']);
+    Route::get('/publications/{slug}', [PublicationController::class, 'show']);
+    Route::post('/publication-targets/{type}/{id}', [PublicationController::class, 'storeForTarget']);
+    Route::patch('/publications/{id}', [PublicationController::class, 'update']);
+    Route::delete('/publications/{id}', [PublicationController::class, 'destroy']);
 
     Route::post('/reports', [ReportController::class, 'store']);
     Route::get('/broadcasts', [BroadcastController::class, 'index']);

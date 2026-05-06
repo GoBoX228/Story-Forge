@@ -25,9 +25,14 @@ class Scenario extends Model
         return $this->belongsTo(Campaign::class);
     }
 
-    public function chapters(): HasMany
+    public function nodes(): HasMany
     {
-        return $this->hasMany(Chapter::class)->orderBy('order_index');
+        return $this->hasMany(ScenarioNode::class)->orderBy('order_index');
+    }
+
+    public function transitions(): HasMany
+    {
+        return $this->hasMany(ScenarioTransition::class)->orderBy('order_index');
     }
 
     public function maps(): HasMany

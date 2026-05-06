@@ -30,6 +30,8 @@ const Sidebar = React.memo<SidebarProps>(({
       case 'maps': return '#FFFFFF';      // White
       case 'characters': return '#FFC300'; // Yellow
       case 'items': return '#4361EE';     // Blue
+      case 'assets': return '#2EC4B6';    // Teal
+      case 'world': return '#8338EC';     // Purple
       case 'campaigns': return '#8338EC'; // Purple
       case 'dashboard': return '#E63946'; // Brand Red
       case 'community': return '#2EC4B6'; // Teal
@@ -48,6 +50,8 @@ const Sidebar = React.memo<SidebarProps>(({
     { id: 'characters', label: 'Персонажи', icon: ICONS.Characters },
     { id: 'maps', label: 'Карты', icon: ICONS.Map },
     { id: 'items', label: 'Предметы', icon: ICONS.Items },
+    { id: 'assets', label: 'Ассеты', icon: ICONS.Assets },
+    { id: 'world', label: 'Мир', icon: ICONS.World },
     { id: 'campaigns', label: 'Кампании', icon: ICONS.Campaigns },
   ];
 

@@ -9,10 +9,9 @@ class FindOwnedScenarioForExportAction
     public function execute(int $userId, string $scenarioId): Scenario
     {
         return Scenario::query()
-            ->with(['chapters.blocks', 'user'])
+            ->with(['nodes', 'transitions', 'user'])
             ->where('id', $scenarioId)
             ->where('user_id', $userId)
             ->firstOrFail();
     }
 }
-

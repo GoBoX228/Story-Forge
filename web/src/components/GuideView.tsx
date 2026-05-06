@@ -41,19 +41,19 @@ export const GuideView: React.FC = () => {
       accentColor: 'var(--col-red)',
       shortContent: (
         <div>
-          <h4 className="mono text-sm font-black uppercase text-[var(--text-main)] mb-2">Блочная структура</h4>
+          <h4 className="mono text-sm font-black uppercase text-[var(--text-main)] mb-2">Граф сценария</h4>
           <p className="text-[10px] mono text-[var(--text-muted)] leading-relaxed">
-            Сценарии разбиты на ГЛАВЫ, а главы — на БЛОКИ. Блоки бывают разных типов:
+            Сценарии собираются из связанных узлов. Основные типы узлов:
           </p>
           <ul className="mt-2 space-y-1">
             <li className="flex items-center gap-2 mono text-[9px] uppercase font-bold text-[var(--text-main)]">
-              <span className="w-1.5 h-1.5 bg-[var(--col-red)]"></span> Бой (Красный)
+              <span className="w-1.5 h-1.5 bg-[var(--col-red)]"></span> Бой
             </li>
             <li className="flex items-center gap-2 mono text-[9px] uppercase font-bold text-[var(--text-main)]">
-              <span className="w-1.5 h-1.5 bg-[var(--col-blue)]"></span> Диалог (Синий)
+              <span className="w-1.5 h-1.5 bg-[var(--col-blue)]"></span> Диалог
             </li>
             <li className="flex items-center gap-2 mono text-[9px] uppercase font-bold text-[var(--text-main)]">
-              <span className="w-1.5 h-1.5 bg-[var(--col-yellow)]"></span> Проверка (Желтый)
+              <span className="w-1.5 h-1.5 bg-[var(--col-yellow)]"></span> Проверка
             </li>
           </ul>
         </div>
@@ -63,28 +63,28 @@ export const GuideView: React.FC = () => {
         <div className="space-y-6">
            <div className="p-4 border-l-4 border-[var(--col-red)] bg-[var(--bg-main)]">
               <p className="mono text-xs leading-relaxed text-[var(--text-main)]">
-                 Сценарий — это основной исполнительный файл игры. Он состоит из последовательности событий, организованных в главы.
+                 Сценарий — это граф игровых сцен. Узлы описывают содержание, а переходы задают маршрут прохождения и исходы.
               </p>
            </div>
            
            <div className="space-y-4">
-              <h3 className="mono text-sm font-black uppercase text-[var(--col-red)] border-b border-[var(--border-color)] pb-2">ТИПЫ БЛОКОВ</h3>
+              <h3 className="mono text-sm font-black uppercase text-[var(--col-red)] border-b border-[var(--border-color)] pb-2">ТИПЫ УЗЛОВ</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="p-3 border border-[var(--border-color)] bg-[var(--bg-main)]">
                     <div className="mono text-[10px] font-black text-[var(--col-red)] mb-1">БОЙ</div>
-                    <p className="text-[10px] text-[var(--text-muted)]">Используется для описания энкаунтеров и сражений. Визуально выделяется красным индикатором.</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">Используется для описания энкаунтеров и сражений.</p>
                  </div>
                  <div className="p-3 border border-[var(--border-color)] bg-[var(--bg-main)]">
                     <div className="mono text-[10px] font-black text-[var(--col-blue)] mb-1">ДИАЛОГ</div>
-                    <p className="text-[10px] text-[var(--text-muted)]">Скриптовые сцены общения с NPC. Синий индикатор для быстрого поиска в тексте.</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">Сцены общения с NPC или другими участниками сюжета.</p>
                  </div>
                  <div className="p-3 border border-[var(--border-color)] bg-[var(--bg-main)]">
                     <div className="mono text-[10px] font-black text-[var(--col-yellow)] mb-1">ПРОВЕРКА (CHECK)</div>
-                    <p className="text-[10px] text-[var(--text-muted)]">Событие, требующее броска кубиков. Имеет параметр <span className="text-[var(--text-main)]">СЛОЖНОСТЬ (DC)</span>, который отображается в углу блока.</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">Событие, требующее проверки. Имеет навык и <span className="text-[var(--text-main)]">DC</span>, а переходы успеха/провала задаются отдельно.</p>
                  </div>
                  <div className="p-3 border border-[var(--border-color)] bg-[var(--bg-main)]">
                     <div className="mono text-[10px] font-black text-[var(--text-muted)] mb-1">ОПИСАНИЕ</div>
-                    <p className="text-[10px] text-[var(--text-muted)]">Стандартный нарративный текст. Поддерживает Rich Text форматирование.</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">Стандартный нарративный текст и описание сцены.</p>
                  </div>
               </div>
            </div>
@@ -94,11 +94,11 @@ export const GuideView: React.FC = () => {
               <ul className="space-y-2">
                  <li className="flex items-start gap-3 text-[10px] mono text-[var(--text-muted)]">
                     <Move size={14} className="text-[var(--text-main)] shrink-0"/>
-                    <span><strong className="text-[var(--text-main)]">DRAG & DROP:</strong> Перетаскивайте блоки за иконку рукоятки слева для изменения порядка событий.</span>
+                    <span><strong className="text-[var(--text-main)]">CANVAS:</strong> Перетаскивайте узлы, создавайте переходы через handles и используйте preview для проверки flow.</span>
                  </li>
                  <li className="flex items-start gap-3 text-[10px] mono text-[var(--text-muted)]">
                     <CheckCircle2 size={14} className="text-[var(--text-main)] shrink-0"/>
-                    <span><strong className="text-[var(--text-main)]">АВТОСОХРАНЕНИЕ:</strong> Все изменения фиксируются в локальном хранилище автоматически через 800мс после ввода.</span>
+                    <span><strong className="text-[var(--text-main)]">СОХРАНЕНИЕ:</strong> Узлы, переходы, позиции и связи сохраняются через API сценарного графа.</span>
                  </li>
               </ul>
            </div>

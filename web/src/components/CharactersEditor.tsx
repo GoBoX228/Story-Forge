@@ -1,17 +1,68 @@
 
-import React, { useState } from 'react';
+import Image from 'next/image';
+import React, { useEffect, useRef, useState } from 'react';
 import { BaseCard } from './BaseCard';
 import { Button, Input, SearchInput, Select, AddTile, SectionHeader, StatBadge, TextArea } from './UI';
 import { Modal } from './Modal';
-import { Character, Item, StatKey, ItemRarity } from '../types';
+import {
+  Asset,
+  Character,
+  EntityLink,
+  EntityLinkAssignmentMap,
+  EntityLinkCreatePayload,
+  EntityLinkTargetType,
+  EntityLinkUpdatePayload,
+  Faction,
+  Item,
+  StatKey,
+  ItemRarity,
+  MapData,
+  PublishedContent,
+  PublicationAssignmentMap,
+  PublicationTargetType,
+  PublicationUpdatePayload,
+  PublicationUpsertPayload,
+  Scenario,
+  Tag,
+  TagAssignmentMap,
+  TaggableTargetType,
+  WorldEvent,
+  WorldLocation
+} from '../types';
 import { apiRequest } from '../lib/api';
-import { mapCharacterFromApi } from '../lib/mappers';
+import { entityLinkAssignmentKey, mapCharacterFromApi, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
+import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
+import { TagFilter, TagPicker } from './TagPicker';
+import { EntityLinksPanel } from './EntityLinksPanel';
+import { AssetUsagePicker } from './AssetUsagePicker';
+import { PublicationPanel } from './PublicationPanel';
 import { UserPlus, Zap, Edit3, Save, Scale, Package, Plus, X } from 'lucide-react';
 
 interface CharactersEditorProps {
   data: Character[];
   onUpdate: (data: Character[]) => void;
   items: Item[];
+  scenarios: Scenario[];
+  maps: MapData[];
+  assets: Asset[];
+  locations: WorldLocation[];
+  factions: Faction[];
+  events: WorldEvent[];
+  tags: Tag[];
+  tagAssignments: TagAssignmentMap;
+  entityLinks: EntityLinkAssignmentMap;
+  publicationAssignments: PublicationAssignmentMap;
+  onReplaceTargetTags: (type: TaggableTargetType, id: string, tagIds: string[], newTags?: string[]) => Promise<Tag[]>;
+  onUpdateTag: (id: string, name: string) => Promise<Tag>;
+  onDeleteTag: (id: string) => Promise<void>;
+  onCreateMaterialLink: (sourceType: EntityLinkTargetType, sourceId: string, payload: EntityLinkCreatePayload) => Promise<EntityLink>;
+  onUpdateMaterialLink: (id: string, payload: EntityLinkUpdatePayload) => Promise<EntityLink>;
+  onDeleteMaterialLink: (id: string) => Promise<void>;
+  onUpsertPublication: (type: PublicationTargetType, id: string, payload: PublicationUpsertPayload) => Promise<PublishedContent>;
+  onUpdatePublication: (id: string, payload: PublicationUpdatePayload) => Promise<PublishedContent>;
+  onDeletePublication: (id: string) => Promise<void>;
+  onOpenMaterialLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
+  initialCharacterId?: string | null;
 }
 
 const SECTION_ACCENT = 'var(--col-yellow)'; 
@@ -31,13 +82,40 @@ const EMPTY_STATS: Record<StatKey, number> = { 'АТК': 10, 'ЗАЩ': 10, 'СИ
 
 const EMPTY_CHARACTER: Partial<Character> = { name: '', role: 'NPC', race: 'ЧЕЛОВЕК', description: '', level: 1, baseStats: { ...EMPTY_STATS }, inventory: [] };
 
-const CharactersEditor: React.FC<CharactersEditorProps> = ({ data, onUpdate, items }) => {
+const CharactersEditor: React.FC<CharactersEditorProps> = ({
+  data,
+  onUpdate,
+  items,
+  scenarios,
+  maps,
+  assets,
+  locations,
+  factions,
+  events,
+  tags,
+  tagAssignments,
+  entityLinks,
+  publicationAssignments,
+  onReplaceTargetTags,
+  onUpdateTag,
+  onDeleteTag,
+  onCreateMaterialLink,
+  onUpdateMaterialLink,
+  onDeleteMaterialLink,
+  onUpsertPublication,
+  onUpdatePublication,
+  onDeletePublication,
+  onOpenMaterialLink,
+  initialCharacterId
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTagFilter, setSelectedTagFilter] = useState('');
   const [activeRole, setActiveRole] = useState<'ВСЕ' | 'Герой' | 'NPC' | 'Монстр'>('ВСЕ');
   const [sortOrder, setSortOrder] = useState('NAME_ASC');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Character>>(EMPTY_CHARACTER);
+  const initialCharacterAppliedRef = useRef<string | null>(null);
 
   const calculateEffectiveStats = (char: Partial<Character>) => {
     const effective = { ...(char.baseStats || EMPTY_STATS) };
@@ -49,6 +127,33 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({ data, onUpdate, ite
     return { effective, bonus };
   };
 
+  const linksForCharacter = (characterId: string) =>
+    entityLinks[entityLinkAssignmentKey('character', characterId)] ?? [];
+
+  const setCharacterAssetUsage = async (
+    role: 'portrait' | 'token',
+    assetId: string | null
+  ) => {
+    if (!editingId) return;
+    const links = linksForCharacter(editingId);
+    const existing = findAssetUsageLink(links, role);
+
+    if (!assetId) {
+      if (existing) await onDeleteMaterialLink(existing.id);
+      return;
+    }
+
+    if (existing && existing.targetId !== assetId) {
+      await onDeleteMaterialLink(existing.id);
+    }
+
+    await onCreateMaterialLink(
+      'character',
+      editingId,
+      buildAssetUsagePayload(assetId, role)
+    );
+  };
+
   const calculateWeight = (inventory: string[]) => inventory.reduce((acc, id) => acc + (items.find(i => i.id === id)?.weight || 0), 0);
 
   const maxWeight = (formData.baseStats?.СИЛ || 10) * 5;
@@ -57,6 +162,17 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({ data, onUpdate, ite
 
   const handleOpenEdit = (char: Character) => { setEditingId(char.id); setFormData({ ...char }); setIsModalOpen(true); };
   const handleOpenCreate = () => { setEditingId(null); setFormData(EMPTY_CHARACTER); setIsModalOpen(true); };
+
+  useEffect(() => {
+    if (!initialCharacterId) return;
+    if (initialCharacterAppliedRef.current === initialCharacterId) return;
+    const target = data.find((character) => character.id === initialCharacterId);
+    if (!target) return;
+    initialCharacterAppliedRef.current = initialCharacterId;
+    setEditingId(target.id);
+    setFormData({ ...target });
+    setIsModalOpen(true);
+  }, [data, initialCharacterId]);
 
   const handleSave = async () => {
     if (!formData.name) return;
@@ -112,7 +228,12 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({ data, onUpdate, ite
   };
 
   const filteredCharacters = data
-    .filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) && (activeRole === 'ВСЕ' || c.role === activeRole))
+    .filter(c => {
+      const assignedTags = tagAssignments[tagAssignmentKey('character', c.id)] ?? [];
+      return c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (activeRole === 'ВСЕ' || c.role === activeRole) &&
+        (!selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter));
+    })
     .sort((a, b) => {
       if (sortOrder === 'NAME_ASC') return a.name.localeCompare(b.name);
       if (sortOrder === 'LEVEL_DESC') return b.level - a.level;
@@ -129,9 +250,22 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({ data, onUpdate, ite
             {filteredCharacters.map(char => {
               const { effective: eff, bonus: bns } = calculateEffectiveStats(char);
               const accent = ROLE_COLORS[char.role as keyof typeof ROLE_COLORS] || 'var(--col-blue)';
+              const portraitAsset = findAssetForUsage(linksForCharacter(char.id), assets, 'portrait');
               return (
                 <BaseCard key={char.id} title={char.name} accentColor={accent}>
                   <div className="space-y-6 flex flex-col h-full">
+                    {portraitAsset?.url && (
+                      <div className="relative h-36 border border-[var(--border-color)] bg-black overflow-hidden">
+                        <Image
+                          src={portraitAsset.url}
+                          alt={portraitAsset.name}
+                          fill
+                          sizes="360px"
+                          unoptimized
+                          className="object-cover"
+                        />
+                      </div>
+                    )}
                     <div className="flex justify-between items-center">
                       <span className="mono text-[11px] font-black uppercase tracking-[0.15em]" style={{ color: accent }}>{char.role}</span>
                       <span className="mono text-[9px] text-[var(--text-muted)] uppercase font-bold tracking-widest">{char.race} | УР {char.level}</span>
@@ -160,6 +294,7 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({ data, onUpdate, ite
       <div className="w-80 bg-[var(--bg-surface)] border-l-4 border-[var(--col-yellow)] flex flex-col p-8 space-y-10 z-10 overflow-y-auto">
         <h2 className="text-4xl font-black uppercase tracking-tighter text-[var(--col-yellow)] glitch-text leading-none">АРХИВ</h2>
         <SearchInput value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ИМЯ..." accentColor={SECTION_ACCENT} />
+        <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
         <Select value={sortOrder} onChange={val => setSortOrder(val)} options={[{value:'NAME_ASC', label:'ИМЯ'}, {value:'LEVEL_DESC', label:'УРОВЕНЬ'}, {value:'WEIGHT_DESC', label:'ВЕС'}]} accentColor={SECTION_ACCENT} />
         <div className="space-y-5">
            <label className="mono text-[10px] text-[var(--col-yellow)] uppercase tracking-[0.3em] font-black">ФИЛЬТР</label>
@@ -189,6 +324,67 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({ data, onUpdate, ite
               </div>
             </div>
             <div className="space-y-1.5"><label className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">История</label><TextArea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="h-24" accentColor={SECTION_ACCENT} /></div>
+            {editingId && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <AssetUsagePicker
+                  label="Портрет"
+                  assets={assets}
+                  value={findAssetUsageLink(linksForCharacter(editingId), 'portrait')?.targetId ?? null}
+                  allowedTypes={['image']}
+                  accentColor={SECTION_ACCENT}
+                  onChange={(assetId) => setCharacterAssetUsage('portrait', assetId)}
+                />
+                <AssetUsagePicker
+                  label="Токен"
+                  assets={assets}
+                  value={findAssetUsageLink(linksForCharacter(editingId), 'token')?.targetId ?? null}
+                  allowedTypes={['token', 'image']}
+                  accentColor={SECTION_ACCENT}
+                  onChange={(assetId) => setCharacterAssetUsage('token', assetId)}
+                />
+              </div>
+            )}
+            {editingId && (
+              <TagPicker
+                allTags={tags}
+                selectedTags={tagAssignments[tagAssignmentKey('character', editingId)] ?? []}
+                accentColor={SECTION_ACCENT}
+                onReplaceTags={(tagIds, newTags) => onReplaceTargetTags('character', editingId, tagIds, newTags)}
+                onUpdateTag={onUpdateTag}
+                onDeleteTag={onDeleteTag}
+              />
+            )}
+            {editingId && (
+              <EntityLinksPanel
+                sourceType="character"
+                sourceId={editingId}
+                links={linksForCharacter(editingId).filter((link) => !isAssetUsageLink(link))}
+                scenarios={scenarios}
+                maps={maps}
+                characters={data}
+                items={items}
+                assets={assets}
+                locations={locations}
+                factions={factions}
+                events={events}
+                accentColor={SECTION_ACCENT}
+                onCreateLink={onCreateMaterialLink}
+                onUpdateLink={onUpdateMaterialLink}
+                onDeleteLink={onDeleteMaterialLink}
+                onOpenLink={onOpenMaterialLink}
+              />
+            )}
+            {editingId && (
+              <PublicationPanel
+                targetType="character"
+                targetId={editingId}
+                publication={publicationAssignments[publicationAssignmentKey('character', editingId)]}
+                accentColor={SECTION_ACCENT}
+                onUpsertPublication={onUpsertPublication}
+                onUpdatePublication={onUpdatePublication}
+                onDeletePublication={onDeletePublication}
+              />
+            )}
           </div>
           <div className="lg:col-span-5 space-y-6">
             <div className="space-y-4">

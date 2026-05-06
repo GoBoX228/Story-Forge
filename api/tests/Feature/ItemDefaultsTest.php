@@ -26,27 +26,19 @@ class ItemDefaultsTest extends TestCase
             ->assertJsonPath('rarity', 'Обычный');
     }
 
-    public function test_items_legacy_text_backfill_migration_is_idempotent(): void
+    public function test_item_database_defaults_are_available_without_legacy_backfill(): void
     {
-        $legacyItem = Item::query()->create([
+        $item = Item::query()->create([
             'user_id' => User::factory()->create()->id,
-            'name' => 'Legacy Item',
-            'type' => 'РџСЂРѕС‡РµРµ',
-            'rarity' => 'РћР±С‹С‡РЅС‹Р№',
-            'description' => null,
-            'modifiers' => [],
-            'weight' => 0,
-            'value' => 0,
+            'name' => 'Default Item',
         ]);
 
-        $migration = require database_path('migrations/2026_04_23_000019_fix_items_defaults_and_backfill_legacy_text.php');
-        $migration->up();
-        $migration->up();
+        $item->refresh();
 
-        $legacyItem->refresh();
-
-        $this->assertSame('Прочее', $legacyItem->type);
-        $this->assertSame('Обычный', $legacyItem->rarity);
+        $this->assertSame('Прочее', $item->type);
+        $this->assertSame('Обычный', $item->rarity);
+        $this->assertSame([], $item->modifiers);
+        $this->assertSame(0.0, $item->weight);
+        $this->assertSame(0, $item->value);
     }
 }
-

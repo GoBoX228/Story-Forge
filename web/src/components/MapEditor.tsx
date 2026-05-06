@@ -1,9 +1,37 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Button, Input, SearchInput, SectionHeader } from './UI';
-import { MapData, MapObject } from '../types';
+import {
+  Asset,
+  Character,
+  EntityLink,
+  EntityLinkAssignmentMap,
+  EntityLinkCreatePayload,
+  EntityLinkTargetType,
+  EntityLinkUpdatePayload,
+  Faction,
+  Item,
+  MapData,
+  MapObject,
+  PublishedContent,
+  PublicationAssignmentMap,
+  PublicationTargetType,
+  PublicationUpdatePayload,
+  PublicationUpsertPayload,
+  Scenario,
+  Tag,
+  TagAssignmentMap,
+  TaggableTargetType,
+  WorldEvent,
+  WorldLocation
+} from '../types';
 import { apiRequest } from '../lib/api';
-import { mapMapFromApi } from '../lib/mappers';
+import { entityLinkAssignmentKey, mapMapFromApi, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
+import { buildAssetUsagePayload, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
+import { TagFilter, TagPicker } from './TagPicker';
+import { EntityLinksPanel } from './EntityLinksPanel';
+import { AssetUsagePicker } from './AssetUsagePicker';
+import { PublicationPanel } from './PublicationPanel';
 import { 
   Plus, Trash2, ArrowLeft, RefreshCw, Grid, Eraser, 
   MousePointer2, Maximize, Edit3, Layers, Layout, 
@@ -14,22 +42,88 @@ const ACCENT_WHITE = 'var(--col-white)';
 type ToolbarPosition = 'left' | 'top' | 'right' | 'bottom';
 type ToolType = 'brush' | 'eraser' | 'select' | 'pan' | 'fill' | 'rect' | 'picker';
 type GridPoint = { x: number; y: number };
+interface PaletteAsset {
+  type: string;
+  label: string;
+  color: string;
+  assetId?: string | null;
+  imageUrl?: string | null;
+}
+
+const BASE_TILE_ASSETS: PaletteAsset[] = [
+  { type: 'wall', label: 'Стена', color: '#888888' },
+  { type: 'floor', label: 'Пол', color: '#222222' },
+  { type: 'water', label: 'Вода', color: '#4361EE' },
+  { type: 'lava', label: 'Лава', color: '#E63946' },
+  { type: 'grass', label: 'Трава', color: '#2A9D8F' },
+  { type: 'wood', label: 'Дерево', color: '#D4A373' },
+  { type: 'npc', label: 'NPC', color: '#FFC300' },
+  { type: 'loot', label: 'Лут', color: '#8338EC' },
+];
 
 interface MapEditorProps {
   data: MapData[];
   onUpdate: (data: MapData[]) => void;
+  scenarios: Scenario[];
+  characters: Character[];
+  items: Item[];
+  assetsLibrary: Asset[];
+  locations: WorldLocation[];
+  factions: Faction[];
+  events: WorldEvent[];
+  tags: Tag[];
+  tagAssignments: TagAssignmentMap;
+  entityLinks: EntityLinkAssignmentMap;
+  publicationAssignments: PublicationAssignmentMap;
+  onReplaceTargetTags: (type: TaggableTargetType, id: string, tagIds: string[], newTags?: string[]) => Promise<Tag[]>;
+  onUpdateTag: (id: string, name: string) => Promise<Tag>;
+  onDeleteTag: (id: string) => Promise<void>;
+  onCreateMaterialLink: (sourceType: EntityLinkTargetType, sourceId: string, payload: EntityLinkCreatePayload) => Promise<EntityLink>;
+  onUpdateMaterialLink: (id: string, payload: EntityLinkUpdatePayload) => Promise<EntityLink>;
+  onDeleteMaterialLink: (id: string) => Promise<void>;
+  onUpsertPublication: (type: PublicationTargetType, id: string, payload: PublicationUpsertPayload) => Promise<PublishedContent>;
+  onUpdatePublication: (id: string, payload: PublicationUpdatePayload) => Promise<PublishedContent>;
+  onDeletePublication: (id: string) => Promise<void>;
+  onOpenMaterialLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
   initialMapId?: string | null;
 }
 
-const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) => {
+const MapEditor: React.FC<MapEditorProps> = ({
+  data,
+  onUpdate,
+  scenarios,
+  characters,
+  items,
+  assetsLibrary,
+  locations,
+  factions,
+  events,
+  tags,
+  tagAssignments,
+  entityLinks,
+  publicationAssignments,
+  onReplaceTargetTags,
+  onUpdateTag,
+  onDeleteTag,
+  onCreateMaterialLink,
+  onUpdateMaterialLink,
+  onDeleteMaterialLink,
+  onUpsertPublication,
+  onUpdatePublication,
+  onDeletePublication,
+  onOpenMaterialLink,
+  initialMapId
+}) => {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTagFilter, setSelectedTagFilter] = useState('');
   const [autosaveState, setAutosaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [selectedTool, setSelectedTool] = useState<ToolType>('pan');
-  const [activeAsset, setActiveAsset] = useState({ type: 'wall', label: 'Стена', color: '#6C757D' });
+  const [activeAsset, setActiveAsset] = useState<PaletteAsset>(BASE_TILE_ASSETS[0]);
   const [toolbarPosition, setToolbarPosition] = useState<ToolbarPosition>('left');
   const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [imageRevision, setImageRevision] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [undoStack, setUndoStack] = useState<MapObject[][]>([]);
@@ -38,10 +132,19 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
   const [rectEnd, setRectEnd] = useState<GridPoint | null>(null);
   const initialMapAppliedRef = useRef<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeMap = data.find(m => m.id === activeId);
+  const activeMapTags = activeMap ? tagAssignments[tagAssignmentKey('map', activeMap.id)] ?? [] : [];
+  const activeMapEntityLinks = activeMap ? entityLinks[entityLinkAssignmentKey('map', activeMap.id)] ?? [] : [];
+  const filteredMaps = data.filter((map) => {
+    const matchesSearch = map.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const assignedTags = tagAssignments[tagAssignmentKey('map', map.id)] ?? [];
+    const matchesTag = !selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter);
+    return matchesSearch && matchesTag;
+  });
 
-  const assets = [
+  const assets = useMemo<PaletteAsset[]>(() => [
     { type: 'wall', label: 'Стена', color: '#888888' },
     { type: 'floor', label: 'Пол', color: '#222222' },
     { type: 'water', label: 'Вода', color: '#4361EE' },
@@ -50,7 +153,24 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
     { type: 'wood', label: 'Дерево', color: '#D4A373' },
     { type: 'npc', label: 'NPC', color: '#FFC300' },
     { type: 'loot', label: 'Лут', color: '#8338EC' },
-  ];
+  ], []);
+
+  const assetById = useMemo(() => new globalThis.Map(assetsLibrary.map((asset) => [asset.id, asset])), [assetsLibrary]);
+  const paletteAssets = useMemo<PaletteAsset[]>(
+    () => [
+      ...assets,
+      ...assetsLibrary
+        .filter((asset) => asset.type === 'token' || asset.type === 'image')
+        .map((asset) => ({
+          type: `asset:${asset.id}`,
+          label: asset.name,
+          color: '#2A9D8F',
+          assetId: asset.id,
+          imageUrl: asset.url ?? null
+        }))
+    ],
+    [assets, assetsLibrary]
+  );
 
   const handleCreateMap = async () => {
     try {
@@ -85,7 +205,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
             width: nextMap.width,
             height: nextMap.height,
             cell_size: nextMap.cellSize,
-            data: { objects: nextMap.objects },
+            data: { objects: nextMap.objects, backgroundAssetId: nextMap.backgroundAssetId ?? null },
             scenario_id: nextMap.scenarioId ?? null
           })
         });
@@ -108,6 +228,36 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
     scheduleSave(updated);
   };
 
+  const setMapAssetUsage = async (
+    role: 'map_background' | 'map_token',
+    assetId: string | null
+  ) => {
+    if (!activeMap) return;
+    const existing = findAssetUsageLink(activeMapEntityLinks, role);
+
+    if (!assetId) {
+      if (existing) await onDeleteMaterialLink(existing.id);
+      if (role === 'map_background') {
+        updateMapField('backgroundAssetId', null);
+      }
+      return;
+    }
+
+    if (role === 'map_background' && existing && existing.targetId !== assetId) {
+      await onDeleteMaterialLink(existing.id);
+    }
+
+    await onCreateMaterialLink(
+      'map',
+      activeMap.id,
+      buildAssetUsagePayload(assetId, role)
+    );
+
+    if (role === 'map_background') {
+      updateMapField('backgroundAssetId', assetId);
+    }
+  };
+
   const deleteMap = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm('Удалить карту?')) return;
@@ -121,15 +271,15 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
   };
   const cycleToolbarPosition = () => { const p: ToolbarPosition[] = ['left', 'top', 'right', 'bottom']; setToolbarPosition(p[(p.indexOf(toolbarPosition) + 1) % 4]); };
   const handleZoom = (delta: number) => { setZoom(prev => Math.max(0.2, Math.min(3, prev + delta))); };
-  const isWithinMapBounds = (x: number, y: number, map: MapData) => x >= 0 && y >= 0 && x < map.width && y < map.height;
+  const isWithinMapBounds = useCallback((x: number, y: number, map: MapData) => x >= 0 && y >= 0 && x < map.width && y < map.height, []);
   const clampGridToMapBounds = (x: number, y: number, map: MapData): GridPoint => ({
     x: Math.min(map.width - 1, Math.max(0, x)),
     y: Math.min(map.height - 1, Math.max(0, y)),
   });
-  const sanitizeObjects = (objects: MapObject[], map: MapData) =>
-    objects.filter((obj) => isWithinMapBounds(obj.x, obj.y, map));
+  const sanitizeObjects = useCallback((objects: MapObject[], map: MapData) =>
+    objects.filter((obj) => isWithinMapBounds(obj.x, obj.y, map)), [isWithinMapBounds]);
 
-  const drawMap = () => {
+  const drawMap = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !activeMap) return;
     const ctx = canvas.getContext('2d');
@@ -141,14 +291,46 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
     const cx = canvas.width / 2; const cy = canvas.height / 2;
     ctx.translate(cx, cy); ctx.scale(zoom, zoom); ctx.translate(-cx, -cy); ctx.translate(viewOffset.x, viewOffset.y);
     const mapW = activeMap.width * activeMap.cellSize; const mapH = activeMap.height * activeMap.cellSize;
+    const getCanvasImage = (url: string): HTMLImageElement | null => {
+      if (typeof window === 'undefined') return null;
+      let image = imageCacheRef.current[url];
+      if (!image) {
+        image = new window.Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => setImageRevision((revision) => revision + 1);
+        image.src = url;
+        imageCacheRef.current[url] = image;
+      }
+      return image.complete && image.naturalWidth > 0 ? image : null;
+    };
     ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, mapW, mapH);
+    const backgroundAsset = activeMap.backgroundAssetId ? assetById.get(activeMap.backgroundAssetId) : undefined;
+    if (backgroundAsset?.url) {
+      const image = getCanvasImage(backgroundAsset.url);
+      if (image) {
+        ctx.drawImage(image, 0, 0, mapW, mapH);
+      }
+    }
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
     for (let x = 0; x <= activeMap.width; x++) { ctx.beginPath(); ctx.moveTo(x * activeMap.cellSize, 0); ctx.lineTo(x * activeMap.cellSize, mapH); ctx.stroke(); }
     for (let y = 0; y <= activeMap.height; y++) { ctx.beginPath(); ctx.moveTo(0, y * activeMap.cellSize); ctx.lineTo(mapW, y * activeMap.cellSize); ctx.stroke(); }
     sanitizeObjects(activeMap.objects, activeMap).forEach(obj => {
-      ctx.fillStyle = obj.color;
       const p = 1;
-      ctx.fillRect(obj.x * activeMap.cellSize + p, obj.y * activeMap.cellSize + p, activeMap.cellSize - p * 2, activeMap.cellSize - p * 2);
+      const cellX = obj.x * activeMap.cellSize + p;
+      const cellY = obj.y * activeMap.cellSize + p;
+      const cellSize = activeMap.cellSize - p * 2;
+      const objectAsset = obj.assetId ? assetById.get(obj.assetId) : undefined;
+      const objectImage = objectAsset?.url ? getCanvasImage(objectAsset.url) : null;
+
+      if (objectImage) {
+        ctx.drawImage(objectImage, cellX, cellY, cellSize, cellSize);
+        ctx.strokeStyle = obj.color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(cellX, cellY, cellSize, cellSize);
+      } else {
+        ctx.fillStyle = obj.color;
+        ctx.fillRect(cellX, cellY, cellSize, cellSize);
+      }
       if (obj.type === 'wall') { ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.strokeRect(obj.x * activeMap.cellSize + p, obj.y * activeMap.cellSize + p, activeMap.cellSize - p * 2, activeMap.cellSize - p * 2); }
     });
     if (selectedTool === 'rect' && rectStart && rectEnd) {
@@ -172,7 +354,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
     }
     ctx.strokeStyle = '#4361EE'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, mapW, mapH);
     ctx.restore();
-  };
+  }, [activeAsset.color, activeMap, assetById, rectEnd, rectStart, sanitizeObjects, selectedTool, viewOffset.x, viewOffset.y, zoom]);
 
   useEffect(() => {
     if (activeId) {
@@ -180,7 +362,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
       window.addEventListener('resize', drawMap);
       return () => window.removeEventListener('resize', drawMap);
     }
-  }, [data, activeId, activeMap?.width, activeMap?.height, viewOffset, zoom, selectedTool, rectStart, rectEnd, activeAsset.color]);
+  }, [activeId, drawMap, imageRevision]);
 
   useEffect(() => {
     return () => {
@@ -254,18 +436,18 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
   const applyTool = (x: number, y: number, recordHistory = false) => {
     if (!activeMap) return;
     if (!isWithinMapBounds(x, y, activeMap)) return;
-    if (selectedTool === 'picker') { const obj = activeMap.objects.find(o => o.x === x && o.y === y); if (obj) { const a = assets.find(as => as.type === obj.type); if (a) { setActiveAsset(a); setSelectedTool('brush'); } } return; }
+    if (selectedTool === 'picker') { const obj = activeMap.objects.find(o => o.x === x && o.y === y); if (obj) { const a = paletteAssets.find(as => as.type === obj.type && (as.assetId ?? null) === (obj.assetId ?? null)); if (a) { setActiveAsset(a); setSelectedTool('brush'); } } return; }
     if (selectedTool === 'brush') {
-      const newObj: MapObject = { id: Math.random().toString(36).substr(2, 9), x, y, type: activeAsset.type, label: activeAsset.label, color: activeAsset.color };
+      const newObj: MapObject = { id: Math.random().toString(36).substr(2, 9), x, y, type: activeAsset.type, label: activeAsset.label, color: activeAsset.color, assetId: activeAsset.assetId ?? null };
       const clean = activeMap.objects.filter(o => o.x !== x || o.y !== y);
       const exist = activeMap.objects.find(o => o.x === x && o.y === y);
-      if (exist?.type !== activeAsset.type) commitObjects([...clean, newObj], recordHistory);
+      if (exist?.type !== activeAsset.type || (exist.assetId ?? null) !== (activeAsset.assetId ?? null)) commitObjects([...clean, newObj], recordHistory);
     } else if (selectedTool === 'eraser') {
       const clean = activeMap.objects.filter(o => o.x !== x || o.y !== y);
       if (clean.length !== activeMap.objects.length) commitObjects(clean, recordHistory);
     } else if (selectedTool === 'fill') {
         if(confirm('Залить? (Демо)')) {
-            const objs = []; for(let i=0; i<activeMap.width; i++) for(let j=0; j<activeMap.height; j++) objs.push({ id: Math.random().toString(), x: i, y: j, type: activeAsset.type, label: activeAsset.label, color: activeAsset.color });
+            const objs = []; for(let i=0; i<activeMap.width; i++) for(let j=0; j<activeMap.height; j++) objs.push({ id: Math.random().toString(), x: i, y: j, type: activeAsset.type, label: activeAsset.label, color: activeAsset.color, assetId: activeAsset.assetId ?? null });
             commitObjects(objs, recordHistory);
         } setSelectedTool('brush');
     }
@@ -309,6 +491,7 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
             type: activeAsset.type,
             label: activeAsset.label,
             color: activeAsset.color,
+            assetId: activeAsset.assetId ?? null,
           });
         }
       }
@@ -384,7 +567,8 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
         <div className="w-80 bg-[var(--bg-surface)] border-l-4 border-[var(--border-color)] flex flex-col p-8 space-y-10 z-10 overflow-y-auto">
           <h2 className="text-4xl font-black uppercase tracking-tighter text-[var(--text-main)] glitch-text leading-none">АРХИВ КАРТ</h2>
           <SearchInput value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="НАЗВАНИЕ..." accentColor={ACCENT_WHITE}/>
-          <div className="flex-1 overflow-y-auto -mx-4 px-4 space-y-1">{data.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase())).map(map => (<button key={map.id} onClick={() => setActiveId(map.id)} className="w-full text-left p-4 border border-[var(--border-color)] hover:border-[var(--text-main)] hover:bg-[var(--bg-main)] transition-all group relative bg-[var(--bg-surface)]"><div className="flex justify-between items-start"><div className="mono text-[11px] font-black uppercase text-[var(--text-main)] mb-2 group-hover:text-[var(--text-main)] transition-colors truncate pr-6">{map.name}</div></div><div className="flex justify-between items-center border-t border-[var(--border-color)] pt-2 mt-2"><span className="mono text-[9px] text-[var(--text-muted)]">{map.width}x{map.height}</span><div className="flex items-center gap-1 mono text-[9px] text-[var(--text-muted)]"><Grid size={10} /> {map.objects.length} ОБЪЕКТОВ</div></div><div className="absolute right-2 top-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity text-[var(--text-muted)] hover:text-[var(--col-red)]" onClick={(e) => deleteMap(map.id, e)}><Trash2 size={12} /></div></button>))}</div>
+          <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={ACCENT_WHITE} />
+          <div className="flex-1 overflow-y-auto -mx-4 px-4 space-y-1">{filteredMaps.map(map => (<button key={map.id} onClick={() => setActiveId(map.id)} className="w-full text-left p-4 border border-[var(--border-color)] hover:border-[var(--text-main)] hover:bg-[var(--bg-main)] transition-all group relative bg-[var(--bg-surface)]"><div className="flex justify-between items-start"><div className="mono text-[11px] font-black uppercase text-[var(--text-main)] mb-2 group-hover:text-[var(--text-main)] transition-colors truncate pr-6">{map.name}</div></div><div className="flex justify-between items-center border-t border-[var(--border-color)] pt-2 mt-2"><span className="mono text-[9px] text-[var(--text-muted)]">{map.width}x{map.height}</span><div className="flex items-center gap-1 mono text-[9px] text-[var(--text-muted)]"><Grid size={10} /> {map.objects.length} ОБЪЕКТОВ</div></div><div className="absolute right-2 top-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity text-[var(--text-muted)] hover:text-[var(--col-red)]" onClick={(e) => deleteMap(map.id, e)}><Trash2 size={12} /></div></button>))}</div>
         </div>
       </div>
     );
@@ -411,7 +595,58 @@ const MapEditor: React.FC<MapEditorProps> = ({ data, onUpdate, initialMapId }) =
       <div className="w-80 bg-[var(--bg-surface)] border-l border-[var(--border-color)] flex flex-col z-10 shrink-0">
           <div className="p-6 border-b border-[var(--border-color)] flex items-center gap-2 bg-[var(--bg-main)]"><Layers size={16} className="text-[var(--text-main)]"/><span className="mono text-[10px] uppercase font-black text-[var(--text-main)] tracking-widest">РЕСУРСЫ</span></div>
           <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              <div className="space-y-3"><label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black block">Тайлы</label><div className="grid grid-cols-2 gap-2">{assets.map(asset => (<button key={asset.type} onClick={() => { setActiveAsset(asset); setSelectedTool('brush'); }} className={`flex flex-col items-center justify-center p-3 border transition-all hover:scale-105 active:scale-95 ${activeAsset.type === asset.type ? 'border-[var(--text-main)] bg-[var(--text-main)]/10' : 'border-[var(--border-color)] hover:border-[var(--border-color-hover)]'}`}><div className="w-6 h-6 mb-2 border border-[var(--border-color)]" style={{ backgroundColor: asset.color }} /><span className="mono text-[9px] uppercase font-bold text-[var(--text-main)]">{asset.label}</span></button>))}</div></div>
+              <div className="space-y-3"><label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black block">Тайлы и токены</label><div className="grid grid-cols-2 gap-2">{paletteAssets.map(asset => (<button key={`${asset.type}:${asset.assetId ?? ''}`} onClick={() => { setActiveAsset(asset); setSelectedTool('brush'); if (asset.assetId) void setMapAssetUsage('map_token', asset.assetId); }} className={`flex flex-col items-center justify-center p-3 border transition-all hover:scale-105 active:scale-95 ${(activeAsset.type === asset.type && (activeAsset.assetId ?? null) === (asset.assetId ?? null)) ? 'border-[var(--text-main)] bg-[var(--text-main)]/10' : 'border-[var(--border-color)] hover:border-[var(--border-color-hover)]'}`}><div className="w-6 h-6 mb-2 border border-[var(--border-color)] bg-center bg-cover" style={{ backgroundColor: asset.color, backgroundImage: asset.imageUrl ? `url(${asset.imageUrl})` : undefined }} /><span className="mono text-[9px] uppercase font-bold text-[var(--text-main)] truncate max-w-full">{asset.label}</span></button>))}</div></div>
+              {activeMap && (
+                <AssetUsagePicker
+                  label="Фон карты"
+                  assets={assetsLibrary}
+                  value={activeMap.backgroundAssetId ?? findAssetUsageLink(activeMapEntityLinks, 'map_background')?.targetId ?? null}
+                  allowedTypes={['image']}
+                  accentColor={ACCENT_WHITE}
+                  onChange={(assetId) => setMapAssetUsage('map_background', assetId)}
+                />
+              )}
+              {activeMap && (
+                <TagPicker
+                  allTags={tags}
+                  selectedTags={activeMapTags}
+                  accentColor={ACCENT_WHITE}
+                  onReplaceTags={(tagIds, newTags) => onReplaceTargetTags('map', activeMap.id, tagIds, newTags)}
+                  onUpdateTag={onUpdateTag}
+                  onDeleteTag={onDeleteTag}
+                />
+              )}
+              {activeMap && (
+                <EntityLinksPanel
+                  sourceType="map"
+                  sourceId={activeMap.id}
+                  links={activeMapEntityLinks.filter((link) => !isAssetUsageLink(link))}
+                  scenarios={scenarios}
+                  maps={data}
+                  characters={characters}
+                  items={items}
+                  assets={assetsLibrary}
+                  locations={locations}
+                  factions={factions}
+                  events={events}
+                  accentColor={ACCENT_WHITE}
+                  onCreateLink={onCreateMaterialLink}
+                  onUpdateLink={onUpdateMaterialLink}
+                  onDeleteLink={onDeleteMaterialLink}
+                  onOpenLink={onOpenMaterialLink}
+                />
+              )}
+              {activeMap && (
+                <PublicationPanel
+                  targetType="map"
+                  targetId={activeMap.id}
+                  publication={publicationAssignments[publicationAssignmentKey('map', activeMap.id)]}
+                  accentColor={ACCENT_WHITE}
+                  onUpsertPublication={onUpsertPublication}
+                  onUpdatePublication={onUpdatePublication}
+                  onDeletePublication={onDeletePublication}
+                />
+              )}
               <div className="space-y-4 pt-6 border-t border-[var(--border-color)]"><label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black block flex items-center gap-2"><Maximize size={10} /> Размеры</label><div className="grid grid-cols-2 gap-4"><div><label className="mono text-[8px] text-[var(--text-muted)] block mb-1 uppercase">Ширина</label><Input type="number" value={activeMap?.width} onChange={e => updateMapField('width', parseInt(e.target.value) || 20)} accentColor={ACCENT_WHITE} className="text-center font-bold"/></div><div><label className="mono text-[8px] text-[var(--text-muted)] block mb-1 uppercase">Высота</label><Input type="number" value={activeMap?.height} onChange={e => updateMapField('height', parseInt(e.target.value) || 15)} accentColor={ACCENT_WHITE} className="text-center font-bold"/></div></div></div>
           </div>
       </div>

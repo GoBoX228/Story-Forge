@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import { LandingPage } from './components/LandingPage';
@@ -8,28 +8,73 @@ import { COLORS, ICONS } from './constants';
 import { Button, AddTile, SectionHeader } from './components/UI';
 import { BaseCard } from './components/BaseCard';
 import { CampaignEditorModal } from './components/CampaignEditorModal';
-import { Edit3, Loader2, Plus } from 'lucide-react';
+import { ArrowLeft, Edit3, Loader2, Plus } from 'lucide-react';
 import {
   AdminBroadcastItem,
   AdminContentItem,
+  Asset,
+  AssetUpdatePayload,
+  AssetUploadPayload,
   Campaign,
   Character,
+  EntityLink,
+  EntityLinkAssignmentMap,
+  EntityLinkCreatePayload,
+  EntityLinkTargetType,
+  EntityLinkUpdatePayload,
+  Faction,
   Item,
   MapData,
+  PublishedContent,
+  PublicationAssignmentMap,
+  PublicationTargetType,
+  PublicationUpdatePayload,
+  PublicationUpsertPayload,
   Scenario,
-  UserProfile
+  ScenarioNodeEntityTargetType,
+  Tag,
+  TagAssignmentMap,
+  TaggableTargetType,
+  UserProfile,
+  WorldEntityPayload,
+  WorldEntityUpdatePayload,
+  WorldEvent,
+  WorldEventPayload,
+  WorldEventUpdatePayload,
+  WorldLocation
 } from './types';
 import { apiRequest, clearAccessToken, getAccessToken } from './lib/api';
 import {
+  entityLinkAssignmentKey,
   mapCampaignFromApi,
   mapCampaignToApiPayload,
-  mapChapterFromApi,
   mapCharacterFromApi,
   mapItemFromApi,
   mapItemToApiPayload,
   mapMapFromApi,
-  mapScenarioSummary
+  mapScenarioSummary,
+  publicationAssignmentKey,
+  tagAssignmentKey
 } from './lib/mappers';
+import { deleteAsset, listAssets, updateAsset, uploadAsset } from './lib/assetApi';
+import {
+  createFaction,
+  createLocation,
+  createWorldEvent,
+  deleteFaction,
+  deleteLocation,
+  deleteWorldEvent,
+  listFactions,
+  listLocations,
+  listWorldEvents,
+  updateFaction,
+  updateLocation,
+  updateWorldEvent
+} from './lib/worldApi';
+import { deleteTag, listTags, listTargetTags, replaceTargetTags, updateTag } from './lib/tagApi';
+import { createEntityLink, deleteEntityLink, listEntityLinks, updateEntityLink } from './lib/entityLinkApi';
+import { entityLinkIdentityKey } from './lib/assetUsage';
+import { deletePublication, listPublications, publishTarget, updatePublication } from './lib/publicationApi';
 
 const lazyWithRetry = <T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>,
@@ -68,6 +113,8 @@ const MapEditor = lazyWithRetry(() => import('./components/MapEditor'), 'map');
 const ProfileEditor = lazyWithRetry(() => import('./components/ProfileEditor'), 'profile');
 const ItemsEditor = lazyWithRetry(() => import('./components/ItemsEditor'), 'items');
 const CharactersEditor = lazyWithRetry(() => import('./components/CharactersEditor'), 'characters');
+const AssetsEditor = lazyWithRetry(() => import('./components/AssetsEditor'), 'assets');
+const WorldEditor = lazyWithRetry(() => import('./components/WorldEditor'), 'world');
 const CommunityView = lazyWithRetry(
   () => import('./components/CommunityView').then((module) => ({ default: module.CommunityView })),
   'community'
@@ -115,6 +162,16 @@ const getBroadcastAccent = (type: AdminBroadcastItem['type']): string => {
   if (type === 'warning') return 'var(--col-yellow)';
   return 'var(--col-blue)';
 };
+
+interface TagTargetRef {
+  type: TaggableTargetType;
+  id: string;
+}
+
+interface EntityLinkTargetRef {
+  type: EntityLinkTargetType;
+  id: string;
+}
 
 const formatBroadcastTime = (value: string) => {
   const parsed = new Date(value);
@@ -173,6 +230,15 @@ const App: React.FC = () => {
   const [maps, setMaps] = useState<MapData[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [items, setItems] = useStickyState<Item[]>(INITIAL_ITEMS, 'sf_items');
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [locations, setLocations] = useState<WorldLocation[]>([]);
+  const [factions, setFactions] = useState<Faction[]>([]);
+  const [worldEvents, setWorldEvents] = useState<WorldEvent[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagAssignments, setTagAssignments] = useState<TagAssignmentMap>({});
+  const [entityLinks, setEntityLinks] = useState<EntityLinkAssignmentMap>({});
+  const [publications, setPublications] = useState<PublishedContent[]>([]);
+  const [publicationAssignments, setPublicationAssignments] = useState<PublicationAssignmentMap>({});
   const [broadcasts, setBroadcasts] = useState<AdminBroadcastItem[]>([]);
   const [dismissedBroadcastIds, setDismissedBroadcastIds] = useStickyState<number[]>(
     [],
@@ -180,6 +246,14 @@ const App: React.FC = () => {
   );
   const [scenarioEditorTargetId, setScenarioEditorTargetId] = useState<string | null>(null);
   const [mapEditorTargetId, setMapEditorTargetId] = useState<string | null>(null);
+  const [characterEditorTargetId, setCharacterEditorTargetId] = useState<string | null>(null);
+  const [itemEditorTargetId, setItemEditorTargetId] = useState<string | null>(null);
+  const [assetEditorTargetId, setAssetEditorTargetId] = useState<string | null>(null);
+  const [worldEditorTarget, setWorldEditorTarget] = useState<{
+    type: 'location' | 'faction' | 'event';
+    id: string;
+  } | null>(null);
+  const [graphReturnScenarioId, setGraphReturnScenarioId] = useState<string | null>(null);
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Partial<Campaign> | null>(null);
@@ -203,13 +277,78 @@ const App: React.FC = () => {
     }
   }, [dismissedBroadcastIds]);
 
+  const loadTagAssignments = useCallback(async (targets: TagTargetRef[]) => {
+    const pairs = await Promise.all(
+      targets.map(async (target) => {
+        try {
+          const targetTags = await listTargetTags(target.type, target.id);
+          return [tagAssignmentKey(target.type, target.id), targetTags] as const;
+        } catch {
+          return [tagAssignmentKey(target.type, target.id), []] as const;
+        }
+      })
+    );
+
+    setTagAssignments(Object.fromEntries(pairs));
+  }, []);
+
+  const loadEntityLinkAssignments = useCallback(async (targets: EntityLinkTargetRef[]) => {
+    const pairs = await Promise.all(
+      targets.map(async (target) => {
+        try {
+          const targetLinks = await listEntityLinks(target.type, target.id);
+          return [entityLinkAssignmentKey(target.type, target.id), targetLinks] as const;
+        } catch {
+          return [entityLinkAssignmentKey(target.type, target.id), []] as const;
+        }
+      })
+    );
+
+    setEntityLinks(Object.fromEntries(pairs));
+  }, []);
+
+  const loadPublications = useCallback(async () => {
+    const [ownPublications, publicPublications] = await Promise.all([
+      listPublications({ scope: 'own' }),
+      listPublications({ scope: 'public' })
+    ]);
+    const byId = new Map<string, PublishedContent>();
+    publicPublications.forEach((publication) => byId.set(publication.id, publication));
+    ownPublications.forEach((publication) => byId.set(publication.id, publication));
+    setPublications(Array.from(byId.values()));
+    setPublicationAssignments(
+      Object.fromEntries(
+        ownPublications.map((publication) => [
+          publicationAssignmentKey(publication.contentType, publication.contentId),
+          publication,
+        ])
+      )
+    );
+  }, []);
+
   const loadAllData = useCallback(async () => {
-    const [campaignsResponse, scenariosResponse, mapsResponse, charactersResponse, itemsResponse] = await Promise.all([
+    const [
+      campaignsResponse,
+      scenariosResponse,
+      mapsResponse,
+      charactersResponse,
+      itemsResponse,
+      assetsResponse,
+      locationsResponse,
+      factionsResponse,
+      worldEventsResponse,
+      tagsResponse
+    ] = await Promise.all([
       apiRequest<any[]>('/campaigns'),
       apiRequest<any[]>('/scenarios'),
       apiRequest<any[]>('/maps'),
       apiRequest<any[]>('/characters'),
-      apiRequest<any[]>('/items')
+      apiRequest<any[]>('/items'),
+      listAssets(),
+      listLocations(),
+      listFactions(),
+      listWorldEvents(),
+      listTags()
     ]);
 
     setCampaigns(campaignsResponse.map(mapCampaignFromApi));
@@ -217,8 +356,26 @@ const App: React.FC = () => {
     setMaps(mapsResponse.map(mapMapFromApi));
     setCharacters(charactersResponse.map(mapCharacterFromApi));
     setItems(itemsResponse.map(mapItemFromApi));
+    setAssets(assetsResponse);
+    setLocations(locationsResponse);
+    setFactions(factionsResponse);
+    setWorldEvents(worldEventsResponse);
+    setTags(tagsResponse);
+    const materialTargets = [
+      ...scenariosResponse.map((scenario) => ({ type: 'scenario' as const, id: String(scenario.id) })),
+      ...mapsResponse.map((map) => ({ type: 'map' as const, id: String(map.id) })),
+      ...charactersResponse.map((character) => ({ type: 'character' as const, id: String(character.id) })),
+      ...itemsResponse.map((item) => ({ type: 'item' as const, id: String(item.id) })),
+      ...assetsResponse.map((asset) => ({ type: 'asset' as const, id: asset.id })),
+      ...locationsResponse.map((location) => ({ type: 'location' as const, id: location.id })),
+      ...factionsResponse.map((faction) => ({ type: 'faction' as const, id: faction.id })),
+      ...worldEventsResponse.map((event) => ({ type: 'event' as const, id: event.id }))
+    ];
+    await loadTagAssignments(materialTargets);
+    await loadEntityLinkAssignments(materialTargets);
+    await loadPublications();
     await loadBroadcasts();
-  }, [loadBroadcasts, setItems]);
+  }, [loadBroadcasts, loadEntityLinkAssignments, loadPublications, loadTagAssignments, setItems]);
 
   useEffect(() => {
     let mounted = true;
@@ -267,6 +424,21 @@ const App: React.FC = () => {
     }
     if (activeView !== 'maps') {
       setMapEditorTargetId(null);
+    }
+    if (activeView !== 'characters') {
+      setCharacterEditorTargetId(null);
+    }
+    if (activeView !== 'items') {
+      setItemEditorTargetId(null);
+    }
+    if (activeView !== 'assets') {
+      setAssetEditorTargetId(null);
+    }
+    if (activeView !== 'world') {
+      setWorldEditorTarget(null);
+    }
+    if (!['maps', 'characters', 'items', 'assets', 'world'].includes(activeView)) {
+      setGraphReturnScenarioId(null);
     }
   }, [activeView]);
 
@@ -478,6 +650,197 @@ const App: React.FC = () => {
     [setItems]
   );
 
+  const handleUploadAsset = useCallback(async (payload: AssetUploadPayload) => {
+    const uploaded = await uploadAsset(payload);
+    setAssets((prev) => [uploaded, ...prev]);
+    return uploaded;
+  }, []);
+
+  const handleUpdateAsset = useCallback(async (id: string, payload: AssetUpdatePayload) => {
+    const updated = await updateAsset(id, payload);
+    setAssets((prev) => prev.map((asset) => (asset.id === id ? updated : asset)));
+    return updated;
+  }, []);
+
+  const handleDeleteAsset = useCallback(async (id: string) => {
+    await deleteAsset(id);
+    setAssets((prev) => prev.filter((asset) => asset.id !== id));
+  }, []);
+
+  const handleCreateLocation = useCallback(async (payload: WorldEntityPayload) => {
+    const created = await createLocation(payload);
+    setLocations((prev) => [created, ...prev]);
+    return created;
+  }, []);
+
+  const handleUpdateLocation = useCallback(async (id: string, payload: WorldEntityUpdatePayload) => {
+    const updated = await updateLocation(id, payload);
+    setLocations((prev) => prev.map((location) => (location.id === id ? updated : location)));
+    return updated;
+  }, []);
+
+  const handleDeleteLocation = useCallback(async (id: string) => {
+    await deleteLocation(id);
+    setLocations((prev) => prev.filter((location) => location.id !== id));
+  }, []);
+
+  const handleCreateFaction = useCallback(async (payload: WorldEntityPayload) => {
+    const created = await createFaction(payload);
+    setFactions((prev) => [created, ...prev]);
+    return created;
+  }, []);
+
+  const handleUpdateFaction = useCallback(async (id: string, payload: WorldEntityUpdatePayload) => {
+    const updated = await updateFaction(id, payload);
+    setFactions((prev) => prev.map((faction) => (faction.id === id ? updated : faction)));
+    return updated;
+  }, []);
+
+  const handleDeleteFaction = useCallback(async (id: string) => {
+    await deleteFaction(id);
+    setFactions((prev) => prev.filter((faction) => faction.id !== id));
+  }, []);
+
+  const handleCreateWorldEvent = useCallback(async (payload: WorldEventPayload) => {
+    const created = await createWorldEvent(payload);
+    setWorldEvents((prev) => [created, ...prev]);
+    return created;
+  }, []);
+
+  const handleUpdateWorldEvent = useCallback(async (id: string, payload: WorldEventUpdatePayload) => {
+    const updated = await updateWorldEvent(id, payload);
+    setWorldEvents((prev) => prev.map((event) => (event.id === id ? updated : event)));
+    return updated;
+  }, []);
+
+  const handleDeleteWorldEvent = useCallback(async (id: string) => {
+    await deleteWorldEvent(id);
+    setWorldEvents((prev) => prev.filter((event) => event.id !== id));
+  }, []);
+
+  const handleReplaceTargetTags = useCallback(async (
+    type: TaggableTargetType,
+    id: string,
+    tagIds: string[],
+    newTags: string[] = []
+  ) => {
+    const nextTags = await replaceTargetTags(type, id, { tagIds, newTags });
+    const key = tagAssignmentKey(type, id);
+    setTagAssignments((prev) => ({ ...prev, [key]: nextTags }));
+    setTags((prev) => {
+      const byId = new Map(prev.map((tag) => [tag.id, tag]));
+      nextTags.forEach((tag) => byId.set(tag.id, tag));
+      return Array.from(byId.values()).sort((left, right) => left.name.localeCompare(right.name));
+    });
+    return nextTags;
+  }, []);
+
+  const handleUpdateTag = useCallback(async (id: string, name: string) => {
+    const updated = await updateTag(id, { name });
+    setTags((prev) => prev.map((tag) => (tag.id === id ? updated : tag)).sort((left, right) => left.name.localeCompare(right.name)));
+    setTagAssignments((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([key, assignedTags]) => [
+          key,
+          assignedTags.map((tag) => (tag.id === id ? updated : tag)),
+        ])
+      )
+    );
+    return updated;
+  }, []);
+
+  const handleDeleteTag = useCallback(async (id: string) => {
+    await deleteTag(id);
+    setTags((prev) => prev.filter((tag) => tag.id !== id));
+    setTagAssignments((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([key, assignedTags]) => [
+          key,
+          assignedTags.filter((tag) => tag.id !== id),
+        ])
+      )
+    );
+  }, []);
+
+  const handleCreateMaterialLink = useCallback(async (
+    sourceType: EntityLinkTargetType,
+    sourceId: string,
+    payload: EntityLinkCreatePayload
+  ) => {
+    const nextLink = await createEntityLink(sourceType, sourceId, payload);
+    const key = entityLinkAssignmentKey(sourceType, sourceId);
+    setEntityLinks((prev) => {
+      const current = prev[key] ?? [];
+      const withoutSame = current.filter((link) =>
+        link.id !== nextLink.id && entityLinkIdentityKey(link) !== entityLinkIdentityKey(nextLink)
+      );
+      return { ...prev, [key]: [...withoutSame, nextLink] };
+    });
+    return nextLink;
+  }, []);
+
+  const handleUpdateMaterialLink = useCallback(async (id: string, payload: EntityLinkUpdatePayload) => {
+    const updated = await updateEntityLink(id, payload);
+    setEntityLinks((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([key, links]) => [
+          key,
+          links.map((link) => (link.id === id ? updated : link)),
+        ])
+      )
+    );
+    return updated;
+  }, []);
+
+  const handleDeleteMaterialLink = useCallback(async (id: string) => {
+    await deleteEntityLink(id);
+    setEntityLinks((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([key, links]) => [
+          key,
+          links.filter((link) => link.id !== id),
+        ])
+      )
+    );
+  }, []);
+
+  const upsertPublicationState = useCallback((publication: PublishedContent) => {
+    setPublications((prev) => {
+      const withoutCurrent = prev.filter((item) => item.id !== publication.id);
+      return [publication, ...withoutCurrent];
+    });
+    setPublicationAssignments((prev) => ({
+      ...prev,
+      [publicationAssignmentKey(publication.contentType, publication.contentId)]: publication,
+    }));
+  }, []);
+
+  const handleUpsertPublication = useCallback(async (
+    type: PublicationTargetType,
+    id: string,
+    payload: PublicationUpsertPayload
+  ) => {
+    const publication = await publishTarget(type, id, payload);
+    upsertPublicationState(publication);
+    return publication;
+  }, [upsertPublicationState]);
+
+  const handleUpdatePublication = useCallback(async (id: string, payload: PublicationUpdatePayload) => {
+    const publication = await updatePublication(id, payload);
+    upsertPublicationState(publication);
+    return publication;
+  }, [upsertPublicationState]);
+
+  const handleDeletePublication = useCallback(async (id: string) => {
+    await deletePublication(id);
+    setPublications((prev) => prev.filter((publication) => publication.id !== id));
+    setPublicationAssignments((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).filter(([, publication]) => publication?.id !== id)
+      )
+    );
+  }, []);
+
   const handleOpenEditor = (campaign?: Campaign) => {
     setEditingCampaign(
       campaign || {
@@ -676,21 +1039,8 @@ const App: React.FC = () => {
           body: JSON.stringify({ title: 'НОВЫЙ СЦЕНАРИЙ', description: '' }),
         });
         const scenario = mapScenarioSummary(created);
-        let createdScenario: Scenario = scenario;
-
-        try {
-          const chapterResponse = await apiRequest(`/scenarios/${scenario.id}/chapters`, {
-            method: 'POST',
-            body: JSON.stringify({ title: 'ГЛАВА 1', order_index: 0 }),
-          });
-          const chapter = mapChapterFromApi(chapterResponse);
-          createdScenario = { ...scenario, chapters: [chapter] };
-        } catch {
-          // ignore chapter bootstrap failure
-        }
-
-        setScenarios((prev) => [createdScenario, ...prev.filter((item) => item.id !== createdScenario.id)]);
-        targetId = createdScenario.id;
+        setScenarios((prev) => [scenario, ...prev.filter((item) => item.id !== scenario.id)]);
+        targetId = scenario.id;
       } catch {
         setActiveView('scenarios');
         return;
@@ -755,8 +1105,108 @@ const App: React.FC = () => {
     handleOpenEditor();
   };
 
-  const renderView = useMemo(() => {
-    return (
+  const handleReturnToGraphScenario = useCallback(() => {
+    if (!graphReturnScenarioId) return;
+    setScenarioEditorTargetId(graphReturnScenarioId);
+    setActiveView('scenarios');
+    setGraphReturnScenarioId(null);
+  }, [graphReturnScenarioId]);
+
+  const handleOpenGraphEntityLink = useCallback((
+    targetType: ScenarioNodeEntityTargetType,
+    targetId: string,
+    sourceScenarioId: string
+  ) => {
+    setGraphReturnScenarioId(sourceScenarioId);
+
+    if (targetType === 'map') {
+      setMapEditorTargetId(targetId);
+      setActiveView('maps');
+      return;
+    }
+
+    if (targetType === 'character') {
+      setCharacterEditorTargetId(targetId);
+      setActiveView('characters');
+      return;
+    }
+
+    if (targetType === 'item') {
+      setItemEditorTargetId(targetId);
+      setActiveView('items');
+      return;
+    }
+
+    if (targetType === 'asset') {
+      setAssetEditorTargetId(targetId);
+      setActiveView('assets');
+      return;
+    }
+
+    if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
+      setWorldEditorTarget({ type: targetType, id: targetId });
+      setActiveView('world');
+    }
+  }, []);
+
+  const handleOpenMaterialLink = useCallback((targetType: EntityLinkTargetType, targetId: string) => {
+    if (targetType === 'scenario') {
+      setScenarioEditorTargetId(targetId);
+      setActiveView('scenarios');
+      return;
+    }
+
+    if (targetType === 'map') {
+      setMapEditorTargetId(targetId);
+      setActiveView('maps');
+      return;
+    }
+
+    if (targetType === 'character') {
+      setCharacterEditorTargetId(targetId);
+      setActiveView('characters');
+      return;
+    }
+
+    if (targetType === 'item') {
+      setItemEditorTargetId(targetId);
+      setActiveView('items');
+      return;
+    }
+
+    if (targetType === 'asset') {
+      setAssetEditorTargetId(targetId);
+      setActiveView('assets');
+      return;
+    }
+
+    if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
+      setWorldEditorTarget({ type: targetType, id: targetId });
+      setActiveView('world');
+    }
+  }, []);
+
+  const graphReturnScenarioTitle = graphReturnScenarioId
+    ? scenarios.find((scenario) => scenario.id === graphReturnScenarioId)?.title
+    : null;
+
+  const graphReturnBanner = graphReturnScenarioId ? (
+    <div className="shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-6 py-3 flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <div className="mono text-[8px] uppercase font-black text-[var(--text-muted)] tracking-widest">
+          ОТКРЫТО ИЗ УЗЛА ГРАФА
+        </div>
+        <div className="mono text-[10px] uppercase font-black text-[var(--text-main)] truncate">
+          {graphReturnScenarioTitle ?? 'СЦЕНАРИЙ'}
+        </div>
+      </div>
+      <Button variant="accent-red" size="sm" inverted onClick={handleReturnToGraphScenario}>
+        <ArrowLeft size={13} /> ВЕРНУТЬСЯ К СЦЕНАРИЮ
+      </Button>
+    </div>
+  ) : null;
+
+  const renderView = (
       <div key={activeView} className="h-full w-full animate-fade-in">
         {(() => {
           switch (activeView) {
@@ -855,26 +1305,217 @@ const App: React.FC = () => {
                   onUpdate={setScenarios}
                   campaigns={campaigns}
                   characters={characters}
+                  items={items}
                   maps={maps}
+                  assets={assets}
+                  locations={locations}
+                  factions={factions}
+                  events={worldEvents}
                   onUpdateCharacters={setCharacters}
                   onUpdateMaps={setMaps}
+                  tags={tags}
+                  tagAssignments={tagAssignments}
+                  entityLinks={entityLinks}
+                  publicationAssignments={publicationAssignments}
+                  onReplaceTargetTags={handleReplaceTargetTags}
+                  onUpdateTag={handleUpdateTag}
+                  onDeleteTag={handleDeleteTag}
+                  onCreateMaterialLink={handleCreateMaterialLink}
+                  onUpdateMaterialLink={handleUpdateMaterialLink}
+                  onDeleteMaterialLink={handleDeleteMaterialLink}
+                  onUpsertPublication={handleUpsertPublication}
+                  onUpdatePublication={handleUpdatePublication}
+                  onDeletePublication={handleDeletePublication}
+                  onOpenMaterialLink={handleOpenMaterialLink}
                   initialScenarioId={scenarioEditorTargetId}
+                  onOpenEntityLink={handleOpenGraphEntityLink}
                 />
               );
             case 'maps':
-              return <MapEditor data={maps} onUpdate={setMaps} initialMapId={mapEditorTargetId} />;
+              return (
+                <div className="h-full w-full flex flex-col">
+                  {graphReturnBanner}
+                  <div className="flex-1 min-h-0">
+                    <MapEditor
+                      data={maps}
+                      onUpdate={setMaps}
+                      scenarios={scenarios}
+                      characters={characters}
+                      items={items}
+                      assetsLibrary={assets}
+                      locations={locations}
+                      factions={factions}
+                      events={worldEvents}
+                      tags={tags}
+                      tagAssignments={tagAssignments}
+                      entityLinks={entityLinks}
+                      publicationAssignments={publicationAssignments}
+                      onReplaceTargetTags={handleReplaceTargetTags}
+                      onUpdateTag={handleUpdateTag}
+                      onDeleteTag={handleDeleteTag}
+                      onCreateMaterialLink={handleCreateMaterialLink}
+                      onUpdateMaterialLink={handleUpdateMaterialLink}
+                      onDeleteMaterialLink={handleDeleteMaterialLink}
+                      onUpsertPublication={handleUpsertPublication}
+                      onUpdatePublication={handleUpdatePublication}
+                      onDeletePublication={handleDeletePublication}
+                      onOpenMaterialLink={handleOpenMaterialLink}
+                      initialMapId={mapEditorTargetId}
+                    />
+                  </div>
+                </div>
+              );
             case 'items':
               return (
-                <ItemsEditor
-                  data={items}
-                  onUpdate={setItems}
-                  onCreateItem={handleCreateItem}
-                  onUpdateItem={handleUpdateItem}
-                  onDeleteItem={handleDeleteItem}
-                />
+                <div className="h-full w-full flex flex-col">
+                  {graphReturnBanner}
+                  <div className="flex-1 min-h-0">
+                    <ItemsEditor
+                      data={items}
+                      onUpdate={setItems}
+                      onCreateItem={handleCreateItem}
+                      onUpdateItem={handleUpdateItem}
+                      onDeleteItem={handleDeleteItem}
+                      scenarios={scenarios}
+                      maps={maps}
+                      characters={characters}
+                      assets={assets}
+                      locations={locations}
+                      factions={factions}
+                      events={worldEvents}
+                      tags={tags}
+                      tagAssignments={tagAssignments}
+                      entityLinks={entityLinks}
+                      publicationAssignments={publicationAssignments}
+                      onReplaceTargetTags={handleReplaceTargetTags}
+                      onUpdateTag={handleUpdateTag}
+                      onDeleteTag={handleDeleteTag}
+                      onCreateMaterialLink={handleCreateMaterialLink}
+                      onUpdateMaterialLink={handleUpdateMaterialLink}
+                      onDeleteMaterialLink={handleDeleteMaterialLink}
+                      onUpsertPublication={handleUpsertPublication}
+                      onUpdatePublication={handleUpdatePublication}
+                      onDeletePublication={handleDeletePublication}
+                      onOpenMaterialLink={handleOpenMaterialLink}
+                      initialItemId={itemEditorTargetId}
+                    />
+                  </div>
+                </div>
               );
             case 'characters':
-              return <CharactersEditor data={characters} onUpdate={setCharacters} items={items} />;
+              return (
+                <div className="h-full w-full flex flex-col">
+                  {graphReturnBanner}
+                  <div className="flex-1 min-h-0">
+                    <CharactersEditor
+                      data={characters}
+                      onUpdate={setCharacters}
+                      items={items}
+                      scenarios={scenarios}
+                      maps={maps}
+                      assets={assets}
+                      locations={locations}
+                      factions={factions}
+                      events={worldEvents}
+                      tags={tags}
+                      tagAssignments={tagAssignments}
+                      entityLinks={entityLinks}
+                      publicationAssignments={publicationAssignments}
+                      onReplaceTargetTags={handleReplaceTargetTags}
+                      onUpdateTag={handleUpdateTag}
+                      onDeleteTag={handleDeleteTag}
+                      onCreateMaterialLink={handleCreateMaterialLink}
+                      onUpdateMaterialLink={handleUpdateMaterialLink}
+                      onDeleteMaterialLink={handleDeleteMaterialLink}
+                      onUpsertPublication={handleUpsertPublication}
+                      onUpdatePublication={handleUpdatePublication}
+                      onDeletePublication={handleDeletePublication}
+                      onOpenMaterialLink={handleOpenMaterialLink}
+                      initialCharacterId={characterEditorTargetId}
+                    />
+                  </div>
+                </div>
+              );
+            case 'assets':
+              return (
+                <div className="h-full w-full flex flex-col">
+                  {graphReturnBanner}
+                  <div className="flex-1 min-h-0">
+                    <AssetsEditor
+                      data={assets}
+                      campaigns={campaigns}
+                      scenarios={scenarios}
+                      maps={maps}
+                      characters={characters}
+                      items={items}
+                      locations={locations}
+                      factions={factions}
+                      events={worldEvents}
+                      onUploadAsset={handleUploadAsset}
+                      onUpdateAsset={handleUpdateAsset}
+                      onDeleteAsset={handleDeleteAsset}
+                      tags={tags}
+                      tagAssignments={tagAssignments}
+                      entityLinks={entityLinks}
+                      publicationAssignments={publicationAssignments}
+                      onReplaceTargetTags={handleReplaceTargetTags}
+                      onUpdateTag={handleUpdateTag}
+                      onDeleteTag={handleDeleteTag}
+                      onCreateMaterialLink={handleCreateMaterialLink}
+                      onUpdateMaterialLink={handleUpdateMaterialLink}
+                      onDeleteMaterialLink={handleDeleteMaterialLink}
+                      onUpsertPublication={handleUpsertPublication}
+                      onUpdatePublication={handleUpdatePublication}
+                      onDeletePublication={handleDeletePublication}
+                      onOpenMaterialLink={handleOpenMaterialLink}
+                      initialAssetId={assetEditorTargetId}
+                    />
+                  </div>
+                </div>
+              );
+            case 'world':
+              return (
+                <div className="h-full w-full flex flex-col">
+                  {graphReturnBanner}
+                  <div className="flex-1 min-h-0">
+                    <WorldEditor
+                      locations={locations}
+                      factions={factions}
+                      events={worldEvents}
+                      campaigns={campaigns}
+                      scenarios={scenarios}
+                      maps={maps}
+                      characters={characters}
+                      items={items}
+                      assets={assets}
+                      onCreateLocation={handleCreateLocation}
+                      onUpdateLocation={handleUpdateLocation}
+                      onDeleteLocation={handleDeleteLocation}
+                      onCreateFaction={handleCreateFaction}
+                      onUpdateFaction={handleUpdateFaction}
+                      onDeleteFaction={handleDeleteFaction}
+                      onCreateEvent={handleCreateWorldEvent}
+                      onUpdateEvent={handleUpdateWorldEvent}
+                      onDeleteEvent={handleDeleteWorldEvent}
+                      tags={tags}
+                      tagAssignments={tagAssignments}
+                      entityLinks={entityLinks}
+                      publicationAssignments={publicationAssignments}
+                      onReplaceTargetTags={handleReplaceTargetTags}
+                      onUpdateTag={handleUpdateTag}
+                      onDeleteTag={handleDeleteTag}
+                      onCreateMaterialLink={handleCreateMaterialLink}
+                      onUpdateMaterialLink={handleUpdateMaterialLink}
+                      onDeleteMaterialLink={handleDeleteMaterialLink}
+                      onUpsertPublication={handleUpsertPublication}
+                      onUpdatePublication={handleUpdatePublication}
+                      onDeletePublication={handleDeletePublication}
+                      onOpenMaterialLink={handleOpenMaterialLink}
+                      initialTarget={worldEditorTarget}
+                    />
+                  </div>
+                </div>
+              );
             case 'profile':
               return (
                 <ProfileEditor
@@ -885,7 +1526,7 @@ const App: React.FC = () => {
                 />
               );
             case 'community':
-              return <CommunityView />;
+              return <CommunityView publications={publications} />;
             case 'friends':
               return <FriendsView />;
             case 'messages':
@@ -939,31 +1580,7 @@ const App: React.FC = () => {
           }
         })()}
       </div>
-    );
-  }, [
-    activeView,
-    campaigns,
-    characters,
-    currentTheme,
-    currentUser,
-    interfaceScale,
-    items,
-    handleCreateItem,
-    handleAdminContentDeleted,
-    handleDeleteItem,
-    confirmDisableTwoFactor,
-    confirmEnableTwoFactor,
-    changePassword,
-    handleUpdateProfile,
-    handleUpdateItem,
-    mapEditorTargetId,
-    maps,
-    resendTwoFactorChallenge,
-    requestDisableTwoFactor,
-    requestEnableTwoFactor,
-    scenarioEditorTargetId,
-    scenarios
-  ]);
+  );
 
   if (isBootstrapping) {
     return <LoadingSpinner />;

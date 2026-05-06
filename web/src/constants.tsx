@@ -29,7 +29,8 @@ import {
   Ban,
   CheckCircle,
   Activity,
-  Terminal
+  Terminal,
+  Images
 } from 'lucide-react';
 
 // Using CSS variables allows these to change dynamically based on the [data-theme] attribute
@@ -55,6 +56,8 @@ export const ICONS = {
   Map: <MapIcon size={20} />,
   Characters: <Users size={20} />,
   Items: <Package size={20} />,
+  Assets: <Images size={20} />,
+  World: <Globe size={20} />,
   Profile: <User size={20} />,
   Campaigns: <Library size={20} />,
   Community: <Globe size={20} />,

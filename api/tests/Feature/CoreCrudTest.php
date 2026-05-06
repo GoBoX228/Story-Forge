@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Campaign;
-use App\Models\Chapter;
 use App\Models\Character;
 use App\Models\Item;
 use App\Models\Map;
@@ -36,19 +35,6 @@ class CoreCrudTest extends TestCase
         ]);
         $scenarioResponse->assertStatus(201);
         $scenarioId = (string) $scenarioResponse->json('id');
-
-        $chapterResponse = $this->postJson("/api/scenarios/{$scenarioId}/chapters", [
-            'title' => 'Chapter One',
-        ]);
-        $chapterResponse->assertStatus(201)->assertJsonPath('order_index', 0);
-        $chapterId = (string) $chapterResponse->json('id');
-
-        $blockResponse = $this->postJson("/api/chapters/{$chapterId}/blocks", [
-            'type' => 'scene',
-            'content' => 'Block content',
-        ]);
-        $blockResponse->assertStatus(201)->assertJsonPath('order_index', 0);
-        $blockId = (string) $blockResponse->json('id');
 
         $mapResponse = $this->postJson('/api/maps', [
             'name' => 'Map One',
@@ -94,14 +80,6 @@ class CoreCrudTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('title', 'Scenario Updated');
 
-        $this->patchJson("/api/chapters/{$chapterId}", ['title' => 'Chapter Updated'])
-            ->assertStatus(200)
-            ->assertJsonPath('title', 'Chapter Updated');
-
-        $this->patchJson("/api/blocks/{$blockId}", ['content' => 'Updated block'])
-            ->assertStatus(200)
-            ->assertJsonPath('content', 'Updated block');
-
         $this->patchJson("/api/maps/{$mapId}", ['name' => 'Map Updated'])
             ->assertStatus(200)
             ->assertJsonPath('name', 'Map Updated');
@@ -116,8 +94,8 @@ class CoreCrudTest extends TestCase
 
         $this->getJson("/api/scenarios/{$scenarioId}")
             ->assertStatus(200)
-            ->assertJsonPath('chapters.0.id', (int) $chapterId)
-            ->assertJsonPath('chapters.0.blocks.0.id', (int) $blockId);
+            ->assertJsonPath('id', (int) $scenarioId)
+            ->assertJsonMissingPath('chapters');
 
         $this->deleteJson("/api/items/{$itemId}")
             ->assertStatus(200)
@@ -137,18 +115,6 @@ class CoreCrudTest extends TestCase
         $scenario = Scenario::create([
             'user_id' => $owner->id,
             'title' => 'Owner Scenario',
-        ]);
-
-        $chapter = Chapter::create([
-            'scenario_id' => $scenario->id,
-            'title' => 'Owner Chapter',
-            'order_index' => 0,
-        ]);
-
-        $block = $chapter->blocks()->create([
-            'type' => 'scene',
-            'content' => 'Owner Block',
-            'order_index' => 0,
         ]);
 
         $map = Map::create([
@@ -178,8 +144,6 @@ class CoreCrudTest extends TestCase
 
         $this->getJson("/api/campaigns/{$campaign->id}")->assertStatus(404);
         $this->getJson("/api/scenarios/{$scenario->id}")->assertStatus(404);
-        $this->patchJson("/api/chapters/{$chapter->id}", ['title' => 'x'])->assertStatus(404);
-        $this->patchJson("/api/blocks/{$block->id}", ['content' => 'x'])->assertStatus(404);
         $this->getJson("/api/maps/{$map->id}")->assertStatus(404);
         $this->patchJson("/api/characters/{$character->id}", ['name' => 'x'])->assertStatus(404);
         $this->getJson("/api/items/{$item->id}")->assertStatus(404);
@@ -223,41 +187,6 @@ class CoreCrudTest extends TestCase
             'title' => 'My Campaign',
             'scenario_ids' => [$foreignScenario->id],
         ])->assertStatus(422)->assertJsonValidationErrors(['scenario_ids']);
-    }
-
-    public function test_default_order_index_and_reorder_flow_for_chapters_and_blocks(): void
-    {
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
-
-        $scenario = Scenario::create([
-            'user_id' => $user->id,
-            'title' => 'Scenario',
-        ]);
-
-        $firstChapter = $this->postJson("/api/scenarios/{$scenario->id}/chapters", [
-            'title' => 'Chapter A',
-        ])->assertStatus(201)->assertJsonPath('order_index', 0)->json();
-
-        $secondChapter = $this->postJson("/api/scenarios/{$scenario->id}/chapters", [
-            'title' => 'Chapter B',
-        ])->assertStatus(201)->assertJsonPath('order_index', 1)->json();
-
-        $firstBlock = $this->postJson('/api/chapters/' . $firstChapter['id'] . '/blocks', [
-            'type' => 'scene',
-            'content' => 'Block A',
-        ])->assertStatus(201)->assertJsonPath('order_index', 0)->json();
-
-        $this->postJson('/api/chapters/' . $firstChapter['id'] . '/blocks', [
-            'type' => 'scene',
-            'content' => 'Block B',
-        ])->assertStatus(201)->assertJsonPath('order_index', 1);
-
-        $this->postJson('/api/blocks/' . $firstBlock['id'] . '/reorder', [
-            'order_index' => 7,
-        ])->assertStatus(200)->assertJsonPath('order_index', 7);
-
-        $this->assertSame(1, $secondChapter['order_index']);
     }
 
     public function test_list_filters_search_and_sorting_behavior_are_preserved(): void
@@ -395,17 +324,6 @@ class CoreCrudTest extends TestCase
             'updated_at',
         ], $campaignKeys);
 
-        $chapter = Chapter::create([
-            'scenario_id' => $scenario->id,
-            'title' => 'Chapter',
-            'order_index' => 0,
-        ]);
-        $chapter->blocks()->create([
-            'type' => 'scene',
-            'content' => 'Block',
-            'order_index' => 0,
-        ]);
-
         $this->getJson('/api/scenarios/' . $scenario->id)
             ->assertStatus(200)
             ->assertJsonStructure([
@@ -416,29 +334,8 @@ class CoreCrudTest extends TestCase
                 'description',
                 'created_at',
                 'updated_at',
-                'chapters' => [
-                    '*' => [
-                        'id',
-                        'scenario_id',
-                        'title',
-                        'order_index',
-                        'created_at',
-                        'updated_at',
-                        'blocks' => [
-                            '*' => [
-                                'id',
-                                'chapter_id',
-                                'type',
-                                'content',
-                                'order_index',
-                                'difficulty',
-                                'created_at',
-                                'updated_at',
-                            ],
-                        ],
-                    ],
-                ],
-            ]);
+            ])
+            ->assertJsonMissingPath('chapters');
 
         $this->deleteJson('/api/campaigns/' . $campaignResponse->json('id'))
             ->assertStatus(200)

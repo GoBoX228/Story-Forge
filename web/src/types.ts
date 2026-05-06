@@ -1,25 +1,7 @@
-export type BlockType = string;
-
-export interface Block {
-  id: string;
-  type: BlockType;
-  content: string;
-  order: number;
-  difficulty?: number;
-}
-
-export interface Chapter {
-  id: string;
-  title: string;
-  orderIndex?: number;
-  blocks: Block[];
-}
-
 export interface Scenario {
   id: string;
   title: string;
   description: string;
-  chapters: Chapter[];
   createdAt: string;
   updatedAt?: string;
   campaignId?: string;
@@ -28,6 +10,104 @@ export interface Scenario {
   relatedItemIds?: string[];
 }
 
+export type ScenarioNodeType = 'description' | 'dialog' | 'location' | 'check' | 'loot' | 'combat';
+
+export type ScenarioTransitionType = 'linear' | 'choice' | 'success' | 'failure';
+
+export type ScenarioNodeEntityTargetType = 'map' | 'character' | 'item' | 'asset' | 'location' | 'faction' | 'event';
+
+export type ScenarioNodeConfig =
+  | { scene?: string }
+  | { speaker?: string }
+  | { map_hint?: string }
+  | { skill?: string; dc?: number }
+  | { item_hint?: string }
+  | { encounter?: string };
+
+export type ScenarioTransitionCondition =
+  | Record<string, never>
+  | { dc?: number; outcome: 'success' | 'failure' };
+
+export interface ScenarioTransitionWaypoint {
+  x: number;
+  y: number;
+}
+
+export interface ScenarioTransitionMetadata {
+  visual?: {
+    waypoints?: ScenarioTransitionWaypoint[];
+  };
+}
+
+export interface ScenarioNode {
+  id: string;
+  scenarioId: string;
+  type: ScenarioNodeType;
+  title?: string | null;
+  content?: string | null;
+  position: Record<string, unknown>;
+  config: ScenarioNodeConfig;
+  orderIndex: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScenarioTransition {
+  id: string;
+  scenarioId: string;
+  fromNodeId: string;
+  toNodeId: string;
+  type: ScenarioTransitionType;
+  label?: string | null;
+  condition: ScenarioTransitionCondition;
+  metadata: ScenarioTransitionMetadata;
+  orderIndex: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScenarioNodeCreatePayload {
+  type: ScenarioNodeType;
+  title?: string | null;
+  content?: string | null;
+  position?: Record<string, unknown>;
+  config?: ScenarioNodeConfig;
+  orderIndex?: number;
+}
+
+export type ScenarioNodeUpdatePayload = Partial<ScenarioNodeCreatePayload>;
+
+export interface ScenarioNodeEntityLink {
+  id: string;
+  sourceType: 'scenario_node';
+  sourceId: string;
+  targetType: ScenarioNodeEntityTargetType;
+  targetId: string;
+  relationType: 'related';
+  label?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScenarioNodeEntityLinkCreatePayload {
+  targetType: ScenarioNodeEntityTargetType;
+  targetId: string;
+  label?: string | null;
+}
+
+export interface ScenarioTransitionCreatePayload {
+  fromNodeId: string;
+  toNodeId: string;
+  type?: ScenarioTransitionType | null;
+  label?: string | null;
+  condition?: ScenarioTransitionCondition;
+  metadata?: ScenarioTransitionMetadata;
+  orderIndex?: number;
+}
+
+export type ScenarioTransitionUpdatePayload = Partial<ScenarioTransitionCreatePayload>;
+
 export interface MapObject {
   id: string;
   x: number;
@@ -35,6 +115,7 @@ export interface MapObject {
   type: string;
   label: string;
   color: string;
+  assetId?: string | null;
 }
 
 export interface MapData {
@@ -44,6 +125,7 @@ export interface MapData {
   height: number;
   cellSize: number;
   objects: MapObject[];
+  backgroundAssetId?: string | null;
   createdAt?: string;
   updatedAt?: string;
   scenarioId?: string | null;
@@ -51,6 +133,114 @@ export interface MapData {
 }
 
 export type StatKey = string;
+
+export type TaggableTargetType = 'scenario' | 'map' | 'character' | 'item' | 'asset' | 'location' | 'faction' | 'event';
+
+export type EntityLinkTargetType = TaggableTargetType;
+
+export type EntityLinkRelationType = 'related' | 'uses' | 'located_in' | 'member_of' | 'rewards' | 'mentions';
+export type AssetUsageRole = 'portrait' | 'token' | 'item_image' | 'map_background' | 'map_token';
+
+export type EntityLinkMetadata = Record<string, unknown> & {
+  role?: AssetUsageRole;
+};
+
+export interface EntityLink {
+  id: string;
+  sourceType: EntityLinkTargetType;
+  sourceId: string;
+  targetType: EntityLinkTargetType;
+  targetId: string;
+  relationType: EntityLinkRelationType;
+  label?: string | null;
+  metadata: EntityLinkMetadata;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type EntityLinkAssignmentMap = Record<string, EntityLink[]>;
+
+export type PublicationTargetType = TaggableTargetType;
+
+export type PublicationStatus = 'draft' | 'published' | 'archived';
+
+export type PublicationVisibility = 'private' | 'unlisted' | 'public';
+
+export interface PublicationMetadata {
+  summary?: string;
+}
+
+export interface PublishedContent {
+  id: string;
+  contentType: PublicationTargetType;
+  contentId: string;
+  userId: string;
+  status: PublicationStatus;
+  visibility: PublicationVisibility;
+  slug?: string | null;
+  metadata: PublicationMetadata;
+  publishedAt?: string | null;
+  targetTitle?: string | null;
+  targetMissing?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type PublicationAssignmentMap = Record<string, PublishedContent | undefined>;
+
+export interface PublicationListParams {
+  scope?: 'own' | 'public';
+  type?: PublicationTargetType | '';
+  status?: PublicationStatus | '';
+  visibility?: PublicationVisibility | '';
+  search?: string;
+}
+
+export interface PublicationUpsertPayload {
+  status?: PublicationStatus;
+  visibility?: PublicationVisibility;
+  metadata?: PublicationMetadata;
+}
+
+export type PublicationUpdatePayload = PublicationUpsertPayload;
+
+export interface EntityLinkCreatePayload {
+  targetType: EntityLinkTargetType;
+  targetId: string;
+  relationType?: EntityLinkRelationType;
+  label?: string | null;
+  metadata?: EntityLinkMetadata;
+}
+
+export interface EntityLinkUpdatePayload {
+  relationType?: EntityLinkRelationType;
+  label?: string | null;
+  metadata?: EntityLinkMetadata;
+}
+
+export interface Tag {
+  id: string;
+  userId?: string | null;
+  name: string;
+  slug: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type TagAssignmentMap = Record<string, Tag[]>;
+
+export interface TagCreatePayload {
+  name: string;
+}
+
+export interface TagUpdatePayload {
+  name: string;
+}
+
+export interface TagAssignmentPayload {
+  tagIds: string[];
+  newTags?: string[];
+}
 
 export interface Character {
   id: string;
@@ -98,6 +288,91 @@ export interface Campaign {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export type AssetType = 'image' | 'token' | 'document' | 'other';
+
+export interface Asset {
+  id: string;
+  userId: string;
+  campaignId?: string | null;
+  type: AssetType;
+  name: string;
+  path?: string | null;
+  url?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
+  metadata: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AssetUploadPayload {
+  file: File;
+  name?: string;
+  type?: AssetType;
+  campaignId?: string | null;
+}
+
+export interface AssetUpdatePayload {
+  name?: string;
+  type?: AssetType;
+  campaignId?: string | null;
+}
+
+export interface WorldLocation {
+  id: string;
+  userId: string;
+  campaignId?: string | null;
+  name: string;
+  description?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Faction {
+  id: string;
+  userId: string;
+  campaignId?: string | null;
+  name: string;
+  description?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorldEvent {
+  id: string;
+  userId: string;
+  campaignId?: string | null;
+  title: string;
+  description?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  metadata: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorldEntityPayload {
+  name: string;
+  description?: string | null;
+  campaignId?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export type WorldEntityUpdatePayload = Partial<WorldEntityPayload>;
+
+export interface WorldEventPayload {
+  title: string;
+  description?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  campaignId?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export type WorldEventUpdatePayload = Partial<WorldEventPayload>;
 
 export type UserRole = 'user' | 'moderator' | 'admin';
 export type UserStatus = 'active' | 'muted' | 'banned';
