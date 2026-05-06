@@ -132,7 +132,7 @@
 - Предметы.
 - Ассеты: файлы, изображения и токены.
 - Универсальные связи между материалами через `entity_links`.
-- Публикация материалов через `published_contents`: статусы `draft/published/archived`, видимость `private/unlisted/public` и public feed в разделе "Сообщество".
+- Публикация материалов через `published_contents`: backend/API и базовый workflow сохранены, но community/publication UI временно скрыт до переработки социальной модели.
 - PDF-экспорт сценария как graph-aware runbook по graph-модели.
 - Жалобы на контент.
 - Административные маршруты.
@@ -141,7 +141,7 @@
 ### Реализовано частично
 
 - Графовый сценарный редактор: есть backend API, demo seed, typed contract, Typed Node Editors v1, Scenario Play/Preview Mode v2, Graph Canvas Navigation v2, Edge Editing v2, Edge Routing v1, Edge Ports v1, Selection UX v1, Undo/Redo v1, Readability v2, Node Presentation v2, Auto Layout v2, Minimap v1, Navigation Panel v2, inline labels, manual edge waypoints со сглаженными кривыми, computed obstacle-aware auto-routing, frontend-only graph validation v2 с errors/warnings и layout v2 с canvas как основной рабочей областью.
-- Социальные разделы: сообщества, друзья, сообщения.
+- Социальные разделы: сообщества, друзья и сообщения временно скрыты из интерфейса.
 - Система приватности.
 - Публикация материалов.
 - Экспорт карт и карточек.
@@ -762,7 +762,7 @@ npm audit --omit=dev --audit-level=high
 
 ## Известные ограничения
 
-- Часть социальных экранов пока является интерфейсной заготовкой.
+- Социальные и community-входы временно скрыты из интерфейса, чтобы не создавать ложное ощущение готовности social layer.
 - Сценарии теперь graph-first на frontend и backend: legacy-главы/блоки больше не редактируются в UI, а backend legacy-слой удален. Graph UI v2 поддерживает canvas-first раскладку, pan/zoom/fit-to-view, minimap в UI overlay, manual auto-layout v2 в двух направлениях, computed direct directional edges, separated input/output ports, keyboard clear/delete shortcuts, frontend-only undo/redo history, selected-only compact output handles, semantic node type border styling, resizable node cards, content preview, drag-to-connect созданием переходов, quick edit/inline label edit переходов, frontend-only validation v2 с errors/warnings и graph-aware PDF export.
 - Graph Canvas содержит best-effort computed obstacle-aware auto-routing и auto-layout v2, но пока не содержит full obstacle router, persisted route points для auto-routes и полноценный graph layout engine; typed-модель условий/исходов и graph validation остаются frontend-only и не блокируют export/publish/backend-сохранение.
 - Локации, фракции и события реализованы как самостоятельный World module v1, доступны для универсальных связей и могут привязываться к graph-узлам через inspector/preview/export.

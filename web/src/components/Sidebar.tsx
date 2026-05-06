@@ -34,9 +34,6 @@ const Sidebar = React.memo<SidebarProps>(({
       case 'world': return '#8338EC';     // Purple
       case 'campaigns': return '#8338EC'; // Purple
       case 'dashboard': return '#E63946'; // Brand Red
-      case 'community': return '#2EC4B6'; // Teal
-      case 'friends': return '#FF006E';   // Pink
-      case 'messages': return '#4361EE';  // Blue
       case 'settings': return '#6C757D';  // Grey
       case 'guide': return '#FFFFFF';     // White
       case 'admin': return '#E63946';     // Admin
@@ -55,10 +52,7 @@ const Sidebar = React.memo<SidebarProps>(({
     { id: 'campaigns', label: 'Кампании', icon: ICONS.Campaigns },
   ];
 
-  const socialItems = [
-    { id: 'community', label: 'Сообщество', icon: ICONS.Community },
-    { id: 'friends', label: 'Друзья', icon: ICONS.Friends },
-    { id: 'messages', label: 'Сообщения', icon: ICONS.Messages },
+  const accountItems = [
     { id: 'profile', label: 'Профиль', icon: ICONS.Profile },
   ];
 
@@ -159,7 +153,7 @@ const Sidebar = React.memo<SidebarProps>(({
           <div className="h-[1px] w-full bg-[var(--border-color)]" />
         </div>
 
-        {socialItems.map(renderItem)}
+        {accountItems.map(renderItem)}
 
         <div className={`my-4 transition-all duration-300 ${isCollapsed ? 'px-4' : 'px-8'}`}>
           <div className="h-[1px] w-full bg-[var(--border-color)]" />

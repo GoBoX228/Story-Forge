@@ -137,7 +137,7 @@
 - [x] World module v1: locations, factions, events.
 - [x] Tags module v1: общие теги и polymorphic assignment.
 - [x] Universal Entity Links v2: общий API/UI связей между материалами.
-- [x] Publications module v1: публикация материалов, visibility/status workflow и public feed в разделе "Сообщество".
+- [x] Publications module v1: backend/API публикаций и visibility/status workflow; frontend publication/community UI временно скрыт до переработки social layer.
 - [ ] Comments/collaboration: комментарии и участники кампаний.
 - [ ] Notifications API и frontend-индикаторы.
 - [ ] Idempotency middleware для критичных POST/PATCH операций.
@@ -173,6 +173,7 @@
 ## Отложено намеренно
 
 - [ ] Social backend: communities, friends, dialogs, messages.
+- [ ] Community redesign: кружки интересов, роли, участники и связь публикаций с community-контекстом.
 - [ ] Realtime collaboration.
 - [ ] Полноценный VTT/боевой режим.
 - [ ] Мобильные приложения.

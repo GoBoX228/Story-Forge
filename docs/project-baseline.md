@@ -49,8 +49,8 @@
 - Сценарный редактор: legacy-редактор и backend слой `chapters/blocks` удалены; основной UX состоит из graph canvas и read-only preview.
 - Graph-модель: есть узлы, переходы, visual canvas с pan/zoom/fit-to-view, minimap-навигацией, manual auto-layout v2 по уровням переходов в двух направлениях, читаемыми directional edges, computed obstacle-aware auto-routing и separated input/output ports, keyboard clear/delete shortcuts, frontend-only undo/redo для move/resize/layout и transition create/update/delete, resizable node cards с content preview, drag-to-connect созданием переходов, quick edit и inline label edit переходов, canvas-first layout v2, typed forms для `config` узлов, read-only play mode, типизированный контракт `condition`, исходы `success`/`failure`, frontend-only warnings проверки graph-структуры и связи узлов с картами/персонажами/предметами/ассетами/world-сущностями.
 - Связи между сущностями: `entity_links` используется и для graph-node связей с картами/персонажами/предметами/ассетами/локациями/фракциями/событиями, и как универсальный directed layer между основными материалами. UI показывает блок "Связанные материалы", поддерживает relation-типы, label, удаление и quick open target-а; обратные связи и canvas-визуализация universal links пока не реализованы.
-- Социальные разделы: есть frontend-экраны сообществ, друзей и сообщений, но нет backend-моделей и API.
-- Приватность и публикации: реализован базовый workflow публикаций материалов через `published_contents`; расширенные community-функции остаются впереди.
+- Социальные разделы: сообщества, друзья и сообщения временно скрыты из интерфейса; backend-моделей и API для них нет.
+- Приватность и публикации: реализован базовый backend workflow публикаций материалов через `published_contents`, но publication/community UI временно скрыт до переработки социальной модели.
 - Экспорт: реализован PDF сценария для graph-модели, но нет экспорта карт, карточек персонажей/предметов и очереди экспортов.
 - Комментарии, export jobs, notifications и idempotency keys подготовлены как schema-only baseline.
 
@@ -84,7 +84,7 @@
 
 Подготовленные schema-only таблицы для следующих этапов: `campaign_members`, `comments`, `export_jobs`, `idempotency_keys`, `notifications`.
 
-`published_contents` используется Publications module v1: материалы `scenario`, `map`, `character`, `item`, `asset`, `location`, `faction`, `event` можно переводить между `draft/published/archived`, настраивать `private/unlisted/public`, а публичные опубликованные материалы отображаются в разделе "Сообщество". Публикация graph-сценария с backend graph errors блокируется, warnings не блокируют публикацию.
+`published_contents` поддерживает Publications module v1 на backend/API уровне: материалы `scenario`, `map`, `character`, `item`, `asset`, `location`, `faction`, `event` можно переводить между `draft/published/archived`, настраивать `private/unlisted/public`. Frontend publication/community UI временно скрыт; публикация graph-сценария с backend graph errors блокируется, warnings не блокируют публикацию.
 
 `assets` уже используется Assets module v1 и Asset Integration v1: файлы сохраняются в Laravel `public` disk, записи привязаны к владельцу и опционально к кампании. Персонажи используют роли `portrait`/`token`, предметы `item_image`, карты `map_background`/`map_token`; map canvas хранит выбранный фон и token objects в `map.data`.
 
@@ -101,7 +101,7 @@
 - Документация и UI местами описывают перспективные функции как уже существующие.
 - Frontend построен вокруг `App.tsx` и `activeView`, что усложнит рост маршрутов и модулей.
 - Текущая auth-модель использует access token в `localStorage`; это расходится с целевой моделью безопасности из ТЗ.
-- Социальные экраны могут создать ложное впечатление готовности функционала.
+- Социальная модель требует отдельной переработки: community должен стать слоем кружков/интересов, а не простой лентой публикаций.
 - Frontend build/typecheck зависят от установленного `node_modules`; при чистом checkout их нужно воспроизводить через `npm ci`.
 
 ## Проверки baseline

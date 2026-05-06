@@ -112,7 +112,7 @@ export const PublicationPanel: React.FC<PublicationPanelProps> = ({
   };
 
   return (
-    <div className="space-y-4 border-t border-[var(--border-color)] pt-5">
+    <div className="hidden">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Globe2 size={14} style={{ color: accentColor }} />

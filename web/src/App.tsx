@@ -74,7 +74,7 @@ import {
 import { deleteTag, listTags, listTargetTags, replaceTargetTags, updateTag } from './lib/tagApi';
 import { createEntityLink, deleteEntityLink, listEntityLinks, updateEntityLink } from './lib/entityLinkApi';
 import { entityLinkIdentityKey } from './lib/assetUsage';
-import { deletePublication, listPublications, publishTarget, updatePublication } from './lib/publicationApi';
+import { deletePublication, publishTarget, updatePublication } from './lib/publicationApi';
 
 const lazyWithRetry = <T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>,
@@ -115,18 +115,6 @@ const ItemsEditor = lazyWithRetry(() => import('./components/ItemsEditor'), 'ite
 const CharactersEditor = lazyWithRetry(() => import('./components/CharactersEditor'), 'characters');
 const AssetsEditor = lazyWithRetry(() => import('./components/AssetsEditor'), 'assets');
 const WorldEditor = lazyWithRetry(() => import('./components/WorldEditor'), 'world');
-const CommunityView = lazyWithRetry(
-  () => import('./components/CommunityView').then((module) => ({ default: module.CommunityView })),
-  'community'
-);
-const FriendsView = lazyWithRetry(
-  () => import('./components/FriendsView').then((module) => ({ default: module.FriendsView })),
-  'friends'
-);
-const MessagesView = lazyWithRetry(
-  () => import('./components/MessagesView').then((module) => ({ default: module.MessagesView })),
-  'messages'
-);
 const SettingsView = lazyWithRetry(
   () => import('./components/SettingsView').then((module) => ({ default: module.SettingsView })),
   'settings'
@@ -237,7 +225,7 @@ const App: React.FC = () => {
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagAssignments, setTagAssignments] = useState<TagAssignmentMap>({});
   const [entityLinks, setEntityLinks] = useState<EntityLinkAssignmentMap>({});
-  const [publications, setPublications] = useState<PublishedContent[]>([]);
+  const [, setPublications] = useState<PublishedContent[]>([]);
   const [publicationAssignments, setPublicationAssignments] = useState<PublicationAssignmentMap>({});
   const [broadcasts, setBroadcasts] = useState<AdminBroadcastItem[]>([]);
   const [dismissedBroadcastIds, setDismissedBroadcastIds] = useStickyState<number[]>(
@@ -307,25 +295,6 @@ const App: React.FC = () => {
     setEntityLinks(Object.fromEntries(pairs));
   }, []);
 
-  const loadPublications = useCallback(async () => {
-    const [ownPublications, publicPublications] = await Promise.all([
-      listPublications({ scope: 'own' }),
-      listPublications({ scope: 'public' })
-    ]);
-    const byId = new Map<string, PublishedContent>();
-    publicPublications.forEach((publication) => byId.set(publication.id, publication));
-    ownPublications.forEach((publication) => byId.set(publication.id, publication));
-    setPublications(Array.from(byId.values()));
-    setPublicationAssignments(
-      Object.fromEntries(
-        ownPublications.map((publication) => [
-          publicationAssignmentKey(publication.contentType, publication.contentId),
-          publication,
-        ])
-      )
-    );
-  }, []);
-
   const loadAllData = useCallback(async () => {
     const [
       campaignsResponse,
@@ -373,9 +342,8 @@ const App: React.FC = () => {
     ];
     await loadTagAssignments(materialTargets);
     await loadEntityLinkAssignments(materialTargets);
-    await loadPublications();
     await loadBroadcasts();
-  }, [loadBroadcasts, loadEntityLinkAssignments, loadPublications, loadTagAssignments, setItems]);
+  }, [loadBroadcasts, loadEntityLinkAssignments, loadTagAssignments, setItems]);
 
   useEffect(() => {
     let mounted = true;
@@ -1525,12 +1493,6 @@ const App: React.FC = () => {
                   onSaveProfile={handleUpdateProfile}
                 />
               );
-            case 'community':
-              return <CommunityView publications={publications} />;
-            case 'friends':
-              return <FriendsView />;
-            case 'messages':
-              return <MessagesView />;
             case 'settings':
               return (
                 <SettingsView
