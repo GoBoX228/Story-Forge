@@ -10,6 +10,12 @@ RUN apt-get update \
     && docker-php-ext-install pdo_pgsql \
     && rm -rf /var/lib/apt/lists/*
 
+RUN { \
+    echo "upload_max_filesize=10M"; \
+    echo "post_max_size=12M"; \
+    echo "memory_limit=256M"; \
+  } > /usr/local/etc/php/conf.d/storyforge-uploads.ini
+
 ENV PUPPETEER_SKIP_DOWNLOAD=1 \
     CHROME_PATH=/usr/bin/chromium
 

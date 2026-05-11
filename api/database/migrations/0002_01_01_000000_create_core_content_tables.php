@@ -51,11 +51,25 @@ return new class extends Migration
             $table->index(['scenario_id', 'updated_at']);
         });
 
+        Schema::create('character_groups', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('name');
+            $table->string('slug');
+            $table->text('description')->nullable();
+            $table->unsignedInteger('order_index')->default(0);
+            $table->timestamps();
+
+            $table->unique(['user_id', 'slug']);
+            $table->index(['user_id', 'order_index']);
+        });
+
         Schema::create('characters', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('campaign_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('scenario_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('character_group_id')->nullable()->constrained()->nullOnDelete();
             $table->string('name');
             $table->string('role')->default('NPC');
             $table->string('race')->nullable();
@@ -68,11 +82,26 @@ return new class extends Migration
             $table->index(['user_id', 'updated_at']);
             $table->index(['campaign_id', 'updated_at']);
             $table->index(['scenario_id', 'updated_at']);
+            $table->index(['character_group_id', 'updated_at']);
+        });
+
+        Schema::create('item_groups', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('name');
+            $table->string('slug');
+            $table->text('description')->nullable();
+            $table->unsignedInteger('order_index')->default(0);
+            $table->timestamps();
+
+            $table->unique(['user_id', 'slug']);
+            $table->index(['user_id', 'order_index']);
         });
 
         Schema::create('items', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('item_group_id')->nullable()->constrained()->nullOnDelete();
             $table->string('name');
             $table->string('type', 100)->default('Прочее');
             $table->string('rarity', 100)->default('Обычный');
@@ -83,13 +112,16 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['user_id', 'updated_at']);
+            $table->index(['item_group_id', 'updated_at']);
         });
     }
 
     public function down(): void
     {
         Schema::dropIfExists('items');
+        Schema::dropIfExists('item_groups');
         Schema::dropIfExists('characters');
+        Schema::dropIfExists('character_groups');
         Schema::dropIfExists('maps');
         Schema::dropIfExists('scenarios');
         Schema::dropIfExists('campaigns');

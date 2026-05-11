@@ -11,6 +11,7 @@ use App\Domain\Core\DTO\ItemIndexData;
 use App\Domain\Core\DTO\ItemStoreData;
 use App\Domain\Core\DTO\ItemUpdateData;
 use App\Models\Item;
+use App\Models\ItemGroup;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -31,6 +32,14 @@ class ItemService
             Item::class,
             $user->id,
             function ($query) use ($data): void {
+                if ($data->hasGroupId) {
+                    if ($data->groupId === null || $data->groupId === '') {
+                        $query->whereNull('item_group_id');
+                    } else {
+                        $query->where('item_group_id', $data->groupId);
+                    }
+                }
+
                 if (!$data->hasSearch) {
                     return;
                 }
@@ -48,9 +57,14 @@ class ItemService
     {
         $payload = $data->data;
 
+        if (!empty($payload['group_id'])) {
+            $this->findOwnedModelAction->execute(ItemGroup::class, $user->id, $payload['group_id']);
+        }
+
         /** @var Item $item */
         $item = $this->createModelAction->execute(Item::class, [
             'user_id' => $user->id,
+            'item_group_id' => $payload['group_id'] ?? null,
             'name' => $payload['name'],
             'type' => $payload['type'] ?? 'Прочее',
             'rarity' => $payload['rarity'] ?? 'Обычный',
@@ -75,7 +89,21 @@ class ItemService
     {
         /** @var Item $item */
         $item = $this->findOwnedModelAction->execute(Item::class, $user->id, $id);
-        $this->updateModelAction->execute($item, $data->data);
+        $payload = $data->data;
+
+        if (
+            array_key_exists('group_id', $payload) &&
+            $payload['group_id'] !== null
+        ) {
+            $this->findOwnedModelAction->execute(ItemGroup::class, $user->id, $payload['group_id']);
+        }
+
+        if (array_key_exists('group_id', $payload)) {
+            $payload['item_group_id'] = $payload['group_id'];
+            unset($payload['group_id']);
+        }
+
+        $this->updateModelAction->execute($item, $payload);
 
         return $item;
     }
@@ -87,4 +115,3 @@ class ItemService
         $this->deleteModelAction->execute($item);
     }
 }
-

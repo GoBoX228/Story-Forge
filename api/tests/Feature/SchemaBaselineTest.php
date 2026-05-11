@@ -28,7 +28,9 @@ class SchemaBaselineTest extends TestCase
             'campaigns',
             'scenarios',
             'maps',
+            'character_groups',
             'characters',
+            'item_groups',
             'items',
             'scenario_nodes',
             'scenario_transitions',
@@ -39,6 +41,10 @@ class SchemaBaselineTest extends TestCase
             'tags',
             'taggables',
             'assets',
+            'asset_folders',
+            'asset_collections',
+            'asset_collection_items',
+            'asset_collection_targets',
             'campaign_members',
             'comments',
             'published_contents',
@@ -85,6 +91,55 @@ class SchemaBaselineTest extends TestCase
             'target_id',
             'relation_type',
             'metadata',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('asset_collection_targets', [
+            'user_id',
+            'asset_collection_id',
+            'target_type',
+            'target_id',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('asset_folders', [
+            'user_id',
+            'name',
+            'slug',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('assets', [
+            'user_id',
+            'asset_folder_id',
+            'type',
+            'kind',
+            'name',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('character_groups', [
+            'user_id',
+            'name',
+            'slug',
+            'description',
+            'order_index',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('characters', [
+            'user_id',
+            'character_group_id',
+            'name',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('item_groups', [
+            'user_id',
+            'name',
+            'slug',
+            'description',
+            'order_index',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('items', [
+            'user_id',
+            'item_group_id',
+            'name',
         ]));
 
         $this->assertTrue(Schema::hasColumns('idempotency_keys', [

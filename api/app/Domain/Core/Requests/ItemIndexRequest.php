@@ -9,6 +9,8 @@ class ItemIndexRequest extends CoreReadRequest
     public function toDto(): ItemIndexData
     {
         return new ItemIndexData(
+            $this->has('groupId'),
+            $this->input('groupId'),
             $this->filled('q'),
             mb_strtolower((string) $this->input('q', ''))
         );

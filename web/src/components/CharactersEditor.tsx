@@ -6,7 +6,11 @@ import { Button, Input, SearchInput, Select, AddTile, SectionHeader, StatBadge, 
 import { Modal } from './Modal';
 import {
   Asset,
+  AssetCollection,
+  AssetCollectionAssignmentMap,
+  AssetCollectionTargetType,
   Character,
+  CharacterGroup,
   EntityLink,
   EntityLinkAssignmentMap,
   EntityLinkCreatePayload,
@@ -30,11 +34,12 @@ import {
   WorldLocation
 } from '../types';
 import { apiRequest } from '../lib/api';
-import { entityLinkAssignmentKey, mapCharacterFromApi, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
+import { assetCollectionAssignmentKey, entityLinkAssignmentKey, mapCharacterFromApi, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
 import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
 import { TagFilter, TagPicker } from './TagPicker';
 import { EntityLinksPanel } from './EntityLinksPanel';
 import { AssetUsagePicker } from './AssetUsagePicker';
+import { AssetCollectionTargetPicker } from './AssetCollectionTargetPicker';
 import { PublicationPanel } from './PublicationPanel';
 import { UserPlus, Zap, Edit3, Save, Scale, Package, Plus, X } from 'lucide-react';
 
@@ -45,6 +50,8 @@ interface CharactersEditorProps {
   scenarios: Scenario[];
   maps: MapData[];
   assets: Asset[];
+  assetCollections: AssetCollection[];
+  assetCollectionAssignments: AssetCollectionAssignmentMap;
   locations: WorldLocation[];
   factions: Faction[];
   events: WorldEvent[];
@@ -62,7 +69,12 @@ interface CharactersEditorProps {
   onUpdatePublication: (id: string, payload: PublicationUpdatePayload) => Promise<PublishedContent>;
   onDeletePublication: (id: string) => Promise<void>;
   onOpenMaterialLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
+  onReplaceAssetCollections: (type: AssetCollectionTargetType, id: string, collectionIds: string[]) => Promise<AssetCollection[]>;
   initialCharacterId?: string | null;
+  characterGroups: CharacterGroup[];
+  onCreateCharacterGroup: () => Promise<CharacterGroup>;
+  onUpdateCharacterGroup: (id: string, payload: Partial<CharacterGroup>) => Promise<CharacterGroup>;
+  onDeleteCharacterGroup: (id: string) => Promise<void>;
 }
 
 const SECTION_ACCENT = 'var(--col-yellow)'; 
@@ -80,6 +92,18 @@ const ROLE_COLORS = { 'Герой': 'var(--col-yellow)', 'NPC': 'var(--col-purpl
 
 const EMPTY_STATS: Record<StatKey, number> = { 'АТК': 10, 'ЗАЩ': 10, 'СИЛ': 10, 'ЛОВ': 10, 'ВЫН': 10, 'ИНТ': 10, 'МДР': 10, 'ХАР': 10, 'УДЧ': 10 };
 
+const STAT_HINTS: Record<StatKey, string> = {
+  'АТК': 'Атака: влияет на точность и силу боевых действий.',
+  'ЗАЩ': 'Защита: снижает входящий урон и помогает выдерживать атаки.',
+  'СИЛ': 'Сила: физическая мощь, грузоподъемность и силовые проверки.',
+  'ЛОВ': 'Ловкость: реакция, уклонение, скрытность и точные действия.',
+  'ВЫН': 'Выносливость: здоровье, стойкость и сопротивление усталости.',
+  'ИНТ': 'Интеллект: знания, анализ, магическая теория и сложные задачи.',
+  'МДР': 'Мудрость: внимательность, интуиция и восприятие опасности.',
+  'ХАР': 'Харизма: убеждение, лидерство и социальное влияние.',
+  'УДЧ': 'Удача: случайные шансы, редкие находки и рискованные исходы.'
+};
+
 const EMPTY_CHARACTER: Partial<Character> = { name: '', role: 'NPC', race: 'ЧЕЛОВЕК', description: '', level: 1, baseStats: { ...EMPTY_STATS }, inventory: [] };
 
 const CharactersEditor: React.FC<CharactersEditorProps> = ({
@@ -89,6 +113,8 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
   scenarios,
   maps,
   assets,
+  assetCollections,
+  assetCollectionAssignments,
   locations,
   factions,
   events,
@@ -106,10 +132,18 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
   onUpdatePublication,
   onDeletePublication,
   onOpenMaterialLink,
-  initialCharacterId
+  onReplaceAssetCollections,
+  initialCharacterId,
+  characterGroups,
+  onCreateCharacterGroup,
+  onUpdateCharacterGroup,
+  onDeleteCharacterGroup
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTagFilter, setSelectedTagFilter] = useState('');
+  const [activeGroupId, setActiveGroupId] = useState<'all' | 'none' | string>('all');
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [renamingGroupName, setRenamingGroupName] = useState('');
   const [activeRole, setActiveRole] = useState<'ВСЕ' | 'Герой' | 'NPC' | 'Монстр'>('ВСЕ');
   const [sortOrder, setSortOrder] = useState('NAME_ASC');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -129,6 +163,29 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
 
   const linksForCharacter = (characterId: string) =>
     entityLinks[entityLinkAssignmentKey('character', characterId)] ?? [];
+
+  const collectionIdsForCharacter = (characterId: string) =>
+    (assetCollectionAssignments[assetCollectionAssignmentKey('character', characterId)] ?? []).map((collection) => collection.id);
+
+  const collectionIdsForCharacterGroup = (groupId?: string | null) =>
+    groupId
+      ? (assetCollectionAssignments[assetCollectionAssignmentKey('character_group', groupId)] ?? []).map((collection) => collection.id)
+      : [];
+
+  const effectiveCollectionIdsForCharacter = (character: Partial<Character>) => {
+    const groupCollectionIds = collectionIdsForCharacterGroup(character.groupId);
+    if (groupCollectionIds.length > 0) return groupCollectionIds;
+    if (character.id) return collectionIdsForCharacter(character.id);
+    return [];
+  };
+
+  const assetSourceLabelForCharacter = (character: Partial<Character>) => {
+    const group = characterGroups.find((candidate) => candidate.id === character.groupId);
+    const groupCollectionIds = collectionIdsForCharacterGroup(character.groupId);
+    if (group && groupCollectionIds.length > 0) return `Источник ассетов: из группы "${group.name}"`;
+    if (character.id && collectionIdsForCharacter(character.id).length > 0) return 'Источник ассетов: прямые наборы карточки';
+    return 'Источник ассетов: все подходящие ассеты';
+  };
 
   const setCharacterAssetUsage = async (
     role: 'portrait' | 'token',
@@ -161,7 +218,14 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
   const inventorySlots = 12;
 
   const handleOpenEdit = (char: Character) => { setEditingId(char.id); setFormData({ ...char }); setIsModalOpen(true); };
-  const handleOpenCreate = () => { setEditingId(null); setFormData(EMPTY_CHARACTER); setIsModalOpen(true); };
+  const handleOpenCreate = () => {
+    setEditingId(null);
+    setFormData({
+      ...EMPTY_CHARACTER,
+      groupId: activeGroupId !== 'all' && activeGroupId !== 'none' ? activeGroupId : null
+    });
+    setIsModalOpen(true);
+  };
 
   useEffect(() => {
     if (!initialCharacterId) return;
@@ -184,7 +248,8 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
       level: formData.level ?? 1,
       stats: formData.baseStats ?? { ...EMPTY_STATS },
       inventory: formData.inventory ?? [],
-      scenario_id: formData.scenarioId ?? null
+      scenario_id: formData.scenarioId ?? null,
+      group_id: formData.groupId ?? null
     };
 
     try {
@@ -223,7 +288,13 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     const inv = [...(formData.inventory || [])];
     const index = inv.indexOf(id);
     if (index > -1) inv.splice(index, 1);
-    else { if (inv.length >= inventorySlots) return alert('ИНВЕНТАРЬ ПЕРЕПОЛНЕН'); inv.push(id); }
+    else {
+      const item = items.find((candidate) => candidate.id === id);
+      const nextWeight = currentWeight + (item?.weight || 0);
+      if (inv.length >= inventorySlots) return alert('ИНВЕНТАРЬ ПЕРЕПОЛНЕН');
+      if (nextWeight > maxWeight) return alert('ПРЕДМЕТ ПРИВЕДЕТ К ПЕРЕВЕСУ');
+      inv.push(id);
+    }
     setFormData({ ...formData, inventory: inv });
   };
 
@@ -232,6 +303,7 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
       const assignedTags = tagAssignments[tagAssignmentKey('character', c.id)] ?? [];
       return c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         (activeRole === 'ВСЕ' || c.role === activeRole) &&
+        (activeGroupId === 'all' || (activeGroupId === 'none' ? !c.groupId : c.groupId === activeGroupId)) &&
         (!selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter));
     })
     .sort((a, b) => {
@@ -240,6 +312,30 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
       if (sortOrder === 'WEIGHT_DESC') return calculateWeight(b.inventory) - calculateWeight(a.inventory);
       return 0;
     });
+
+  const createGroup = async () => {
+    const created = await onCreateCharacterGroup();
+    setActiveGroupId(created.id);
+  };
+
+  const startRenameGroup = (group: CharacterGroup) => {
+    setRenamingGroupId(group.id);
+    setRenamingGroupName(group.name);
+  };
+
+  const commitRenameGroup = async () => {
+    if (!renamingGroupId) return;
+    const groupId = renamingGroupId;
+    const name = renamingGroupName.trim();
+    setRenamingGroupId(null);
+    if (name) await onUpdateCharacterGroup(groupId, { name });
+  };
+
+  const deleteGroup = async (groupId: string) => {
+    if (!confirm('Удалить группу? Персонажи останутся без группы.')) return;
+    await onDeleteCharacterGroup(groupId);
+    if (activeGroupId === groupId) setActiveGroupId('all');
+  };
 
   return (
     <div className="flex h-full w-full">
@@ -268,12 +364,12 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
                     )}
                     <div className="flex justify-between items-center">
                       <span className="mono text-[11px] font-black uppercase tracking-[0.15em]" style={{ color: accent }}>{char.role}</span>
-                      <span className="mono text-[9px] text-[var(--text-muted)] uppercase font-bold tracking-widest">{char.race} | УР {char.level}</span>
+                      <span className="mono text-[9px] text-[var(--text-muted)] uppercase font-bold tracking-widest">{char.race}</span>
                     </div>
                     <div className="relative pl-5 py-1 border-l border-[var(--border-color)]">
                       <p className="text-[11px] text-[var(--text-main)] opacity-60 mono leading-relaxed text-left">{char.description || 'БИОГРАФИЯ НЕ ЗАПОЛНЕНА'}</p>
                     </div>
-                    <div className="flex flex-wrap gap-2 pt-1">{['АТК', 'ЗАЩ', 'СИЛ'].map(sk => (<StatBadge key={sk} stat={sk as StatKey} value={eff[sk as StatKey]} bonus={bns[sk as StatKey]} showBonus={false}/>))}</div>
+                    <div className="flex flex-wrap gap-2 pt-1">{['АТК', 'ЗАЩ', 'СИЛ'].map(sk => (<StatBadge key={sk} stat={sk as StatKey} value={eff[sk as StatKey]} bonus={bns[sk as StatKey]} showBonus={false} accentColor={accent} />))}</div>
                     <div className="flex-1 min-h-[10px]" />
                     <div className="grid grid-cols-2 gap-4 border-t border-[var(--border-color)] pt-4">
                       <div className="flex items-center gap-2"><Scale size={14} className="text-[var(--text-muted)]" /><span className="mono text-[10px] uppercase font-black text-[var(--text-main)] opacity-80">{calculateWeight(char.inventory).toFixed(1)} КГ</span></div>
@@ -296,6 +392,29 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
         <SearchInput value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ИМЯ..." accentColor={SECTION_ACCENT} />
         <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
         <Select value={sortOrder} onChange={val => setSortOrder(val)} options={[{value:'NAME_ASC', label:'ИМЯ'}, {value:'LEVEL_DESC', label:'УРОВЕНЬ'}, {value:'WEIGHT_DESC', label:'ВЕС'}]} accentColor={SECTION_ACCENT} />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="mono text-[10px] text-[var(--col-yellow)] uppercase tracking-[0.3em] font-black">Группы</label>
+            <button onClick={() => void createGroup()} className="mono text-[9px] uppercase font-black text-[var(--col-yellow)] hover:text-[var(--text-main)]">+ группа</button>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button onClick={() => setActiveGroupId('all')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'all' ? 'border-[var(--col-yellow)] bg-[var(--col-yellow)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Все персонажи</button>
+            <button onClick={() => setActiveGroupId('none')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'none' ? 'border-[var(--col-yellow)] bg-[var(--col-yellow)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Без группы</button>
+            {characterGroups.map((group) => (
+              <div key={group.id} className={`border-2 ${activeGroupId === group.id ? 'border-[var(--col-yellow)]' : 'border-[var(--border-color)]'}`}>
+                {renamingGroupId === group.id ? (
+                  <Input autoFocus value={renamingGroupName} onChange={(event) => setRenamingGroupName(event.target.value)} onBlur={() => void commitRenameGroup()} onKeyDown={(event) => { if (event.key === 'Enter') void commitRenameGroup(); if (event.key === 'Escape') setRenamingGroupId(null); }} accentColor={SECTION_ACCENT} />
+                ) : (
+                  <button onClick={() => setActiveGroupId(group.id)} className="w-full px-4 py-3 mono text-[10px] uppercase text-left font-black text-[var(--text-main)]">{group.name}</button>
+                )}
+                <div className="flex border-t border-[var(--border-color)]">
+                  <button onClick={() => startRenameGroup(group)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-yellow)]">Переименовать</button>
+                  <button onClick={() => void deleteGroup(group.id)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-red)]">Удалить</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="space-y-5">
            <label className="mono text-[10px] text-[var(--col-yellow)] uppercase tracking-[0.3em] font-black">ФИЛЬТР</label>
            <div className="flex flex-col gap-2">
@@ -312,25 +431,63 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
               <div className="space-y-1.5"><label className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">Имя персонажа</label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} accentColor={SECTION_ACCENT} className="h-10 text-sm uppercase font-black" /></div>
               <div className="space-y-1.5"><label className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">Роль</label><Select value={formData.role} onChange={v => setFormData({...formData, role: v as any})} options={[{value:'NPC', label:'NPC'},{value:'Герой', label:'ГЕРОЙ'},{value:'Монстр', label:'МОНСТР'}]} accentColor={SECTION_ACCENT} /></div>
             </div>
+            <div className="space-y-1.5">
+              <label className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">Группа</label>
+              <Select
+                value={formData.groupId ?? ''}
+                onChange={(value) => setFormData({ ...formData, groupId: value || null })}
+                options={[{ value: '', label: 'БЕЗ ГРУППЫ' }, ...characterGroups.map((group) => ({ value: group.id, label: group.name.toUpperCase() }))]}
+                accentColor={SECTION_ACCENT}
+              />
+            </div>
             <div className="space-y-4">
               <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-2"><label className="mono text-[10px] uppercase font-black text-[var(--text-muted)] flex items-center gap-2"><Zap size={12} /> Базовые атрибуты</label><span className="mono text-[9px] font-black text-[var(--text-muted)]">БАЗА (+БОНУС)</span></div>
               <div className="grid grid-cols-3 gap-4">
                 {STAT_KEYS.map(sk => { const { bonus: bns } = calculateEffectiveStats(formData); return (
-                    <div key={sk} className="space-y-1.5 p-3 border border-[var(--border-color)] bg-[var(--bg-main)] hover:bg-[var(--bg-surface)] transition-all">
+                    <div
+                      key={sk}
+                      title={STAT_HINTS[sk]}
+                      className="group/stat-field relative space-y-1.5 p-3 border border-[var(--border-color)] bg-[var(--bg-main)] hover:bg-[var(--bg-surface)] transition-all"
+                    >
                       <div className="flex justify-between items-center"><label className="mono text-[9px] font-black text-[var(--text-muted)]">{sk}</label><div className="mono text-[10px] font-black"><span className="text-[var(--text-main)]">{formData.baseStats?.[sk]}</span>{bns[sk] > 0 && <span className="text-[var(--col-yellow)] ml-1">+{bns[sk]}</span>}</div></div>
                       <input type="number" value={formData.baseStats?.[sk]} onChange={e => { const newStats = { ...formData.baseStats } as any; newStats[sk] = parseInt(e.target.value) || 0; setFormData({...formData, baseStats: newStats}); }} className="w-full bg-transparent border-none mono text-xs font-black text-[var(--col-yellow)] focus:outline-none p-0 h-6" />
+                      <div className="pointer-events-none absolute left-0 top-full z-30 mt-2 hidden w-64 border border-[var(--border-color)] bg-[#050505] p-3 mono text-[9px] uppercase leading-relaxed text-[var(--text-main)] shadow-2xl group-hover/stat-field:block">
+                        {STAT_HINTS[sk]}
+                      </div>
                     </div>
                 ); })}
               </div>
             </div>
             <div className="space-y-1.5"><label className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">История</label><TextArea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="h-24" accentColor={SECTION_ACCENT} /></div>
+            {editingId && formData.groupId && (
+              <AssetCollectionTargetPicker
+                label="Наборы ассетов персонажа"
+                collections={assetCollections}
+                value={collectionIdsForCharacterGroup(formData.groupId)}
+                accentColor={SECTION_ACCENT}
+                onChange={(collectionIds) => onReplaceAssetCollections('character_group', formData.groupId!, collectionIds)}
+              />
+            )}
+            {editingId && !formData.groupId && collectionIdsForCharacter(editingId).length > 0 && (
+              <AssetCollectionTargetPicker
+                label="Прямые наборы карточки"
+                collections={assetCollections}
+                value={collectionIdsForCharacter(editingId)}
+                accentColor={SECTION_ACCENT}
+                onChange={(collectionIds) => onReplaceAssetCollections('character', editingId, collectionIds)}
+              />
+            )}
+            {editingId && (
+              <div className="mono text-[9px] uppercase text-[var(--text-muted)]">{assetSourceLabelForCharacter(formData)}</div>
+            )}
             {editingId && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <AssetUsagePicker
                   label="Портрет"
                   assets={assets}
                   value={findAssetUsageLink(linksForCharacter(editingId), 'portrait')?.targetId ?? null}
-                  allowedTypes={['image']}
+                  allowedKinds={['portrait']}
+                  collectionIds={effectiveCollectionIdsForCharacter(formData)}
                   accentColor={SECTION_ACCENT}
                   onChange={(assetId) => setCharacterAssetUsage('portrait', assetId)}
                 />
@@ -338,7 +495,8 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
                   label="Токен"
                   assets={assets}
                   value={findAssetUsageLink(linksForCharacter(editingId), 'token')?.targetId ?? null}
-                  allowedTypes={['token', 'image']}
+                  allowedKinds={['token']}
+                  collectionIds={effectiveCollectionIdsForCharacter(formData)}
                   accentColor={SECTION_ACCENT}
                   onChange={(assetId) => setCharacterAssetUsage('token', assetId)}
                 />
@@ -405,12 +563,22 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
             <div className="space-y-3 pt-4 border-t border-[var(--border-color)]">
               <label className="mono text-[9px] uppercase font-black text-[var(--text-muted)] flex items-center gap-2">Доступные предметы</label>
               <div className="space-y-2">
-                {items.filter(i => !formData.inventory?.includes(i.id)).slice(0, 3).map(item => (
-                  <button key={item.id} onClick={() => toggleInventoryItem(item.id)} className="w-full flex items-center justify-between p-3 border border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--bg-main)] group transition-all">
+                {items.filter(i => !formData.inventory?.includes(i.id)).slice(0, 3).map(item => {
+                  const wouldOverweight = currentWeight + item.weight > maxWeight;
+
+                  return (
+                  <button
+                    key={item.id}
+                    disabled={wouldOverweight}
+                    title={wouldOverweight ? 'Предмет приведет к перевесу' : undefined}
+                    onClick={() => toggleInventoryItem(item.id)}
+                    className="w-full flex items-center justify-between p-3 border border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--bg-main)] group transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--bg-surface)]"
+                  >
                     <div className="flex flex-col items-start gap-1 truncate pr-2"><span className="mono text-[9px] font-black text-[var(--text-muted)] group-hover:text-[var(--text-main)] uppercase truncate">{item.name}</span></div>
-                    <Plus size={14} className="text-[var(--text-muted)] group-hover:text-[var(--col-yellow)] shrink-0" />
+                    <Plus size={14} className="text-[var(--text-muted)] group-hover:text-[var(--col-yellow)] shrink-0 group-disabled:hover:text-[var(--text-muted)]" />
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

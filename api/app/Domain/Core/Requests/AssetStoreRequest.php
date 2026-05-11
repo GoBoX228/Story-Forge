@@ -19,7 +19,10 @@ class AssetStoreRequest extends FormRequest
             'file' => ['required', 'file', 'max:10240'],
             'name' => ['nullable', 'string', 'max:255'],
             'type' => ['nullable', 'string', 'in:' . implode(',', Asset::TYPES)],
-            'campaign_id' => ['nullable', 'integer'],
+            'kind' => ['nullable', 'string', 'in:' . implode(',', Asset::KINDS)],
+            'folder_id' => ['nullable', 'integer'],
+            'collection_ids' => ['nullable', 'array'],
+            'collection_ids.*' => ['integer'],
         ];
     }
 
@@ -29,7 +32,9 @@ class AssetStoreRequest extends FormRequest
             $this->file('file'),
             $this->validated('name'),
             $this->validated('type'),
-            $this->validated('campaign_id')
+            $this->validated('kind'),
+            $this->validated('folder_id'),
+            $this->validated('collection_ids') ?? []
         );
     }
 }

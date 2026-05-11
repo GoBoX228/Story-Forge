@@ -11,6 +11,8 @@ class CharacterIndexRequest extends CoreReadRequest
         return new CharacterIndexData(
             $this->filled('scenarioId'),
             $this->input('scenarioId'),
+            $this->has('groupId'),
+            $this->input('groupId'),
             $this->filled('q'),
             (string) $this->input('q', '')
         );

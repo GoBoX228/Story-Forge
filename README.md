@@ -317,27 +317,41 @@ Story-Forge/
 
 ### Maps
 
+Tile Metadata / Autotile Rules v1 is deferred: technical tile labels such as `wall_top_left`, `wall_top_right`, `wall_vertical`, `floor`, `door`, and `water_edge` should be implemented as a separate autotile metadata layer, not mixed into user-facing Tags module v1.
+
+Map Asset Layers v1 + UX Stabilization v2 + Asset Sets Integration into Map Layers v1: map data is layer-based through `map.data.layers` (`background`, `tiles`, `tokens`) and still saves flattened `map.data.objects` for compatibility. The editor uses a simplified Photoshop-like layer panel with active layer highlight, visibility/lock/opacity/reorder controls, compact selected-layer properties, conditional resource palettes by layer type, background opacity, token width/height/rotation/opacity, asset collection filtering, active-layer set summaries, asset source set labels in palettes and lazy runtime conversion for old maps that only have `data.objects`.
+
 Отвечает за создание карт на сетке, хранение размеров, клеток и объектов карты.
 
 ### Characters
 
 Отвечает за создание персонажей, NPC и монстров.
 
+Character Groups v1: персонажи могут входить максимум в одну группу. Группа подключает наборы ассетов как наследуемый пул для portrait/token picker, а прямой выбор конкретного portrait/token на карточке остается manual override.
+
 ### Items
 
 Отвечает за создание предметов, их характеристик, редкости, стоимости и модификаторов.
 
+Item Groups v1: предметы могут входить максимум в одну группу. Группа подключает наборы ассетов как наследуемый пул для item image picker, а прямой выбор изображения на карточке остается manual override.
+
 ### Assets & Tokens
 
-Рабочий модуль библиотеки файлов: загрузка ассетов до 10 MB, типы `image`, `token`, `document`, `other`, preview для изображений/токенов, фильтрация, переименование, смена типа и привязка к кампании. Файлы хранятся через Laravel `public` disk. Ассеты можно назначать как портреты/токены персонажей, изображения предметов, фон карты и token palette карты.
+Asset Sets UX v2: `Ассеты` теперь разделяет режимы `Файлы` и `Наборы`. Папка отвечает только за расположение файла в личной библиотеке, а набор ассетов является переиспользуемым пакетом: его можно создать с дефолтным именем, переименовать inline, открыть, описать, наполнить выделенными ассетами или drag/drop и подключить к карте, персонажу или предмету без изменения папок файлов.
+
+Asset Sets Explorer UX Alignment v1: наборы используют тот же проводниковый паттерн, что и папки: double click для открытия, inline rename на карточке, ПКМ для действий и drag/drop для добавления ассетов в набор без перемещения файла по папкам.
+
+Рабочий модуль библиотеки файлов: загрузка ассетов до 10 MB, media-типы `image`, `document`, `other`, доменные назначения `tile`, `token`, `portrait`, `background`, `item_image`, `handout`, `document`, `icon`, `other`, preview, фильтрация и переименование. Папки ассетов хранятся отдельно в `asset_folders`: корень показывает только ассеты без папки, а выбранные ассеты можно вырезать/вставлять или переносить drag-and-drop между папками. Наборы ассетов остаются отдельной сущностью на `asset_collections`: один ассет может входить в несколько наборов, а карты, персонажи и предметы подключают наборы для фильтрации picker/palette по `kind`. Campaign binding из asset UI/API удален. Файлы хранятся через Laravel `public` disk. Ассеты можно назначать как портреты/токены персонажей, изображения предметов, фон карты и token/tile palette карты.
+
+Текущее решение по назначению ассетов карточкам: персонажи и предметы могут входить в одну группу карточек, а группа может подключать наборы ассетов как наследуемый пул для portrait/token/item image picker. Конкретная карточка персонажа или предмета все еще может хранить прямой выбор одиночного ассета как manual override; он не сбрасывается при смене группы. Если у группы нет подключенных наборов или карточка без группы, picker показывает все подходящие ассеты нужного `kind`, включая ассеты без набора.
 
 ### World
 
-Рабочий модуль мира: локации, фракции и события доступны через отдельный API/UI, привязаны к владельцу и опционально к кампании. В интерфейсе есть вкладки, поиск, фильтр по кампании, создание, редактирование и удаление записей.
+Backend/API-модуль мира для локаций, фракций и событий существует, но standalone UI временно скрыт из sidebar. Данные остаются доступны для уже созданных связей и будущей переработки `Atlas / World Module v2`, где будет заново определен UX локаций, фракций, событий и их связь с картами, персонажами и сценариями.
 
 ### Tags
 
-Рабочий общий tagging-слой: пользовательские теги создаются один раз и привязываются к сценариям, картам, персонажам, предметам, ассетам, локациям, фракциям и событиям через `taggables`. В основных редакторах есть выбор, создание, переименование, удаление привязок и фильтрация по тегам. Legacy `campaigns.tags` остается отдельным полем кампаний.
+Рабочий общий tagging-слой: пользовательские теги создаются один раз и привязываются к сценариям, картам, персонажам, предметам, ассетам, локациям, фракциям и событиям через `taggables`. В основных редакторах есть выбор, создание, переименование, удаление привязок и фильтрация по тегам. Эти теги считаются приватными library tags пользователя: они не должны автоматически попадать в public/community payload, публикации или PDF export. Для публичных хэштегов публикаций нужен отдельный будущий слой. Legacy `campaigns.tags` остается отдельным полем кампаний.
 
 ### Relations
 
@@ -408,7 +422,7 @@ Story-Forge/
 
 ### Карта
 
-Карта хранит размеры, размер клетки, структуру объектов и ссылки на asset background/token objects в `data`. Canvas карты умеет показывать фон из image-ассета и размещать image/token ассеты как single-cell объекты.
+Карта хранит размеры, размер клетки, layer-based структуру `data.layers` и совместимое зеркало `data.objects`. Canvas карты умеет показывать фон из asset kind `background`, рисовать tile/token слои по порядку, управлять visibility/lock/opacity слоев и размещать asset kind `tile`/`token` с размером, поворотом и прозрачностью. Подключенные к карте asset collections ограничивают фон, tile palette и token palette соответствующими наборами; активный слой показывает, какие наборы дают подходящие ассеты, а палитра подписывает источник ассета. Если наборы не подключены, карта использует fallback на все подходящие ассеты нужного `kind`.
 
 ---
 
@@ -765,9 +779,10 @@ npm audit --omit=dev --audit-level=high
 - Социальные и community-входы временно скрыты из интерфейса, чтобы не создавать ложное ощущение готовности social layer.
 - Сценарии теперь graph-first на frontend и backend: legacy-главы/блоки больше не редактируются в UI, а backend legacy-слой удален. Graph UI v2 поддерживает canvas-first раскладку, pan/zoom/fit-to-view, minimap в UI overlay, manual auto-layout v2 в двух направлениях, computed direct directional edges, separated input/output ports, keyboard clear/delete shortcuts, frontend-only undo/redo history, selected-only compact output handles, semantic node type border styling, resizable node cards, content preview, drag-to-connect созданием переходов, quick edit/inline label edit переходов, frontend-only validation v2 с errors/warnings и graph-aware PDF export.
 - Graph Canvas содержит best-effort computed obstacle-aware auto-routing и auto-layout v2, но пока не содержит full obstacle router, persisted route points для auto-routes и полноценный graph layout engine; typed-модель условий/исходов и graph validation остаются frontend-only и не блокируют export/publish/backend-сохранение.
-- Локации, фракции и события реализованы как самостоятельный World module v1, доступны для универсальных связей и могут привязываться к graph-узлам через inspector/preview/export.
-- Библиотека токенов и изображений интегрирована в персонажей, предметы и карты через role-based asset links; resize/rotation/layers для map tokens еще впереди.
-- Теги реализованы как пользовательский Tags module v1; campaign legacy tags не мигрированы в `taggables`.
+- Локации, фракции и события реализованы на backend/API уровне и могут участвовать в существующих связях, но standalone World UI временно скрыт до полноценной переработки Atlas/World UX.
+- Библиотека ассетов интегрирована в персонажей, предметы и карты через role-based asset links; ассеты имеют доменный `kind`, наборы и подключение наборов к материалам, а Map Asset Layers v1 уже поддерживает слои карты, visibility/lock/opacity и size/rotation/opacity для map tokens.
+- Группы карточек с наследованием наборов ассетов пока не реализованы: текущие карточки могут использовать прямой одиночный asset override, а наборы работают как фильтр доступного пула.
+- Теги реализованы как приватный пользовательский Tags module v1; campaign legacy tags не мигрированы в `taggables`, а публичные теги публикаций должны быть отдельным слоем и не наследовать личные теги автоматически.
 - Экспорт карточек и карт требует доработки.
 - Realtime-функции не являются обязательными для версии к защите.
 - Проект ориентирован на подготовку материалов, а не на проведение полноценной онлайн-сессии.

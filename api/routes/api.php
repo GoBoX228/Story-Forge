@@ -11,13 +11,18 @@ use App\Http\Controllers\Admin\AdminOverviewController;
 use App\Http\Controllers\Admin\AdminReportsController;
 use App\Http\Controllers\Admin\AdminUsersController;
 use App\Http\Controllers\AssetController;
+use App\Http\Controllers\AssetCollectionController;
+use App\Http\Controllers\AssetCollectionTargetController;
+use App\Http\Controllers\AssetFolderController;
 use App\Http\Controllers\BroadcastController;
 use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\CharacterController;
+use App\Http\Controllers\CharacterGroupController;
 use App\Http\Controllers\EntityLinkController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\FactionController;
 use App\Http\Controllers\ItemController;
+use App\Http\Controllers\ItemGroupController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\MapController;
 use App\Http\Controllers\PublicationController;
@@ -85,18 +90,42 @@ Route::middleware(['auth:sanctum', 'active_user'])->group(function () {
     Route::get('/characters', [CharacterController::class, 'index']);
     Route::patch('/characters/{id}', [CharacterController::class, 'update']);
     Route::delete('/characters/{id}', [CharacterController::class, 'destroy']);
+    Route::get('/character-groups', [CharacterGroupController::class, 'index']);
+    Route::post('/character-groups', [CharacterGroupController::class, 'store']);
+    Route::get('/character-groups/{id}', [CharacterGroupController::class, 'show']);
+    Route::patch('/character-groups/{id}', [CharacterGroupController::class, 'update']);
+    Route::delete('/character-groups/{id}', [CharacterGroupController::class, 'destroy']);
 
     Route::get('/items', [ItemController::class, 'index']);
     Route::post('/items', [ItemController::class, 'store']);
     Route::get('/items/{id}', [ItemController::class, 'show']);
     Route::patch('/items/{id}', [ItemController::class, 'update']);
     Route::delete('/items/{id}', [ItemController::class, 'destroy']);
+    Route::get('/item-groups', [ItemGroupController::class, 'index']);
+    Route::post('/item-groups', [ItemGroupController::class, 'store']);
+    Route::get('/item-groups/{id}', [ItemGroupController::class, 'show']);
+    Route::patch('/item-groups/{id}', [ItemGroupController::class, 'update']);
+    Route::delete('/item-groups/{id}', [ItemGroupController::class, 'destroy']);
 
     Route::get('/assets', [AssetController::class, 'index']);
     Route::post('/assets', [AssetController::class, 'store']);
     Route::get('/assets/{id}', [AssetController::class, 'show']);
     Route::patch('/assets/{id}', [AssetController::class, 'update']);
     Route::delete('/assets/{id}', [AssetController::class, 'destroy']);
+
+    Route::get('/asset-folders', [AssetFolderController::class, 'index']);
+    Route::post('/asset-folders', [AssetFolderController::class, 'store']);
+    Route::get('/asset-folders/{id}', [AssetFolderController::class, 'show']);
+    Route::patch('/asset-folders/{id}', [AssetFolderController::class, 'update']);
+    Route::delete('/asset-folders/{id}', [AssetFolderController::class, 'destroy']);
+
+    Route::get('/asset-collections', [AssetCollectionController::class, 'index']);
+    Route::post('/asset-collections', [AssetCollectionController::class, 'store']);
+    Route::get('/asset-collections/{id}', [AssetCollectionController::class, 'show']);
+    Route::patch('/asset-collections/{id}', [AssetCollectionController::class, 'update']);
+    Route::delete('/asset-collections/{id}', [AssetCollectionController::class, 'destroy']);
+    Route::get('/asset-collection-targets/{type}/{id}/collections', [AssetCollectionTargetController::class, 'targetCollections']);
+    Route::put('/asset-collection-targets/{type}/{id}/collections', [AssetCollectionTargetController::class, 'replaceTargetCollections']);
 
     Route::get('/locations', [LocationController::class, 'index']);
     Route::post('/locations', [LocationController::class, 'store']);

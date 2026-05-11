@@ -1,5 +1,16 @@
 # Project Baseline
 
+## Latest Update
+
+- Character/Item Groups v1 + Inherited Asset Sets is implemented: character and item cards can belong to one group, groups can own asset-set assignments, card pickers inherit those pools, and direct single-asset overrides remain supported.
+- Standalone World UI is temporarily hidden from the sidebar and quick navigation. Backend/API/data for `locations`, `factions` and `events` remain available for existing links and future Atlas/World redesign.
+- Asset Sets Explorer UX Alignment v1 is implemented: reusable asset sets now follow the same explorer-style interaction model as folders, with double click open, inline rename, context menus and drag/drop membership management instead of persistent card action buttons.
+- Asset Sets UX v2 is implemented: the Assets section separates the file explorer from reusable asset sets, supports default set creation, inline rename, description editing, set composition management, adding selected assets to sets and drag/drop onto set cards without moving assets between folders.
+- Map Layers UX Stabilization v2 is implemented: the map editor resource panel now presents layers as a simplified Photoshop-like list, keeps selected-layer properties in a compact block, hides irrelevant tile/token/background controls by active layer type, and preserves asset collection filtering.
+- Asset Collection Integration v1 + Asset Sets Integration into Map Layers v1 are implemented: asset collections are reusable asset sets that can be attached to maps, characters and items; map layer palettes filter by connected sets, expose connected set counts for the active layer, show asset source set labels, and fall back to all matching asset kinds when no sets are connected.
+- Asset Folders vs Asset Sets Domain Split v1 is implemented: assets now use separate single-location `asset_folders` for library organization, while `asset_collections` remain multi-asset sets for material usage and future sharing.
+- Map Asset Layers v1 is implemented: maps now use `map.data.layers` for background/tile/token layers, keep flattened `map.data.objects` as a compatibility mirror, support visibility, lock, opacity, rename/reorder controls, background opacity and token width/height/rotation/opacity. Old maps with only `data.objects` are converted into runtime layers on read and are saved in the new format on the next map update.
+
 Документ фиксирует фактическое состояние проекта перед дальнейшей доработкой. Он нужен, чтобы отделить реализованное ядро от планируемых модулей из ТЗ и дополнительных материалов.
 
 ## Назначение
@@ -33,9 +44,9 @@
 - CRUD карт с canvas/grid-редактором.
 - CRUD персонажей.
 - CRUD предметов.
-- Assets module v1 + Asset Integration v1: загрузка, реестр, фильтрация, preview, редактирование и удаление файлов/изображений/токенов через public storage; ассеты назначаются персонажам, предметам и картам через role-based `entity_links.metadata`.
-- World module v1: CRUD/API/UI для локаций, фракций и событий с ownership scope, поиском и фильтрацией по кампании.
-- Tags module v1: пользовательские теги, `taggables` assignment и фильтры по тегам для сценариев, карт, персонажей, предметов, ассетов и world-сущностей.
+- Assets module v1 + Asset Integration v1 + Asset Taxonomy/Collections v1 + Asset Collection Integration v1 + Asset Sets UX v2 + Character/Item Groups v1: загрузка, реестр, фильтрация, preview, редактирование и удаление файлов через public storage; ассеты имеют media `type` (`image/document/other`), semantic `kind` (`tile/token/portrait/background/item_image/handout/document/icon/other`), находятся в одной папке или прямо в библиотеке без папки, могут входить в несколько наборов ассетов, а сами ассеты назначаются материалам через role-based `entity_links.metadata`. Наборы ограничивают доступный пул ассетов на уровне карты, группы персонажей или группы предметов; карточка персонажа/предмета может хранить прямой выбор конкретного ассета как manual override; при отсутствии подключенных наборов доступны все подходящие ассеты нужного `kind`.
+- World module v1 backend/API для локаций, фракций и событий с ownership scope. Standalone UI временно скрыт из sidebar до полноценного Atlas/World UX; данные остаются доступны для существующих связей.
+- Tags module v1: приватные пользовательские теги, `taggables` assignment и фильтры по тегам для сценариев, карт, персонажей, предметов, ассетов и world-сущностей. Эти теги не должны автоматически публиковаться или попадать в export/community payload.
 - Universal Entity Links v2: общий API/UI для направленных связей между сценариями, картами, персонажами, предметами, ассетами, локациями, фракциями и событиями.
 - Базовые связи кампании со сценариями, картами и персонажами.
 - Базовые связи сценария с картами и персонажами.
@@ -48,9 +59,10 @@
 
 - Сценарный редактор: legacy-редактор и backend слой `chapters/blocks` удалены; основной UX состоит из graph canvas и read-only preview.
 - Graph-модель: есть узлы, переходы, visual canvas с pan/zoom/fit-to-view, minimap-навигацией, manual auto-layout v2 по уровням переходов в двух направлениях, читаемыми directional edges, computed obstacle-aware auto-routing и separated input/output ports, keyboard clear/delete shortcuts, frontend-only undo/redo для move/resize/layout и transition create/update/delete, resizable node cards с content preview, drag-to-connect созданием переходов, quick edit и inline label edit переходов, canvas-first layout v2, typed forms для `config` узлов, read-only play mode, типизированный контракт `condition`, исходы `success`/`failure`, frontend-only warnings проверки graph-структуры и связи узлов с картами/персонажами/предметами/ассетами/world-сущностями.
-- Связи между сущностями: `entity_links` используется и для graph-node связей с картами/персонажами/предметами/ассетами/локациями/фракциями/событиями, и как универсальный directed layer между основными материалами. UI показывает блок "Связанные материалы", поддерживает relation-типы, label, удаление и quick open target-а; обратные связи и canvas-визуализация universal links пока не реализованы.
+- Связи между сущностями: `entity_links` используется и для graph-node связей с картами/персонажами/предметами/ассетами/локациями/фракциями/событиями, и как универсальный directed layer между основными материалами. UI показывает блок "Связанные материалы", поддерживает relation-типы, label, удаление и quick open для активных редакторов; quick open для world-сущностей временно отключен вместе со standalone World UI.
 - Социальные разделы: сообщества, друзья и сообщения временно скрыты из интерфейса; backend-моделей и API для них нет.
 - Приватность и публикации: реализован базовый backend workflow публикаций материалов через `published_contents`, но publication/community UI временно скрыт до переработки социальной модели.
+- Public tags для публикаций не реализованы: текущие `tags/taggables` являются личными library tags пользователя и не должны автоматически утекать в публикации, community feed или PDF export.
 - Экспорт: реализован PDF сценария для graph-модели, но нет экспорта карт, карточек персонажей/предметов и очереди экспортов.
 - Комментарии, export jobs, notifications и idempotency keys подготовлены как schema-only baseline.
 
@@ -58,8 +70,9 @@
 
 - Следующие graph UX-задачи: publish/export enforcement и более полный graph layout/router.
 - Backend/publish/export-blocking валидация невозможных переходов поверх frontend-only graph warnings.
+- Tile Metadata / Autotile Rules v1 не реализован: специальные технические метки тайлов вроде `wall_top_left`, `wall_top_right`, `wall_vertical`, `floor`, `door`, `water_edge` и правила автоподбора тайлов оставлены как отдельный будущий слой. Текущий Tags module v1 остается пользовательским tagging/search-слоем и не должен смешиваться с autotile-метаданными.
 - Comments/collaboration/invitations.
-- Advanced publications/community features beyond v1 feed: comments, reactions, moderation workflow and public anonymous pages.
+- Advanced publications/community features beyond v1 feed: public hashtags/publication tags, comments, reactions, moderation workflow and public anonymous pages.
 - Friends/messages backend.
 - Notifications API.
 - Search/filter/pagination по всем основным спискам.
@@ -86,11 +99,13 @@
 
 `published_contents` поддерживает Publications module v1 на backend/API уровне: материалы `scenario`, `map`, `character`, `item`, `asset`, `location`, `faction`, `event` можно переводить между `draft/published/archived`, настраивать `private/unlisted/public`. Frontend publication/community UI временно скрыт; публикация graph-сценария с backend graph errors блокируется, warnings не блокируют публикацию.
 
-`assets` уже используется Assets module v1 и Asset Integration v1: файлы сохраняются в Laravel `public` disk, записи привязаны к владельцу и опционально к кампании. Персонажи используют роли `portrait`/`token`, предметы `item_image`, карты `map_background`/`map_token`; map canvas хранит выбранный фон и token objects в `map.data`.
+`assets`, `asset_folders`, `asset_collections`, `asset_collection_items` и `asset_collection_targets` уже используются Assets module v1, Asset Integration v1, Asset Taxonomy + Collections v1, Asset Collection Integration v1, Asset Sets Integration into Map Layers v1, Asset Folders vs Asset Sets Domain Split v1 и Asset Sets UX v2: файлы сохраняются в Laravel `public` disk, записи привязаны к владельцу, имеют media `type` и semantic `kind`, находятся в одной папке или прямо в библиотеке без папки. Наборы ассетов управляются в отдельном режиме библиотеки, имеют описание, inline rename и состав, могут наполняться выделенными ассетами или drag/drop без изменения `asset_folder_id`. Наборы ассетов можно подключать к картам, персонажам и предметам; подключенные наборы фильтруют фон/тайлы/токены карты, portrait/token персонажа и item image предмета. В карте активный слой показывает контекст подключенных наборов и source labels у ассетов в палитрах; при отсутствии наборов остается fallback на все подходящие ассеты нужного `kind`. Campaign binding для assets удален из публичного UI/API. Персонажи используют роли `portrait`/`token`, предметы `item_image`, карты `map_background`/`map_token`; map canvas хранит выбранный фон и token objects в `map.data`.
 
-`locations`, `factions` и `events` уже используются World module v1: записи доступны через отдельный API/UI, привязаны к владельцу и опционально к кампании.
+`character_groups` и `item_groups` используются Character/Item Groups v1: карточка персонажа или предмета может принадлежать максимум одной группе, группы имеют собственные `asset_collection_targets`, а pickers наследуют пул наборов группы. Прямые role-based asset overrides на карточке сохраняются и имеют приоритет над наследованным пулом.
 
-`tags` и `taggables` уже используются Tags module v1: теги пользовательские, assignment поддерживает `scenario`, `map`, `character`, `item`, `asset`, `location`, `faction`, `event`. Legacy `campaigns.tags` остается отдельным JSON-полем кампаний.
+`locations`, `factions` и `events` уже поддерживаются World module v1 на backend/API уровне: записи привязаны к владельцу и опционально к кампании. Standalone World UI временно скрыт из интерфейса; возвращение раздела планируется как отдельный Atlas/World UX v2 после уточнения домена локаций, фракций, событий и их связей с картами/персонажами/сценариями.
+
+`tags` и `taggables` уже используются Tags module v1: теги пользовательские и приватные, assignment поддерживает `scenario`, `map`, `character`, `item`, `asset`, `location`, `faction`, `event`. Они предназначены для личной организации библиотеки и фильтрации, а не для публичных хэштегов. Publication/community слой должен использовать отдельную модель публичных тегов и явный whitelist экспортируемых metadata. Legacy `campaigns.tags` остается отдельным JSON-полем кампаний.
 
 `entity_links` уже используется Graph Node Links Upgrade v2 для связей `scenario_node -> map/character/item/asset/location/faction/event`, Universal Entity Links v2 для материалов `scenario`, `map`, `character`, `item`, `asset`, `location`, `faction`, `event`, а также Asset Integration v1 для visual asset roles в `metadata.role`. Graph-node endpoints сохранены совместимыми, универсальные связи доступны отдельными `/api/entity-links/{sourceType}/{sourceId}` routes.
 

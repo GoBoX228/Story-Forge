@@ -13,10 +13,19 @@ import {
   AdminBroadcastItem,
   AdminContentItem,
   Asset,
+  AssetCollection,
+  AssetCollectionAssignmentMap,
+  AssetCollectionCreatePayload,
+  AssetCollectionTargetType,
+  AssetCollectionUpdatePayload,
+  AssetFolder,
+  AssetFolderCreatePayload,
+  AssetFolderUpdatePayload,
   AssetUpdatePayload,
   AssetUploadPayload,
   Campaign,
   Character,
+  CharacterGroup,
   EntityLink,
   EntityLinkAssignmentMap,
   EntityLinkCreatePayload,
@@ -24,6 +33,7 @@ import {
   EntityLinkUpdatePayload,
   Faction,
   Item,
+  ItemGroup,
   MapData,
   PublishedContent,
   PublicationAssignmentMap,
@@ -46,6 +56,7 @@ import {
 import { apiRequest, clearAccessToken, getAccessToken } from './lib/api';
 import {
   entityLinkAssignmentKey,
+  assetCollectionAssignmentKey,
   mapCampaignFromApi,
   mapCampaignToApiPayload,
   mapCharacterFromApi,
@@ -56,7 +67,22 @@ import {
   publicationAssignmentKey,
   tagAssignmentKey
 } from './lib/mappers';
-import { deleteAsset, listAssets, updateAsset, uploadAsset } from './lib/assetApi';
+import {
+  createAssetCollection,
+  createAssetFolder,
+  deleteAsset,
+  deleteAssetCollection,
+  deleteAssetFolder,
+  listTargetAssetCollections,
+  listAssetCollections,
+  listAssetFolders,
+  listAssets,
+  replaceTargetAssetCollections,
+  updateAsset,
+  updateAssetCollection,
+  updateAssetFolder,
+  uploadAsset
+} from './lib/assetApi';
 import {
   createFaction,
   createLocation,
@@ -75,6 +101,16 @@ import { deleteTag, listTags, listTargetTags, replaceTargetTags, updateTag } fro
 import { createEntityLink, deleteEntityLink, listEntityLinks, updateEntityLink } from './lib/entityLinkApi';
 import { entityLinkIdentityKey } from './lib/assetUsage';
 import { deletePublication, publishTarget, updatePublication } from './lib/publicationApi';
+import {
+  createCharacterGroup,
+  createItemGroup,
+  deleteCharacterGroup,
+  deleteItemGroup,
+  listCharacterGroups,
+  listItemGroups,
+  updateCharacterGroup,
+  updateItemGroup
+} from './lib/cardGroupApi';
 
 const lazyWithRetry = <T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>,
@@ -161,6 +197,11 @@ interface EntityLinkTargetRef {
   id: string;
 }
 
+interface AssetCollectionTargetRef {
+  type: AssetCollectionTargetType;
+  id: string;
+}
+
 const formatBroadcastTime = (value: string) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
@@ -210,15 +251,20 @@ const App: React.FC = () => {
   const [interfaceScale, setInterfaceScale] = useState(1);
   const [currentTheme, setCurrentTheme] = useState<'oled' | 'low-contrast' | 'light'>('oled');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isBootstrapping, setIsBootstrapping] = useState(() => Boolean(getAccessToken()));
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [maps, setMaps] = useState<MapData[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [characterGroups, setCharacterGroups] = useState<CharacterGroup[]>([]);
   const [items, setItems] = useStickyState<Item[]>(INITIAL_ITEMS, 'sf_items');
+  const [itemGroups, setItemGroups] = useState<ItemGroup[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetFolders, setAssetFolders] = useState<AssetFolder[]>([]);
+  const [assetCollections, setAssetCollections] = useState<AssetCollection[]>([]);
+  const [assetCollectionAssignments, setAssetCollectionAssignments] = useState<AssetCollectionAssignmentMap>({});
   const [locations, setLocations] = useState<WorldLocation[]>([]);
   const [factions, setFactions] = useState<Faction[]>([]);
   const [worldEvents, setWorldEvents] = useState<WorldEvent[]>([]);
@@ -295,14 +341,33 @@ const App: React.FC = () => {
     setEntityLinks(Object.fromEntries(pairs));
   }, []);
 
+  const loadAssetCollectionAssignments = useCallback(async (targets: AssetCollectionTargetRef[]) => {
+    const pairs = await Promise.all(
+      targets.map(async (target) => {
+        try {
+          const targetCollections = await listTargetAssetCollections(target.type, target.id);
+          return [assetCollectionAssignmentKey(target.type, target.id), targetCollections] as const;
+        } catch {
+          return [assetCollectionAssignmentKey(target.type, target.id), []] as const;
+        }
+      })
+    );
+
+    setAssetCollectionAssignments(Object.fromEntries(pairs));
+  }, []);
+
   const loadAllData = useCallback(async () => {
     const [
       campaignsResponse,
       scenariosResponse,
       mapsResponse,
       charactersResponse,
+      characterGroupsResponse,
       itemsResponse,
+      itemGroupsResponse,
       assetsResponse,
+      assetFoldersResponse,
+      assetCollectionsResponse,
       locationsResponse,
       factionsResponse,
       worldEventsResponse,
@@ -312,8 +377,12 @@ const App: React.FC = () => {
       apiRequest<any[]>('/scenarios'),
       apiRequest<any[]>('/maps'),
       apiRequest<any[]>('/characters'),
+      listCharacterGroups(),
       apiRequest<any[]>('/items'),
+      listItemGroups(),
       listAssets(),
+      listAssetFolders(),
+      listAssetCollections(),
       listLocations(),
       listFactions(),
       listWorldEvents(),
@@ -324,8 +393,12 @@ const App: React.FC = () => {
     setScenarios(scenariosResponse.map(mapScenarioSummary));
     setMaps(mapsResponse.map(mapMapFromApi));
     setCharacters(charactersResponse.map(mapCharacterFromApi));
+    setCharacterGroups(characterGroupsResponse);
     setItems(itemsResponse.map(mapItemFromApi));
+    setItemGroups(itemGroupsResponse);
     setAssets(assetsResponse);
+    setAssetFolders(assetFoldersResponse);
+    setAssetCollections(assetCollectionsResponse);
     setLocations(locationsResponse);
     setFactions(factionsResponse);
     setWorldEvents(worldEventsResponse);
@@ -340,10 +413,18 @@ const App: React.FC = () => {
       ...factionsResponse.map((faction) => ({ type: 'faction' as const, id: faction.id })),
       ...worldEventsResponse.map((event) => ({ type: 'event' as const, id: event.id }))
     ];
+    const assetCollectionTargets = [
+      ...mapsResponse.map((map) => ({ type: 'map' as const, id: String(map.id) })),
+      ...charactersResponse.map((character) => ({ type: 'character' as const, id: String(character.id) })),
+      ...characterGroupsResponse.map((group) => ({ type: 'character_group' as const, id: group.id })),
+      ...itemsResponse.map((item) => ({ type: 'item' as const, id: String(item.id) })),
+      ...itemGroupsResponse.map((group) => ({ type: 'item_group' as const, id: group.id }))
+    ];
     await loadTagAssignments(materialTargets);
     await loadEntityLinkAssignments(materialTargets);
+    await loadAssetCollectionAssignments(assetCollectionTargets);
     await loadBroadcasts();
-  }, [loadBroadcasts, loadEntityLinkAssignments, loadTagAssignments, setItems]);
+  }, [loadAssetCollectionAssignments, loadBroadcasts, loadEntityLinkAssignments, loadTagAssignments, setItems]);
 
   useEffect(() => {
     let mounted = true;
@@ -358,17 +439,27 @@ const App: React.FC = () => {
         return;
       }
 
+      if (mounted) {
+        setIsBootstrapping(true);
+      }
+
       try {
         const me = await fetchCurrentUser();
         if (!mounted) return;
         setCurrentUser(me);
         setIsAuthenticated(true);
-        await loadAllData();
       } catch {
         if (!mounted) return;
         clearAccessToken();
         setIsAuthenticated(false);
         setCurrentUser(null);
+        return;
+      }
+
+      try {
+        await loadAllData();
+      } catch (error) {
+        console.error('Failed to load application data after auth bootstrap', error);
       } finally {
         if (mounted) setIsBootstrapping(false);
       }
@@ -382,6 +473,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (activeView === 'admin' && currentUser?.role !== 'admin') {
+      setActiveView('dashboard');
+    }
+    if (activeView === 'world') {
       setActiveView('dashboard');
     }
   }, [activeView, currentUser?.role]);
@@ -405,7 +499,7 @@ const App: React.FC = () => {
     if (activeView !== 'world') {
       setWorldEditorTarget(null);
     }
-    if (!['maps', 'characters', 'items', 'assets', 'world'].includes(activeView)) {
+    if (!['maps', 'characters', 'items', 'assets'].includes(activeView)) {
       setGraphReturnScenarioId(null);
     }
   }, [activeView]);
@@ -420,11 +514,17 @@ const App: React.FC = () => {
       const me = await fetchCurrentUser();
       setCurrentUser(me);
       setIsAuthenticated(true);
-      await loadAllData();
     } catch {
       clearAccessToken();
       setIsAuthenticated(false);
       setCurrentUser(null);
+      return;
+    }
+
+    try {
+      await loadAllData();
+    } catch (error) {
+      console.error('Failed to load application data after login', error);
     }
   };
 
@@ -618,21 +718,161 @@ const App: React.FC = () => {
     [setItems]
   );
 
+  const handleCreateCharacterGroup = useCallback(async () => {
+    const created = await createCharacterGroup({ name: 'Новая группа', description: '' });
+    setCharacterGroups((prev) => [...prev, created].sort((a, b) => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name)));
+    return created;
+  }, []);
+
+  const handleUpdateCharacterGroup = useCallback(async (id: string, payload: Partial<CharacterGroup>) => {
+    const updated = await updateCharacterGroup(id, {
+      ...(payload.name !== undefined ? { name: payload.name } : {}),
+      ...(payload.description !== undefined ? { description: payload.description } : {}),
+      ...(payload.orderIndex !== undefined ? { orderIndex: payload.orderIndex } : {})
+    });
+    setCharacterGroups((prev) => prev.map((group) => (group.id === id ? updated : group)));
+    return updated;
+  }, []);
+
+  const handleDeleteCharacterGroup = useCallback(async (id: string) => {
+    await deleteCharacterGroup(id);
+    setCharacterGroups((prev) => prev.filter((group) => group.id !== id));
+    setCharacters((prev) => prev.map((character) => character.groupId === id ? { ...character, groupId: null } : character));
+    setAssetCollectionAssignments((prev) => {
+      const next = { ...prev };
+      delete next[assetCollectionAssignmentKey('character_group', id)];
+      return next;
+    });
+  }, []);
+
+  const handleCreateItemGroup = useCallback(async () => {
+    const created = await createItemGroup({ name: 'Новая группа', description: '' });
+    setItemGroups((prev) => [...prev, created].sort((a, b) => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name)));
+    return created;
+  }, []);
+
+  const handleUpdateItemGroup = useCallback(async (id: string, payload: Partial<ItemGroup>) => {
+    const updated = await updateItemGroup(id, {
+      ...(payload.name !== undefined ? { name: payload.name } : {}),
+      ...(payload.description !== undefined ? { description: payload.description } : {}),
+      ...(payload.orderIndex !== undefined ? { orderIndex: payload.orderIndex } : {})
+    });
+    setItemGroups((prev) => prev.map((group) => (group.id === id ? updated : group)));
+    return updated;
+  }, []);
+
+  const handleDeleteItemGroup = useCallback(async (id: string) => {
+    await deleteItemGroup(id);
+    setItemGroups((prev) => prev.filter((group) => group.id !== id));
+    setItems((prev) => prev.map((item) => item.groupId === id ? { ...item, groupId: null } : item));
+    setAssetCollectionAssignments((prev) => {
+      const next = { ...prev };
+      delete next[assetCollectionAssignmentKey('item_group', id)];
+      return next;
+    });
+  }, [setItems]);
+
   const handleUploadAsset = useCallback(async (payload: AssetUploadPayload) => {
     const uploaded = await uploadAsset(payload);
     setAssets((prev) => [uploaded, ...prev]);
+    setAssetFolders((prev) => prev.map((folder) => uploaded.folderId === folder.id
+      ? { ...folder, assetIds: Array.from(new Set([...folder.assetIds, uploaded.id])) }
+      : folder
+    ));
+    setAssetCollections((prev) => prev.map((collection) => uploaded.collectionIds.includes(collection.id)
+      ? { ...collection, assetIds: Array.from(new Set([...collection.assetIds, uploaded.id])) }
+      : collection
+    ));
     return uploaded;
   }, []);
 
   const handleUpdateAsset = useCallback(async (id: string, payload: AssetUpdatePayload) => {
     const updated = await updateAsset(id, payload);
     setAssets((prev) => prev.map((asset) => (asset.id === id ? updated : asset)));
+    setAssetFolders((prev) => prev.map((folder) => ({
+      ...folder,
+      assetIds: updated.folderId === folder.id
+        ? Array.from(new Set([...folder.assetIds, updated.id]))
+        : folder.assetIds.filter((assetId) => assetId !== updated.id)
+    })));
+    setAssetCollections((prev) => prev.map((collection) => ({
+      ...collection,
+      assetIds: updated.collectionIds.includes(collection.id)
+        ? Array.from(new Set([...collection.assetIds, updated.id]))
+        : collection.assetIds.filter((assetId) => assetId !== updated.id)
+    })));
     return updated;
   }, []);
 
   const handleDeleteAsset = useCallback(async (id: string) => {
     await deleteAsset(id);
     setAssets((prev) => prev.filter((asset) => asset.id !== id));
+    setAssetFolders((prev) => prev.map((folder) => ({
+      ...folder,
+      assetIds: folder.assetIds.filter((assetId) => assetId !== id)
+    })));
+    setAssetCollections((prev) => prev.map((collection) => ({
+      ...collection,
+      assetIds: collection.assetIds.filter((assetId) => assetId !== id)
+    })));
+  }, []);
+
+  const handleCreateAssetFolder = useCallback(async (payload: AssetFolderCreatePayload) => {
+    const created = await createAssetFolder(payload);
+    setAssetFolders((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+    return created;
+  }, []);
+
+  const handleUpdateAssetFolder = useCallback(async (id: string, payload: AssetFolderUpdatePayload) => {
+    const updated = await updateAssetFolder(id, payload);
+    setAssetFolders((prev) => prev.map((folder) => (folder.id === id ? updated : folder)));
+    return updated;
+  }, []);
+
+  const handleDeleteAssetFolder = useCallback(async (id: string) => {
+    await deleteAssetFolder(id);
+    setAssets((prev) => prev.map((asset) => (asset.folderId === id ? { ...asset, folderId: null } : asset)));
+    setAssetFolders((prev) => prev.filter((folder) => folder.id !== id));
+  }, []);
+
+  const handleCreateAssetCollection = useCallback(async (payload: AssetCollectionCreatePayload) => {
+    const created = await createAssetCollection(payload);
+    setAssetCollections((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+    return created;
+  }, []);
+
+  const handleUpdateAssetCollection = useCallback(async (id: string, payload: AssetCollectionUpdatePayload) => {
+    const updated = await updateAssetCollection(id, payload);
+    setAssetCollections((prev) => prev.map((collection) => (collection.id === id ? updated : collection)));
+    return updated;
+  }, []);
+
+  const handleDeleteAssetCollection = useCallback(async (id: string) => {
+    await deleteAssetCollection(id);
+    setAssetCollections((prev) => prev.filter((collection) => collection.id !== id));
+    setAssets((prev) => prev.map((asset) => ({
+      ...asset,
+      collectionIds: asset.collectionIds.filter((collectionId) => collectionId !== id)
+    })));
+    setAssetCollectionAssignments((prev) => Object.fromEntries(
+      Object.entries(prev).map(([key, collections]) => [
+        key,
+        collections.filter((collection) => collection.id !== id)
+      ])
+    ));
+  }, []);
+
+  const handleReplaceTargetAssetCollections = useCallback(async (
+    type: AssetCollectionTargetType,
+    id: string,
+    collectionIds: string[]
+  ) => {
+    const collections = await replaceTargetAssetCollections(type, id, { collectionIds });
+    setAssetCollectionAssignments((prev) => ({
+      ...prev,
+      [assetCollectionAssignmentKey(type, id)]: collections,
+    }));
+    return collections;
   }, []);
 
   const handleCreateLocation = useCallback(async (payload: WorldEntityPayload) => {
@@ -1085,35 +1325,36 @@ const App: React.FC = () => {
     targetId: string,
     sourceScenarioId: string
   ) => {
-    setGraphReturnScenarioId(sourceScenarioId);
-
     if (targetType === 'map') {
+      setGraphReturnScenarioId(sourceScenarioId);
       setMapEditorTargetId(targetId);
       setActiveView('maps');
       return;
     }
 
     if (targetType === 'character') {
+      setGraphReturnScenarioId(sourceScenarioId);
       setCharacterEditorTargetId(targetId);
       setActiveView('characters');
       return;
     }
 
     if (targetType === 'item') {
+      setGraphReturnScenarioId(sourceScenarioId);
       setItemEditorTargetId(targetId);
       setActiveView('items');
       return;
     }
 
     if (targetType === 'asset') {
+      setGraphReturnScenarioId(sourceScenarioId);
       setAssetEditorTargetId(targetId);
       setActiveView('assets');
       return;
     }
 
     if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
-      setWorldEditorTarget({ type: targetType, id: targetId });
-      setActiveView('world');
+      return;
     }
   }, []);
 
@@ -1149,8 +1390,7 @@ const App: React.FC = () => {
     }
 
     if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
-      setWorldEditorTarget({ type: targetType, id: targetId });
-      setActiveView('world');
+      return;
     }
   }, []);
 
@@ -1311,6 +1551,8 @@ const App: React.FC = () => {
                       characters={characters}
                       items={items}
                       assetsLibrary={assets}
+                      assetCollections={assetCollections}
+                      assetCollectionAssignments={assetCollectionAssignments}
                       locations={locations}
                       factions={factions}
                       events={worldEvents}
@@ -1328,6 +1570,7 @@ const App: React.FC = () => {
                       onUpdatePublication={handleUpdatePublication}
                       onDeletePublication={handleDeletePublication}
                       onOpenMaterialLink={handleOpenMaterialLink}
+                      onReplaceAssetCollections={handleReplaceTargetAssetCollections}
                       initialMapId={mapEditorTargetId}
                     />
                   </div>
@@ -1344,10 +1587,16 @@ const App: React.FC = () => {
                       onCreateItem={handleCreateItem}
                       onUpdateItem={handleUpdateItem}
                       onDeleteItem={handleDeleteItem}
+                      itemGroups={itemGroups}
+                      onCreateItemGroup={handleCreateItemGroup}
+                      onUpdateItemGroup={handleUpdateItemGroup}
+                      onDeleteItemGroup={handleDeleteItemGroup}
                       scenarios={scenarios}
                       maps={maps}
                       characters={characters}
                       assets={assets}
+                      assetCollections={assetCollections}
+                      assetCollectionAssignments={assetCollectionAssignments}
                       locations={locations}
                       factions={factions}
                       events={worldEvents}
@@ -1365,6 +1614,7 @@ const App: React.FC = () => {
                       onUpdatePublication={handleUpdatePublication}
                       onDeletePublication={handleDeletePublication}
                       onOpenMaterialLink={handleOpenMaterialLink}
+                      onReplaceAssetCollections={handleReplaceTargetAssetCollections}
                       initialItemId={itemEditorTargetId}
                     />
                   </div>
@@ -1378,10 +1628,16 @@ const App: React.FC = () => {
                     <CharactersEditor
                       data={characters}
                       onUpdate={setCharacters}
+                      characterGroups={characterGroups}
+                      onCreateCharacterGroup={handleCreateCharacterGroup}
+                      onUpdateCharacterGroup={handleUpdateCharacterGroup}
+                      onDeleteCharacterGroup={handleDeleteCharacterGroup}
                       items={items}
                       scenarios={scenarios}
                       maps={maps}
                       assets={assets}
+                      assetCollections={assetCollections}
+                      assetCollectionAssignments={assetCollectionAssignments}
                       locations={locations}
                       factions={factions}
                       events={worldEvents}
@@ -1399,6 +1655,7 @@ const App: React.FC = () => {
                       onUpdatePublication={handleUpdatePublication}
                       onDeletePublication={handleDeletePublication}
                       onOpenMaterialLink={handleOpenMaterialLink}
+                      onReplaceAssetCollections={handleReplaceTargetAssetCollections}
                       initialCharacterId={characterEditorTargetId}
                     />
                   </div>
@@ -1411,7 +1668,8 @@ const App: React.FC = () => {
                   <div className="flex-1 min-h-0">
                     <AssetsEditor
                       data={assets}
-                      campaigns={campaigns}
+                      folders={assetFolders}
+                      collections={assetCollections}
                       scenarios={scenarios}
                       maps={maps}
                       characters={characters}
@@ -1422,6 +1680,12 @@ const App: React.FC = () => {
                       onUploadAsset={handleUploadAsset}
                       onUpdateAsset={handleUpdateAsset}
                       onDeleteAsset={handleDeleteAsset}
+                      onCreateFolder={handleCreateAssetFolder}
+                      onUpdateFolder={handleUpdateAssetFolder}
+                      onDeleteFolder={handleDeleteAssetFolder}
+                      onCreateCollection={handleCreateAssetCollection}
+                      onUpdateCollection={handleUpdateAssetCollection}
+                      onDeleteCollection={handleDeleteAssetCollection}
                       tags={tags}
                       tagAssignments={tagAssignments}
                       entityLinks={entityLinks}

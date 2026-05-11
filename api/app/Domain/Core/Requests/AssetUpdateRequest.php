@@ -18,7 +18,10 @@ class AssetUpdateRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'type' => ['sometimes', 'required', 'string', 'in:' . implode(',', Asset::TYPES)],
-            'campaign_id' => ['sometimes', 'nullable', 'integer'],
+            'kind' => ['sometimes', 'required', 'string', 'in:' . implode(',', Asset::KINDS)],
+            'folder_id' => ['sometimes', 'nullable', 'integer'],
+            'collection_ids' => ['sometimes', 'array'],
+            'collection_ids.*' => ['integer'],
         ];
     }
 

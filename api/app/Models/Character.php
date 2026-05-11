@@ -11,6 +11,7 @@ class Character extends Model
         'user_id',
         'campaign_id',
         'scenario_id',
+        'character_group_id',
         'name',
         'role',
         'race',
@@ -38,5 +39,10 @@ class Character extends Model
     public function campaign(): BelongsTo
     {
         return $this->belongsTo(Campaign::class);
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(CharacterGroup::class, 'character_group_id');
     }
 }

@@ -24,6 +24,7 @@ class ItemUpdateRequest extends FormRequest
             'modifiers.*.value' => ['required_with:modifiers', 'numeric'],
             'weight' => ['nullable', 'numeric', 'min:0'],
             'value' => ['nullable', 'integer', 'min:0'],
+            'group_id' => ['nullable', 'integer'],
         ];
     }
 

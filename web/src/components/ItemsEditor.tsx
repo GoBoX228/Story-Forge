@@ -6,6 +6,9 @@ import { Button, Input, SearchInput, Select, TextArea, AddTile, SectionHeader, S
 import { Modal } from './Modal';
 import {
   Asset,
+  AssetCollection,
+  AssetCollectionAssignmentMap,
+  AssetCollectionTargetType,
   Character,
   EntityLink,
   EntityLinkAssignmentMap,
@@ -14,6 +17,7 @@ import {
   EntityLinkUpdatePayload,
   Faction,
   Item,
+  ItemGroup,
   ItemRarity,
   ItemType,
   MapData,
@@ -31,11 +35,12 @@ import {
   WorldEvent,
   WorldLocation
 } from '../types';
-import { entityLinkAssignmentKey, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
+import { assetCollectionAssignmentKey, entityLinkAssignmentKey, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
 import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
 import { TagFilter, TagPicker } from './TagPicker';
 import { EntityLinksPanel } from './EntityLinksPanel';
 import { AssetUsagePicker } from './AssetUsagePicker';
+import { AssetCollectionTargetPicker } from './AssetCollectionTargetPicker';
 import { PublicationPanel } from './PublicationPanel';
 import { Scale, Coins, Edit3, Trash2, Zap, Plus } from 'lucide-react';
 
@@ -49,6 +54,8 @@ interface ItemsEditorProps {
   maps: MapData[];
   characters: Character[];
   assets: Asset[];
+  assetCollections: AssetCollection[];
+  assetCollectionAssignments: AssetCollectionAssignmentMap;
   locations: WorldLocation[];
   factions: Faction[];
   events: WorldEvent[];
@@ -66,7 +73,12 @@ interface ItemsEditorProps {
   onUpdatePublication: (id: string, payload: PublicationUpdatePayload) => Promise<PublishedContent>;
   onDeletePublication: (id: string) => Promise<void>;
   onOpenMaterialLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
+  onReplaceAssetCollections: (type: AssetCollectionTargetType, id: string, collectionIds: string[]) => Promise<AssetCollection[]>;
   initialItemId?: string | null;
+  itemGroups: ItemGroup[];
+  onCreateItemGroup: () => Promise<ItemGroup>;
+  onUpdateItemGroup: (id: string, payload: Partial<ItemGroup>) => Promise<ItemGroup>;
+  onDeleteItemGroup: (id: string) => Promise<void>;
 }
 
 const SECTION_ACCENT = 'var(--col-blue)';
@@ -87,6 +99,8 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   maps,
   characters,
   assets,
+  assetCollections,
+  assetCollectionAssignments,
   locations,
   factions,
   events,
@@ -104,10 +118,18 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   onUpdatePublication,
   onDeletePublication,
   onOpenMaterialLink,
-  initialItemId
+  onReplaceAssetCollections,
+  initialItemId,
+  itemGroups,
+  onCreateItemGroup,
+  onUpdateItemGroup,
+  onDeleteItemGroup
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [activeGroupId, setActiveGroupId] = useState<'all' | 'none' | string>('all');
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [renamingGroupName, setRenamingGroupName] = useState('');
   const [activeFilter, setActiveFilter] = useState<ItemRarity | 'ВСЕ'>('ВСЕ');
   const [selectedTagFilter, setSelectedTagFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<string>('NAME_ASC');
@@ -120,6 +142,29 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
 
   const linksForItem = (itemId: string) =>
     entityLinks[entityLinkAssignmentKey('item', itemId)] ?? [];
+
+  const collectionIdsForItem = (itemId: string) =>
+    (assetCollectionAssignments[assetCollectionAssignmentKey('item', itemId)] ?? []).map((collection) => collection.id);
+
+  const collectionIdsForItemGroup = (groupId?: string | null) =>
+    groupId
+      ? (assetCollectionAssignments[assetCollectionAssignmentKey('item_group', groupId)] ?? []).map((collection) => collection.id)
+      : [];
+
+  const effectiveCollectionIdsForItem = (item: Partial<Item>) => {
+    const groupCollectionIds = collectionIdsForItemGroup(item.groupId);
+    if (groupCollectionIds.length > 0) return groupCollectionIds;
+    if (item.id) return collectionIdsForItem(item.id);
+    return [];
+  };
+
+  const assetSourceLabelForItem = (item: Partial<Item>) => {
+    const group = itemGroups.find((candidate) => candidate.id === item.groupId);
+    const groupCollectionIds = collectionIdsForItemGroup(item.groupId);
+    if (group && groupCollectionIds.length > 0) return `Источник ассетов: из группы "${group.name}"`;
+    if (item.id && collectionIdsForItem(item.id).length > 0) return 'Источник ассетов: прямые наборы карточки';
+    return 'Источник ассетов: все подходящие ассеты';
+  };
 
   const setItemAssetUsage = async (assetId: string | null) => {
     if (!editingId) return;
@@ -142,7 +187,14 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
     );
   };
 
-  const openCreateModal = () => { setEditingId(null); setFormData(EMPTY_ITEM); setIsModalOpen(true); };
+  const openCreateModal = () => {
+    setEditingId(null);
+    setFormData({
+      ...EMPTY_ITEM,
+      groupId: activeGroupId !== 'all' && activeGroupId !== 'none' ? activeGroupId : null
+    });
+    setIsModalOpen(true);
+  };
   const openEditModal = (item: Item) => { setEditingId(item.id); setFormData({ ...item }); setIsModalOpen(true); };
 
   useEffect(() => {
@@ -167,6 +219,7 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
     })),
     weight: Number(formData.weight ?? 0),
     value: Number(formData.value ?? 0),
+    groupId: formData.groupId ?? null,
   });
 
   const handleDelete = async (id: string) => {
@@ -233,6 +286,7 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
       const assignedTags = tagAssignments[tagAssignmentKey('item', item.id)] ?? [];
       return (activeFilter === 'ВСЕ' || item.rarity === activeFilter) &&
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (activeGroupId === 'all' || (activeGroupId === 'none' ? !item.groupId : item.groupId === activeGroupId)) &&
         (!selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter));
     })
     .sort((a, b) => {
@@ -244,6 +298,30 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
 
   const getButtonColor = (rarity: ItemRarity = 'Обычный'): "blue" | "yellow" | "purple" | "red" | "white" | "grey" => {
     if (rarity === 'Легендарный') return 'yellow'; if (rarity === 'Эпический') return 'purple'; if (rarity === 'Редкий') return 'red'; if (rarity === 'Необычный') return 'blue'; return 'grey';
+  };
+
+  const createGroup = async () => {
+    const created = await onCreateItemGroup();
+    setActiveGroupId(created.id);
+  };
+
+  const startRenameGroup = (group: ItemGroup) => {
+    setRenamingGroupId(group.id);
+    setRenamingGroupName(group.name);
+  };
+
+  const commitRenameGroup = async () => {
+    if (!renamingGroupId) return;
+    const groupId = renamingGroupId;
+    const name = renamingGroupName.trim();
+    setRenamingGroupId(null);
+    if (name) await onUpdateItemGroup(groupId, { name });
+  };
+
+  const deleteGroup = async (groupId: string) => {
+    if (!confirm('Удалить группу? Предметы останутся без группы.')) return;
+    await onDeleteItemGroup(groupId);
+    if (activeGroupId === groupId) setActiveGroupId('all');
   };
 
   return (
@@ -288,6 +366,29 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
         <SearchInput value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ВВЕДИТЕ НАЗВАНИЕ..." accentColor={SECTION_ACCENT} />
         <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
         <Select value={sortOrder} onChange={val => setSortOrder(val)} options={[{value:'NAME_ASC', label:'ИМЯ'}, {value:'VALUE_DESC', label:'ЦЕНА'}, {value:'WEIGHT_DESC', label:'ВЕС'}]} accentColor={SECTION_ACCENT} />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="mono text-[10px] text-[var(--col-blue)] uppercase tracking-[0.3em] font-black">Группы</label>
+            <button onClick={() => void createGroup()} className="mono text-[9px] uppercase font-black text-[var(--col-blue)] hover:text-[var(--text-main)]">+ группа</button>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button onClick={() => setActiveGroupId('all')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'all' ? 'border-[var(--col-blue)] bg-[var(--col-blue)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Все предметы</button>
+            <button onClick={() => setActiveGroupId('none')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'none' ? 'border-[var(--col-blue)] bg-[var(--col-blue)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Без группы</button>
+            {itemGroups.map((group) => (
+              <div key={group.id} className={`border-2 ${activeGroupId === group.id ? 'border-[var(--col-blue)]' : 'border-[var(--border-color)]'}`}>
+                {renamingGroupId === group.id ? (
+                  <Input autoFocus value={renamingGroupName} onChange={(event) => setRenamingGroupName(event.target.value)} onBlur={() => void commitRenameGroup()} onKeyDown={(event) => { if (event.key === 'Enter') void commitRenameGroup(); if (event.key === 'Escape') setRenamingGroupId(null); }} accentColor={SECTION_ACCENT} />
+                ) : (
+                  <button onClick={() => setActiveGroupId(group.id)} className="w-full px-4 py-3 mono text-[10px] uppercase text-left font-black text-[var(--text-main)]">{group.name}</button>
+                )}
+                <div className="flex border-t border-[var(--border-color)]">
+                  <button onClick={() => startRenameGroup(group)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-blue)]">Переименовать</button>
+                  <button onClick={() => void deleteGroup(group.id)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-red)]">Удалить</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="space-y-5">
           <label className="mono text-[10px] text-[var(--col-blue)] uppercase tracking-[0.3em] font-black">ФИЛЬТР РЕДКОСТИ</label>
           <div className="flex flex-col gap-2">
@@ -300,6 +401,15 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
         <div className="space-y-6">
           {error && <div className="p-3 border border-[var(--col-red)] bg-[var(--col-red)]/10 mono text-[10px] uppercase font-black text-[var(--col-red)]">{error}</div>}
           <div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Наименование</label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.toUpperCase()})} placeholder="МОЛОТ ПРЕДКОВ" className="h-10 text-sm border-2 font-black uppercase" accentColor={currentRarityAccent}/></div>
+          <div className="space-y-1.5">
+            <label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Группа</label>
+            <Select
+              value={formData.groupId ?? ''}
+              onChange={(value) => setFormData({ ...formData, groupId: value || null })}
+              options={[{ value: '', label: 'БЕЗ ГРУППЫ' }, ...itemGroups.map((group) => ({ value: group.id, label: group.name.toUpperCase() }))]}
+              accentColor={currentRarityAccent}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-6"><div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Тип</label><Select value={formData.type} onChange={val => setFormData({...formData, type: val as ItemType})} accentColor={currentRarityAccent} options={ITEM_TYPE_OPTIONS}/></div><div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Редкость</label><Select value={formData.rarity} onChange={val => setFormData({...formData, rarity: val as ItemRarity})} accentColor={currentRarityAccent} options={RARITY_OPTIONS}/></div></div>
           <div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Описание</label><TextArea placeholder="Опишите свойства предмета..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} accentColor={currentRarityAccent} className="min-h-[100px]"/></div>
           <div className="space-y-4">
@@ -307,12 +417,34 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
             <div className="space-y-3">{(formData.modifiers && formData.modifiers.length > 0) ? (formData.modifiers.map((mod, idx) => (<div key={idx} className="flex gap-4 items-center animate-appear relative" style={{ zIndex: 100 - idx }}><div className="flex-[3]"><Select value={mod.stat} onChange={val => updateModifier(idx, 'stat', val as StatKey)} accentColor={currentRarityAccent} options={STAT_OPTIONS.map(opt => ({ value: opt, label: opt }))}/></div><div className="flex-1"><Input type="number" className="h-10 px-3 text-center border-2 font-black" value={mod.value} onChange={e => updateModifier(idx, 'value', parseInt(e.target.value) || 0)} accentColor={currentRarityAccent}/></div><button onClick={() => removeModifier(idx)} className="w-10 h-10 shrink-0 border-2 border-[var(--border-color)] flex items-center justify-center hover:border-[var(--col-red)] hover:text-[var(--col-red)] transition-all bg-[var(--bg-main)] active:scale-90 text-[var(--text-muted)]"><Trash2 size={16} /></button></div>))) : (<div className="py-8 border-2 border-dashed flex flex-col items-center justify-center gap-2 bauhaus-bg" style={{ borderColor: `color-mix(in srgb, ${currentRarityAccent} 20%, transparent)` }}><Zap size={16} className="text-[var(--text-muted)]" /><p className="mono text-[9px] uppercase font-black tracking-[0.2em] text-[var(--text-muted)] text-center px-4 leading-relaxed">СПИСОК МОДИФИКАТОРОВ ПУСТ.<br/>НАЖМИТЕ «ДОБАВИТЬ» ДЛЯ НАСТРОЙКИ ХАРАКТЕРИСТИК.</p></div>)}</div>
           </div>
           <div className="grid grid-cols-2 gap-6 border-t border-[var(--border-color)] pt-8 mt-4"><div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Вес (КГ)</label><Input type="number" step="0.1" className="h-10 border-2 font-black" value={formData.weight} onChange={e => setFormData({...formData, weight: parseFloat(e.target.value) || 0})} accentColor={currentRarityAccent} /></div><div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Цена (GP)</label><Input type="number" className="h-10 border-2 font-black" value={formData.value} onChange={e => setFormData({...formData, value: parseInt(e.target.value) || 0})} accentColor={currentRarityAccent} /></div></div>
+          {editingId && formData.groupId && (
+            <AssetCollectionTargetPicker
+              label="Наборы ассетов группы"
+              collections={assetCollections}
+              value={collectionIdsForItemGroup(formData.groupId)}
+              accentColor={currentRarityAccent}
+              onChange={(collectionIds) => onReplaceAssetCollections('item_group', formData.groupId!, collectionIds)}
+            />
+          )}
+          {editingId && !formData.groupId && collectionIdsForItem(editingId).length > 0 && (
+            <AssetCollectionTargetPicker
+              label="Прямые наборы карточки"
+              collections={assetCollections}
+              value={collectionIdsForItem(editingId)}
+              accentColor={currentRarityAccent}
+              onChange={(collectionIds) => onReplaceAssetCollections('item', editingId, collectionIds)}
+            />
+          )}
+          {editingId && (
+            <div className="mono text-[9px] uppercase text-[var(--text-muted)]">{assetSourceLabelForItem(formData)}</div>
+          )}
           {editingId && (
             <AssetUsagePicker
               label="Изображение предмета"
               assets={assets}
               value={findAssetUsageLink(linksForItem(editingId), 'item_image')?.targetId ?? null}
-              allowedTypes={['image', 'token']}
+              allowedKinds={['item_image']}
+              collectionIds={effectiveCollectionIdsForItem(formData)}
               accentColor={currentRarityAccent}
               onChange={setItemAssetUsage}
             />

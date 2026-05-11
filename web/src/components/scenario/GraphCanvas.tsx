@@ -70,8 +70,7 @@ const NODE_TYPE_STYLES: Record<ScenarioNodeType, { accent: string }> = {
   combat: { accent: 'var(--col-red)' }
 };
 
-const INPUT_SIDES: HandleSide[] = ['left', 'top'];
-const OUTPUT_SIDES: HandleSide[] = ['right', 'bottom'];
+const HANDLE_SIDES: HandleSide[] = ['top', 'right', 'bottom', 'left'];
 
 const HANDLE_CLASS_BY_SIDE: Record<HandleSide, string> = {
   top: 'left-1/2 -top-[9px] -translate-x-1/2',
@@ -331,15 +330,25 @@ const sideAnchor = (bounds: NodeBounds, side: HandleSide): NodePosition => {
   return { x: bounds.x, y: bounds.y + bounds.height / 2 };
 };
 
+const chooseNearestSide = (bounds: NodeBounds, point: NodePosition): HandleSide =>
+  HANDLE_SIDES
+    .map((side) => {
+      const anchor = sideAnchor(bounds, side);
+
+      return {
+        side,
+        distance: (anchor.x - point.x) ** 2 + (anchor.y - point.y) ** 2
+      };
+    })
+    .sort((a, b) => a.distance - b.distance)[0]?.side ?? 'right';
+
 const choosePortSides = (from: NodeBounds, to: NodeBounds): { fromSide: HandleSide; toSide: HandleSide } => {
   const fromCenter = nodeCenter(from);
   const toCenter = nodeCenter(to);
-  const fromSide = toCenter.y > from.y + from.height ? OUTPUT_SIDES[1] : OUTPUT_SIDES[0];
-  const toSide = fromCenter.y < to.y ? INPUT_SIDES[1] : INPUT_SIDES[0];
 
   return {
-    fromSide,
-    toSide
+    fromSide: chooseNearestSide(from, toCenter),
+    toSide: chooseNearestSide(to, fromCenter)
   };
 };
 
@@ -369,8 +378,12 @@ const edgeCurve = (from: NodePosition, fromSide: HandleSide, to: NodePosition, t
   return `M ${from.x} ${from.y} C ${controlA.x} ${controlA.y}, ${controlB.x} ${controlB.y}, ${to.x} ${to.y}`;
 };
 
-const previewTargetSide = (sourceSide: HandleSide): HandleSide =>
-  sourceSide === 'bottom' ? 'top' : 'left';
+const oppositeSide = (side: HandleSide): HandleSide => {
+  if (side === 'top') return 'bottom';
+  if (side === 'right') return 'left';
+  if (side === 'bottom') return 'top';
+  return 'right';
+};
 
 const offsetPoint = (point: NodePosition, normal: NodePosition, distance: number): NodePosition => ({
   x: point.x + normal.x * distance,
@@ -424,6 +437,53 @@ const edgeNormal = (from: NodePosition, to: NodePosition): NodePosition => {
     x: -dy / length,
     y: dx / length
   };
+};
+
+const edgeArrowPoints = (
+  points: NodePosition[],
+  fallbackEnd: NodePosition,
+  size = 9,
+  width = 7,
+  inset = 5
+): string => {
+  const end = points[points.length - 1] ?? fallbackEnd;
+  let previous = points.length > 1 ? points[points.length - 2] : null;
+
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    const candidate = points[index];
+    if (Math.hypot(end.x - candidate.x, end.y - candidate.y) > 0.1) {
+      previous = candidate;
+      break;
+    }
+  }
+
+  if (!previous) {
+    previous = { x: end.x - 1, y: end.y };
+  }
+
+  const dx = end.x - previous.x;
+  const dy = end.y - previous.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const unit = { x: dx / length, y: dy / length };
+  const normal = { x: -unit.y, y: unit.x };
+  const tip = {
+    x: end.x - unit.x * inset,
+    y: end.y - unit.y * inset
+  };
+  const base = {
+    x: tip.x - unit.x * size,
+    y: tip.y - unit.y * size
+  };
+  const left = {
+    x: base.x + normal.x * (width / 2),
+    y: base.y + normal.y * (width / 2)
+  };
+  const right = {
+    x: base.x - normal.x * (width / 2),
+    y: base.y - normal.y * (width / 2)
+  };
+
+  return `${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`;
 };
 
 const distanceToSegment = (point: NodePosition, start: NodePosition, end: NodePosition): number => {
@@ -2356,7 +2416,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                   stroke={transitionIssueColor && !isSelected && !isHovered ? transitionIssueColor : color}
                   strokeWidth={isSelected ? 4.5 : isHovered ? 3.5 : isSourceActive ? 3 : 2}
                   strokeOpacity={isSelected ? 1 : isHovered ? 0.95 : isSourceActive || transitionIssueColor ? 0.9 : 0.5}
-                  markerEnd={`url(#graph-arrow-${transition.type})`}
+                  pointerEvents="none"
+                />
+                <polygon
+                  points={edgeArrowPoints(visualEdge.points, visualEdge.end)}
+                  fill={transitionIssueColor && !isSelected && !isHovered ? transitionIssueColor : color}
+                  opacity={isSelected ? 1 : isHovered ? 0.95 : isSourceActive || transitionIssueColor ? 0.9 : 0.72}
                   pointerEvents="none"
                 />
                 {showBadge && !isEditingLabel && (
@@ -2480,7 +2545,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
           })}
           {edgeDragState && (
             <path
-              d={edgeCurve(edgeDragState.start, edgeDragState.sourceSide, edgeDragState.current, previewTargetSide(edgeDragState.sourceSide))}
+              d={edgeCurve(edgeDragState.start, edgeDragState.sourceSide, edgeDragState.current, oppositeSide(edgeDragState.sourceSide))}
               fill="none"
               stroke="var(--col-red)"
               strokeWidth={3}
@@ -2608,7 +2673,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
               >
                 <Plus size={11} />
               </button>}
-              {showHandles && OUTPUT_SIDES.filter((side) => side !== 'right').map((side) => (
+              {showHandles && HANDLE_SIDES.filter((side) => side !== 'right').map((side) => (
                 <button
                   key={side}
                   type="button"

@@ -1,5 +1,20 @@
 # Story Forge Roadmap
 
+## Latest Update
+
+- [x] Character/Item Groups v1 + Inherited Asset Sets: characters and items now support one group per card; groups can own asset-set assignments, cards inherit those pools in portrait/token/item image pickers, and direct asset overrides remain intact.
+- [x] Documented asset assignment decision: cards may keep direct single-asset overrides, while asset sets act as reusable pools/filters; group-level asset inheritance is now implemented for character/item groups.
+- [x] Asset Sets Integration into Map Layers v1: map layer palettes now expose connected set context per active layer and show asset source set labels while keeping fallback to all matching asset kinds when no sets are connected.
+- [x] Documented Tags privacy boundary: current `tags/taggables` are private library tags and must not automatically leak into publications, community payloads or PDF export.
+- [x] World UI temporarily hidden: sidebar entry and quick navigation into the standalone World editor are disabled until a full Atlas/World UX is designed; backend/API/data remain available for existing links.
+- [x] Asset Sets Explorer UX Alignment v1: asset sets now use explorer-style interaction with double click, inline rename, context menus and drag/drop membership instead of persistent action buttons.
+- [x] Asset Sets UX v2: the Assets section now has separate Files and Sets modes; sets can be created with a default name, renamed inline, opened to manage description/composition, populated from selected files or drag/drop, and edited without changing asset folder location.
+- [x] Asset Folders vs Asset Sets Domain Split v1: asset folders are now separate single-location library containers, while asset collections remain reusable multi-asset sets for maps, characters and items.
+- [x] Map Layers UX Stabilization v2: map resources panel now uses a simplified Photoshop-like layer list, active-layer properties live below the list, and resource palettes are conditional by layer type with asset collection filtering.
+- [x] Asset Collection Integration v1: asset collections can now be attached to maps, characters and items; map palettes and asset pickers filter by connected collections with fallback to all matching asset kinds.
+- [x] Asset Taxonomy + Collections v1: assets now have domain `kind`, reusable asset-set membership through collections, no campaign binding in asset UI/API, and pickers filter by semantic usage.
+- [x] Map Asset Layers v1: maps store `data.layers`, keep flattened `data.objects` for compatibility, support layer visibility/lock/opacity/reorder, background opacity, token size/rotation/opacity and lazy runtime conversion for old maps.
+
 Рабочая дорожная карта проекта. Этот файл фиксирует фактически выполненные шаги и ближайшие задачи разработки. README и `docs/project-baseline.md` остаются справочными документами, а этот файл используется как оперативный трекер.
 
 ## Текущий baseline
@@ -57,7 +72,9 @@
 - [x] Graph Scenario MVP smoke пройден: graph editor, preview/play mode, validation и PDF export проверены вручную.
 - [x] Добавлен Assets module v1: загрузка, хранение, фильтрация, редактирование и удаление ассетов через public disk.
 - [x] Добавлен Asset Integration v1: ассеты назначаются как портреты/токены персонажей, изображения предметов, фон карты и token palette карты через `entity_links.metadata.role`.
-- [x] Добавлен World module v1: CRUD/API/UI для локаций, фракций и событий с фильтрацией по кампании.
+- [x] Добавлен Asset Taxonomy + Collections v1: ассеты разделены на media `type` и доменный `kind`, поддерживают наборы без привязки к кампаниям, а pickers фильтруют подходящие назначения.
+- [x] Добавлен Asset Collection Integration v1: наборы ассетов подключаются к картам, персонажам и предметам, а палитры/пикеры фильтруют ассеты по выбранным наборам и `kind`.
+- [x] Добавлен World module v1 backend/API для локаций, фракций и событий; standalone UI временно скрыт до полноценной переработки Atlas/World UX.
 - [x] Добавлен Tags module v1: пользовательские теги, polymorphic assignment и фильтры в основных редакторах.
 - [x] Добавлен Universal Entity Links v2: `entity_links` стали общим слоем связей между сценариями, картами, персонажами, предметами, ассетами и world-сущностями.
 - [x] Добавлен Graph Node Links Upgrade v2: graph-узлы теперь связываются с картами, персонажами, предметами, ассетами, локациями, фракциями и событиями.
@@ -134,15 +151,22 @@
 
 - [x] Assets module v1: загрузка и реестр файлов/изображений/токенов.
 - [x] Asset Integration v1: подключить ассеты к персонажам, предметам и картам.
-- [x] World module v1: locations, factions, events.
+- [x] Asset Taxonomy + Collections v1: наборы ассетов, доменные типы и removal campaign binding из asset UX/API.
+- [x] Asset Collection Integration v1: подключение наборов ассетов к картам, персонажам и предметам.
+- [x] Asset Sets Integration into Map Layers v1: layer-aware отображение подключенных наборов в карте и source labels у ассетов в background/tile/token палитрах.
+- [x] World module v1: locations, factions, events backend/API; standalone UI временно скрыт.
 - [x] Tags module v1: общие теги и polymorphic assignment.
 - [x] Universal Entity Links v2: общий API/UI связей между материалами.
 - [x] Publications module v1: backend/API публикаций и visibility/status workflow; frontend publication/community UI временно скрыт до переработки social layer.
+- [ ] Public Tags / Publication Metadata v1: отдельные публичные хэштеги/теги публикаций, whitelist публикуемых metadata и запрет автоматической утечки приватных `taggables`.
+- [x] Character/Item Groups v1 + Inherited Asset Sets: character/item cards can belong to one group, groups can inherit asset-set pools through `asset_collection_targets`, and card-level portrait/token/item image overrides remain supported.
 - [ ] Comments/collaboration: комментарии и участники кампаний.
 - [ ] Notifications API и frontend-индикаторы.
 - [ ] Idempotency middleware для критичных POST/PATCH операций.
 - [ ] Export jobs: очередь экспортов и история результатов.
 - [ ] Экспорт карт и карточек персонажей/предметов.
+- [ ] Tile Metadata / Autotile Rules v1: отдельные технические метки для tile-ассетов (`wall_top_left`, `wall_top_right`, `wall_vertical`, `floor`, `door`, `water_edge` и т.п.) и правила автоподбора тайлов при рисовании карт; не смешивать с пользовательскими тегами Tags module v1.
+- [ ] World / Atlas Module v2: заново определить UX локаций, фракций, событий и их связь с картами, персонажами, сценариями и таймлайном перед возвратом раздела в sidebar.
 
 ## Отложенная мелкая полировка graph canvas
 

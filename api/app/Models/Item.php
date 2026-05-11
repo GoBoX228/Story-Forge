@@ -9,6 +9,7 @@ class Item extends Model
 {
     protected $fillable = [
         'user_id',
+        'item_group_id',
         'name',
         'type',
         'rarity',
@@ -27,5 +28,10 @@ class Item extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(ItemGroup::class, 'item_group_id');
     }
 }

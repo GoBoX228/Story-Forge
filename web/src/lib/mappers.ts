@@ -1,9 +1,18 @@
 import {
   Asset,
+  AssetCollection,
+  AssetCollectionCreatePayload,
+  AssetCollectionUpdatePayload,
+  AssetFolder,
+  AssetFolderCreatePayload,
+  AssetFolderUpdatePayload,
+  AssetKind,
   AssetType,
   AssetUpdatePayload,
   Campaign,
   Character,
+  CharacterGroup,
+  CharacterGroupPayload,
   EntityLink,
   EntityLinkCreatePayload,
   EntityLinkRelationType,
@@ -11,7 +20,12 @@ import {
   EntityLinkUpdatePayload,
   Faction,
   Item,
+  ItemGroup,
+  ItemGroupPayload,
   MapData,
+  MapLayer,
+  MapLayerType,
+  MapObject,
   PublishedContent,
   PublicationListParams,
   PublicationStatus,
@@ -96,6 +110,8 @@ export const tagAssignmentKey = (type: string, id: string): string => `${type}:$
 
 export const entityLinkAssignmentKey = (type: string, id: string): string => `${type}:${id}`;
 
+export const assetCollectionAssignmentKey = (type: string, id: string): string => `${type}:${id}`;
+
 const NODE_TYPES: ScenarioNodeType[] = ['description', 'dialog', 'location', 'check', 'loot', 'combat'];
 const TRANSITION_TYPES: ScenarioTransitionType[] = ['linear', 'choice', 'success', 'failure'];
 const ENTITY_TARGET_TYPES: ScenarioNodeEntityTargetType[] = [
@@ -125,9 +141,148 @@ const ENTITY_RELATION_TYPES: EntityLinkRelationType[] = [
   'rewards',
   'mentions'
 ];
-const ASSET_TYPES: AssetType[] = ['image', 'token', 'document', 'other'];
+const ASSET_TYPES: AssetType[] = ['image', 'document', 'other'];
+const ASSET_KINDS: AssetKind[] = [
+  'tile',
+  'token',
+  'portrait',
+  'background',
+  'item_image',
+  'handout',
+  'document',
+  'icon',
+  'other'
+];
 const PUBLICATION_STATUSES: PublicationStatus[] = ['draft', 'published', 'archived'];
 const PUBLICATION_VISIBILITIES: PublicationVisibility[] = ['private', 'unlisted', 'public'];
+const MAP_LAYER_TYPES: MapLayerType[] = ['background', 'tiles', 'tokens'];
+
+const clampUnit = (value: unknown, fallback = 1): number => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(1, numeric));
+};
+
+const positiveNumber = (value: unknown, fallback = 1): number => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+};
+
+const toMapLayerType = (value: unknown): MapLayerType => {
+  const type = String(value ?? 'tiles');
+  return MAP_LAYER_TYPES.includes(type as MapLayerType) ? (type as MapLayerType) : 'tiles';
+};
+
+const mapMapObjectFromApi = (object: any, layerId?: string | null, index = 0): MapObject => {
+  const x = Number(object?.x ?? 0);
+  const y = Number(object?.y ?? 0);
+  const type = String(object?.type ?? 'floor');
+
+  return {
+    ...object,
+    id: String(object?.id ?? `${layerId ?? 'object'}-${index}-${x}-${y}-${type}`),
+    x,
+    y,
+    type,
+    label: String(object?.label ?? object?.type ?? 'Object'),
+    color: String(object?.color ?? '#888888'),
+    assetId: object?.assetId ?? object?.asset_id ?? null,
+    width: positiveNumber(object?.width, 1),
+    height: positiveNumber(object?.height, 1),
+    rotation: Number.isFinite(Number(object?.rotation)) ? Number(object.rotation) : 0,
+    opacity: clampUnit(object?.opacity, 1),
+    layerId: object?.layerId ?? object?.layer_id ?? layerId ?? null
+  };
+};
+
+const buildDefaultMapLayers = (
+  legacyObjects: MapObject[],
+  backgroundAssetId?: string | null
+): MapLayer[] => {
+  const layers: MapLayer[] = [
+    {
+      id: 'background',
+      type: 'background',
+      name: 'Background',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      order: 0,
+      objects: []
+    },
+    {
+      id: 'tiles',
+      type: 'tiles',
+      name: 'Tiles',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      order: 1,
+      objects: legacyObjects
+        .filter((object) => !object.assetId)
+        .map((object) => ({ ...object, layerId: 'tiles' }))
+    },
+    {
+      id: 'tokens',
+      type: 'tokens',
+      name: 'Tokens',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      order: 2,
+      objects: legacyObjects
+        .filter((object) => Boolean(object.assetId))
+        .map((object) => ({ ...object, layerId: 'tokens' }))
+    }
+  ];
+
+  return layers.map((layer) => ({
+    ...layer,
+    opacity: layer.type === 'background' && !backgroundAssetId ? 1 : layer.opacity
+  }));
+};
+
+const normalizeMapLayers = (data: any, legacyObjects: MapObject[], backgroundAssetId?: string | null): MapLayer[] => {
+  if (!Array.isArray(data?.layers)) {
+    return buildDefaultMapLayers(legacyObjects, backgroundAssetId);
+  }
+
+  const layers = data.layers.map((layer: any, index: number): MapLayer => {
+    const id = String(layer?.id ?? `${toMapLayerType(layer?.type)}-${index}`);
+    const type = toMapLayerType(layer?.type);
+    return {
+      id,
+      type,
+      name: String(layer?.name ?? (type === 'background' ? 'Background' : type === 'tokens' ? 'Tokens' : 'Tiles')),
+      visible: layer?.visible !== false,
+      locked: Boolean(layer?.locked),
+      opacity: clampUnit(layer?.opacity, 1),
+      order: Number.isFinite(Number(layer?.order)) ? Number(layer.order) : index,
+      objects: Array.isArray(layer?.objects)
+        ? layer.objects.map((object: any, objectIndex: number) => mapMapObjectFromApi(object, id, objectIndex))
+        : []
+    };
+  });
+
+  const withRequiredLayers = [...layers];
+  const ensureLayer = (type: MapLayerType, id: string, name: string, order: number) => {
+    if (!withRequiredLayers.some((layer) => layer.type === type)) {
+      withRequiredLayers.push({ id, type, name, visible: true, locked: false, opacity: 1, order, objects: [] });
+    }
+  };
+
+  ensureLayer('background', 'background', 'Background', 0);
+  ensureLayer('tiles', 'tiles', 'Tiles', 1);
+  ensureLayer('tokens', 'tokens', 'Tokens', 2);
+
+  return withRequiredLayers.sort((a, b) => a.order - b.order);
+};
+
+const flattenMapLayers = (layers: MapLayer[]): MapObject[] =>
+  layers
+    .filter((layer) => layer.type !== 'background')
+    .sort((a, b) => a.order - b.order)
+    .flatMap((layer) => layer.objects.map((object) => ({ ...object, layerId: layer.id })));
 
 const toScenarioNodeType = (value: unknown): ScenarioNodeType => {
   const type = String(value ?? 'description');
@@ -157,6 +312,11 @@ const toEntityLinkRelationType = (value: unknown): EntityLinkRelationType => {
 const toAssetType = (value: unknown): AssetType => {
   const type = String(value ?? 'other');
   return ASSET_TYPES.includes(type as AssetType) ? (type as AssetType) : 'other';
+};
+
+const toAssetKind = (value: unknown): AssetKind => {
+  const kind = String(value ?? 'other');
+  return ASSET_KINDS.includes(kind as AssetKind) ? (kind as AssetKind) : 'other';
 };
 
 const toPublicationStatus = (value: unknown): PublicationStatus => {
@@ -312,22 +472,29 @@ export const mapScenarioTransitionToApiPayload = (
   ...(payload.orderIndex !== undefined ? { order_index: payload.orderIndex } : {})
 });
 
-export const mapMapFromApi = (api: any): MapData => ({
-  id: String(api.id),
-  name: api.name,
-  width: api.width,
-  height: api.height,
-  cellSize: api.cell_size,
-  objects: (api.data?.objects ?? []).map((object: any) => ({
-    ...object,
-    assetId: object.assetId ?? object.asset_id ?? null
-  })),
-  backgroundAssetId: api.data?.backgroundAssetId ?? api.data?.background_asset_id ?? null,
-  createdAt: api.created_at ?? new Date().toISOString(),
-  updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString(),
-  scenarioId: api.scenario_id ? String(api.scenario_id) : null,
-  campaignId: api.campaign_id ? String(api.campaign_id) : null
-});
+export const mapMapFromApi = (api: any): MapData => {
+  const data = toRecord(api.data);
+  const legacyObjects = Array.isArray(data.objects)
+    ? data.objects.map((object: any, objectIndex: number) => mapMapObjectFromApi(object, null, objectIndex))
+    : [];
+  const backgroundAssetId = data.backgroundAssetId ?? data.background_asset_id ?? null;
+  const layers = normalizeMapLayers(data, legacyObjects, backgroundAssetId as string | null);
+
+  return {
+    id: String(api.id),
+    name: api.name,
+    width: api.width,
+    height: api.height,
+    cellSize: api.cell_size,
+    objects: flattenMapLayers(layers),
+    layers,
+    backgroundAssetId: backgroundAssetId as string | null,
+    createdAt: api.created_at ?? new Date().toISOString(),
+    updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString(),
+    scenarioId: api.scenario_id ? String(api.scenario_id) : null,
+    campaignId: api.campaign_id ? String(api.campaign_id) : null
+  };
+};
 
 export const mapCharacterFromApi = (api: any): Character => ({
   id: String(api.id),
@@ -339,7 +506,25 @@ export const mapCharacterFromApi = (api: any): Character => ({
   baseStats: api.stats ?? { ...DEFAULT_STATS },
   inventory: api.inventory ?? [],
   scenarioId: api.scenario_id ? String(api.scenario_id) : null,
-  campaignId: api.campaign_id ? String(api.campaign_id) : null
+  campaignId: api.campaign_id ? String(api.campaign_id) : null,
+  groupId: api.character_group_id || api.group_id ? String(api.character_group_id ?? api.group_id) : null
+});
+
+export const mapCharacterGroupFromApi = (api: any): CharacterGroup => ({
+  id: String(api.id),
+  userId: String(api.user_id),
+  name: api.name ?? '',
+  slug: api.slug ?? '',
+  description: api.description ?? null,
+  orderIndex: Number(api.order_index ?? 0),
+  createdAt: api.created_at ?? undefined,
+  updatedAt: api.updated_at ?? undefined
+});
+
+export const mapCharacterGroupToApiPayload = (payload: CharacterGroupPayload) => ({
+  ...(payload.name !== undefined ? { name: payload.name } : {}),
+  ...(payload.description !== undefined ? { description: payload.description } : {}),
+  ...(payload.orderIndex !== undefined ? { order_index: payload.orderIndex } : {})
 });
 
 export const mapItemFromApi = (api: any): Item => ({
@@ -356,6 +541,7 @@ export const mapItemFromApi = (api: any): Item => ({
     : [],
   weight: Number(api.weight ?? 0),
   value: Number(api.value ?? 0),
+  groupId: api.item_group_id || api.group_id ? String(api.item_group_id ?? api.group_id) : null,
 });
 
 export const mapItemToApiPayload = (item: Omit<Item, 'id'>) => ({
@@ -366,6 +552,24 @@ export const mapItemToApiPayload = (item: Omit<Item, 'id'>) => ({
   modifiers: item.modifiers ?? [],
   weight: Number(item.weight ?? 0),
   value: Number(item.value ?? 0),
+  group_id: item.groupId ?? null,
+});
+
+export const mapItemGroupFromApi = (api: any): ItemGroup => ({
+  id: String(api.id),
+  userId: String(api.user_id),
+  name: api.name ?? '',
+  slug: api.slug ?? '',
+  description: api.description ?? null,
+  orderIndex: Number(api.order_index ?? 0),
+  createdAt: api.created_at ?? undefined,
+  updatedAt: api.updated_at ?? undefined
+});
+
+export const mapItemGroupToApiPayload = (payload: ItemGroupPayload) => ({
+  ...(payload.name !== undefined ? { name: payload.name } : {}),
+  ...(payload.description !== undefined ? { description: payload.description } : {}),
+  ...(payload.orderIndex !== undefined ? { order_index: payload.orderIndex } : {})
 });
 
 export const mapCampaignFromApi = (api: any): Campaign => ({
@@ -386,8 +590,10 @@ export const mapCampaignFromApi = (api: any): Campaign => ({
 export const mapAssetFromApi = (api: any): Asset => ({
   id: String(api.id),
   userId: String(api.user_id),
-  campaignId: api.campaign_id ? String(api.campaign_id) : null,
   type: toAssetType(api.type),
+  kind: toAssetKind(api.kind),
+  folderId: api.asset_folder_id ? String(api.asset_folder_id) : null,
+  collectionIds: toStringArray(api.collection_ids),
   name: api.name ?? '',
   path: api.path ?? null,
   url: api.url ?? null,
@@ -401,7 +607,43 @@ export const mapAssetFromApi = (api: any): Asset => ({
 export const mapAssetToApiPayload = (payload: AssetUpdatePayload) => ({
   ...(payload.name !== undefined ? { name: payload.name } : {}),
   ...(payload.type !== undefined ? { type: payload.type } : {}),
-  ...(payload.campaignId !== undefined ? { campaign_id: payload.campaignId } : {})
+  ...(payload.kind !== undefined ? { kind: payload.kind } : {}),
+  ...(payload.folderId !== undefined ? { folder_id: payload.folderId } : {}),
+  ...(payload.collectionIds !== undefined ? { collection_ids: payload.collectionIds } : {})
+});
+
+export const mapAssetFolderFromApi = (api: any): AssetFolder => ({
+  id: String(api.id),
+  userId: String(api.user_id),
+  name: api.name ?? '',
+  slug: api.slug ?? '',
+  assetIds: toStringArray(api.asset_ids),
+  createdAt: api.created_at ?? undefined,
+  updatedAt: api.updated_at ?? undefined
+});
+
+export const mapAssetFolderToApiPayload = (
+  payload: AssetFolderCreatePayload | AssetFolderUpdatePayload
+) => ({
+  ...(payload.name !== undefined ? { name: payload.name } : {})
+});
+
+export const mapAssetCollectionFromApi = (api: any): AssetCollection => ({
+  id: String(api.id),
+  userId: String(api.user_id),
+  name: api.name ?? '',
+  slug: api.slug ?? '',
+  description: api.description ?? null,
+  assetIds: toStringArray(api.asset_ids),
+  createdAt: api.created_at ?? undefined,
+  updatedAt: api.updated_at ?? undefined
+});
+
+export const mapAssetCollectionToApiPayload = (
+  payload: AssetCollectionCreatePayload | AssetCollectionUpdatePayload
+) => ({
+  ...(payload.name !== undefined ? { name: payload.name } : {}),
+  ...(payload.description !== undefined ? { description: payload.description } : {})
 });
 
 export const mapWorldLocationFromApi = (api: any): WorldLocation => ({

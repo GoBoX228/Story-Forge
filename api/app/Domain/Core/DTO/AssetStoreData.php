@@ -10,7 +10,9 @@ final readonly class AssetStoreData
         public UploadedFile $file,
         public ?string $name,
         public ?string $type,
-        public mixed $campaignId,
+        public ?string $kind,
+        public mixed $folderId,
+        public array $collectionIds,
     ) {
     }
 }

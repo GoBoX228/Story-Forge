@@ -6,7 +6,10 @@ final readonly class AssetIndexData
 {
     public function __construct(
         public ?string $type,
-        public mixed $campaignId,
+        public ?string $kind,
+        public mixed $folderId,
+        public mixed $collectionId,
+        public ?string $search,
     ) {
     }
 }

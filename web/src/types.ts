@@ -116,6 +116,24 @@ export interface MapObject {
   label: string;
   color: string;
   assetId?: string | null;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  opacity?: number;
+  layerId?: string | null;
+}
+
+export type MapLayerType = 'background' | 'tiles' | 'tokens';
+
+export interface MapLayer {
+  id: string;
+  type: MapLayerType;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  opacity: number;
+  order: number;
+  objects: MapObject[];
 }
 
 export interface MapData {
@@ -125,6 +143,7 @@ export interface MapData {
   height: number;
   cellSize: number;
   objects: MapObject[];
+  layers: MapLayer[];
   backgroundAssetId?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -253,6 +272,24 @@ export interface Character {
   inventory: string[];
   scenarioId?: string | null;
   campaignId?: string | null;
+  groupId?: string | null;
+}
+
+export interface CharacterGroup {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  orderIndex: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CharacterGroupPayload {
+  name?: string;
+  description?: string | null;
+  orderIndex?: number;
 }
 
 export type ItemRarity = string;
@@ -272,6 +309,24 @@ export interface Item {
   modifiers: StatModifier[];
   weight: number;
   value: number;
+  groupId?: string | null;
+}
+
+export interface ItemGroup {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  orderIndex: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ItemGroupPayload {
+  name?: string;
+  description?: string | null;
+  orderIndex?: number;
 }
 
 export interface Campaign {
@@ -289,13 +344,68 @@ export interface Campaign {
   updatedAt?: string;
 }
 
-export type AssetType = 'image' | 'token' | 'document' | 'other';
+export type AssetType = 'image' | 'document' | 'other';
+
+export type AssetKind =
+  | 'tile'
+  | 'token'
+  | 'portrait'
+  | 'background'
+  | 'item_image'
+  | 'handout'
+  | 'document'
+  | 'icon'
+  | 'other';
+
+export interface AssetCollection {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  assetIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AssetCollectionCreatePayload {
+  name: string;
+  description?: string | null;
+}
+
+export type AssetCollectionUpdatePayload = Partial<AssetCollectionCreatePayload>;
+
+export interface AssetFolder {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  assetIds: string[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AssetFolderCreatePayload {
+  name: string;
+}
+
+export type AssetFolderUpdatePayload = Partial<AssetFolderCreatePayload>;
+
+export type AssetCollectionTargetType = 'map' | 'character' | 'character_group' | 'item' | 'item_group';
+
+export type AssetCollectionAssignmentMap = Record<string, AssetCollection[]>;
+
+export interface AssetCollectionAssignmentPayload {
+  collectionIds: string[];
+}
 
 export interface Asset {
   id: string;
   userId: string;
-  campaignId?: string | null;
   type: AssetType;
+  kind: AssetKind;
+  folderId?: string | null;
+  collectionIds: string[];
   name: string;
   path?: string | null;
   url?: string | null;
@@ -310,13 +420,17 @@ export interface AssetUploadPayload {
   file: File;
   name?: string;
   type?: AssetType;
-  campaignId?: string | null;
+  kind?: AssetKind;
+  folderId?: string | null;
+  collectionIds?: string[];
 }
 
 export interface AssetUpdatePayload {
   name?: string;
   type?: AssetType;
-  campaignId?: string | null;
+  kind?: AssetKind;
+  folderId?: string | null;
+  collectionIds?: string[];
 }
 
 export interface WorldLocation {

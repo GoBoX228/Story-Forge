@@ -116,7 +116,7 @@ class EntityLinkService
         /** @var EntityLink $link */
         $link = EntityLink::query()->where('id', $linkId)->firstOrFail();
 
-        $this->assertOwnedLink($user, $link);
+        $this->findOwnedMaterial($user, (string) $link->source_type, (string) $link->source_id);
 
         $link->delete();
     }

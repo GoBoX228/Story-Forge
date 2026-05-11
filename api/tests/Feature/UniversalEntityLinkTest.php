@@ -159,6 +159,31 @@ class UniversalEntityLinkTest extends TestCase
             ->assertJsonPath('metadata.role', 'portrait');
     }
 
+    public function test_stale_asset_usage_link_can_be_deleted_after_asset_record_is_missing(): void
+    {
+        $user = User::factory()->create();
+        $item = $this->createItem($user);
+        $asset = $this->createAsset($user);
+        Sanctum::actingAs($user);
+
+        $link = $this->postJson("/api/entity-links/item/{$item->id}", [
+            'target_type' => EntityLink::TARGET_ASSET,
+            'target_id' => $asset->id,
+            'relation_type' => EntityLink::RELATION_USES,
+            'metadata' => ['role' => 'item_image'],
+        ])
+            ->assertStatus(201)
+            ->json();
+
+        Asset::query()->whereKey($asset->id)->delete();
+
+        $this->deleteJson("/api/entity-links/{$link['id']}")
+            ->assertStatus(200)
+            ->assertJsonPath('message', 'Deleted');
+
+        $this->assertDatabaseMissing('entity_links', ['id' => $link['id']]);
+    }
+
     public function test_asset_link_metadata_rejects_invalid_role_and_non_asset_role(): void
     {
         $user = User::factory()->create();

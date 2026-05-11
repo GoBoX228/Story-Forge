@@ -13,6 +13,7 @@ use App\Domain\Core\DTO\CharacterStoreData;
 use App\Domain\Core\DTO\CharacterUpdateData;
 use App\Models\Campaign;
 use App\Models\Character;
+use App\Models\CharacterGroup;
 use App\Models\Scenario;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -37,6 +38,14 @@ class CharacterService
             function ($query) use ($data): void {
                 if ($data->hasScenarioId) {
                     $query->where('scenario_id', $data->scenarioId);
+                }
+
+                if ($data->hasGroupId) {
+                    if ($data->groupId === null || $data->groupId === '') {
+                        $query->whereNull('character_group_id');
+                    } else {
+                        $query->where('character_group_id', $data->groupId);
+                    }
                 }
 
                 if ($data->hasSearch) {
@@ -64,11 +73,16 @@ class CharacterService
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $payload['campaign_id']);
         }
 
+        if (!empty($payload['group_id'])) {
+            $this->ensureOwnedModelExistsAction->execute(CharacterGroup::class, $user->id, $payload['group_id']);
+        }
+
         /** @var Character $character */
         $character = $this->createModelAction->execute(Character::class, [
             'user_id' => $user->id,
             'campaign_id' => $payload['campaign_id'] ?? null,
             'scenario_id' => $payload['scenario_id'] ?? null,
+            'character_group_id' => $payload['group_id'] ?? null,
             'name' => $payload['name'],
             'role' => $payload['role'] ?? 'NPC',
             'race' => $payload['race'] ?? null,
@@ -100,7 +114,20 @@ class CharacterService
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $data->data['campaign_id']);
         }
 
-        $this->updateModelAction->execute($character, $data->data);
+        if (
+            array_key_exists('group_id', $data->data) &&
+            $data->data['group_id'] !== null
+        ) {
+            $this->ensureOwnedModelExistsAction->execute(CharacterGroup::class, $user->id, $data->data['group_id']);
+        }
+
+        $payload = $data->data;
+        if (array_key_exists('group_id', $payload)) {
+            $payload['character_group_id'] = $payload['group_id'];
+            unset($payload['group_id']);
+        }
+
+        $this->updateModelAction->execute($character, $payload);
 
         return $character;
     }

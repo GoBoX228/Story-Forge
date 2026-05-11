@@ -2,7 +2,7 @@
 import React from 'react';
 
 interface BaseCardProps {
-  title?: string;
+  title?: React.ReactNode;
   accentColor?: string;
   children: React.ReactNode;
   className?: string;
@@ -44,7 +44,7 @@ export const BaseCard = React.memo<BaseCardProps>(({
       {/* Заголовок карточки с эффектом подсветки при наведении */}
       {title && (
         <div className="pl-6 pr-4 py-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-main)]/20 transition-colors group-hover/card:bg-[var(--bg-main)]/40">
-          <h3 className="mono text-[10px] uppercase font-black tracking-[0.2em] text-[var(--text-main)]/70 group-hover/card:text-[var(--text-main)] truncate transition-colors">
+          <h3 className="mono text-[10px] uppercase font-black tracking-[0.2em] text-[var(--text-main)]/70 group-hover/card:text-[var(--text-main)] truncate transition-colors flex-1 min-w-0">
             {title}
           </h3>
           <div className="flex items-center gap-3">

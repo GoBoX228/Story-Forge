@@ -24,6 +24,7 @@ class CharacterUpdateRequest extends FormRequest
             'inventory' => ['nullable', 'array'],
             'scenario_id' => ['nullable', 'integer'],
             'campaign_id' => ['nullable', 'integer'],
+            'group_id' => ['nullable', 'integer'],
         ];
     }
 

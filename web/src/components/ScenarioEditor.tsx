@@ -998,7 +998,6 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
           onTagFilterChange={setSelectedTagFilter}
           onSelectScenario={handleSelectScenario}
           onDeleteScenario={handleDeleteScenario}
-          onCreateScenario={handleCreateScenario}
         />
       </div>
     );

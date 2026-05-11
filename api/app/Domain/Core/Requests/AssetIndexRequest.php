@@ -11,8 +11,12 @@ class AssetIndexRequest extends CoreReadRequest
     {
         return [
             'type' => ['nullable', 'string', 'in:' . implode(',', Asset::TYPES)],
-            'campaignId' => ['nullable', 'integer'],
-            'campaign_id' => ['nullable', 'integer'],
+            'kind' => ['nullable', 'string', 'in:' . implode(',', Asset::KINDS)],
+            'folderId' => ['nullable'],
+            'folder_id' => ['nullable'],
+            'collectionId' => ['nullable', 'integer'],
+            'collection_id' => ['nullable', 'integer'],
+            'search' => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -20,7 +24,10 @@ class AssetIndexRequest extends CoreReadRequest
     {
         return new AssetIndexData(
             $this->input('type'),
-            $this->input('campaign_id', $this->input('campaignId'))
+            $this->input('kind'),
+            $this->input('folder_id', $this->input('folderId')),
+            $this->input('collection_id', $this->input('collectionId')),
+            $this->input('search')
         );
     }
 }

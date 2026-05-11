@@ -1,7 +1,7 @@
 import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { Scenario, Tag } from '../../types';
-import { Button, SearchInput } from '../UI';
+import { SearchInput } from '../UI';
 import { TagFilter } from '../TagPicker';
 
 interface ScenarioListPanelProps {
@@ -14,7 +14,6 @@ interface ScenarioListPanelProps {
   onTagFilterChange: (value: string) => void;
   onSelectScenario: (scenarioId: string) => void;
   onDeleteScenario: (scenarioId: string, event: React.MouseEvent) => void;
-  onCreateScenario: () => void;
 }
 
 export const ScenarioListPanel: React.FC<ScenarioListPanelProps> = ({
@@ -26,18 +25,12 @@ export const ScenarioListPanel: React.FC<ScenarioListPanelProps> = ({
   onSearchChange,
   onTagFilterChange,
   onSelectScenario,
-  onDeleteScenario,
-  onCreateScenario
+  onDeleteScenario
 }) => (
   <div className="w-80 bg-[var(--bg-surface)] border-l-4 border-[var(--col-red)] flex flex-col p-8 space-y-10 z-10 overflow-y-auto">
-    <div className="flex items-start justify-between gap-4">
-      <h2 className="text-4xl font-black uppercase tracking-tighter text-[var(--col-red)] glitch-text leading-none">
-        БИБЛИОТЕКА
-      </h2>
-      <Button variant="accent-red" size="sm" onClick={onCreateScenario}>
-        <Plus size={14} />
-      </Button>
-    </div>
+    <h2 className="text-4xl font-black uppercase tracking-tighter text-[var(--col-red)] glitch-text leading-none">
+      БИБЛИОТЕКА
+    </h2>
     <SearchInput
       value={searchQuery}
       onChange={(event) => onSearchChange(event.target.value)}

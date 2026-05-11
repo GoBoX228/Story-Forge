@@ -26,27 +26,62 @@ class GoBoxContentSeederTest extends TestCase
             ->where('user_id', $user->id)
             ->get();
 
-        $this->assertCount(4, $scenarios);
+        $this->assertCount(1, $scenarios);
 
-        foreach ($scenarios as $scenario) {
-            $this->assertGreaterThanOrEqual(4, $scenario->nodes->count());
-            $this->assertGreaterThanOrEqual(4, $scenario->transitions->count());
+        $scenario = $scenarios->first();
+        $this->assertSame('Петля ледяного маяка', $scenario->title);
+        $this->assertMatchesRegularExpression('/\p{Cyrillic}/u', $scenario->description);
 
-            $firstNode = $scenario->nodes->sortBy('order_index')->first();
-            $this->assertInstanceOf(ScenarioNode::class, $firstNode);
-            $this->assertIsArray($firstNode->position);
-            $this->assertArrayHasKey('x', $firstNode->position);
-            $this->assertArrayHasKey('y', $firstNode->position);
-            $this->assertIsArray($firstNode->config);
-            $this->assertSame(0, $firstNode->order_index);
+        $this->assertGreaterThanOrEqual(8, $scenario->nodes->count());
+        $this->assertGreaterThanOrEqual(12, $scenario->transitions->count());
 
-            $firstTransition = $scenario->transitions->sortBy('order_index')->first();
-            $this->assertInstanceOf(ScenarioTransition::class, $firstTransition);
-            $this->assertSame($scenario->id, $firstTransition->scenario_id);
-            $this->assertTrue($scenario->nodes->contains('id', $firstTransition->from_node_id));
-            $this->assertTrue($scenario->nodes->contains('id', $firstTransition->to_node_id));
-            $this->assertIsArray($firstTransition->condition);
-        }
+        $this->assertEqualsCanonicalizing(
+            ['check', 'combat', 'description', 'dialog', 'location', 'loot'],
+            $scenario->nodes->pluck('type')->unique()->sort()->values()->all()
+        );
+
+        $this->assertEqualsCanonicalizing(
+            ['choice', 'failure', 'linear', 'success'],
+            $scenario->transitions->pluck('type')->unique()->sort()->values()->all()
+        );
+
+        $firstNode = $scenario->nodes->sortBy('order_index')->first();
+        $this->assertInstanceOf(ScenarioNode::class, $firstNode);
+        $this->assertIsArray($firstNode->position);
+        $this->assertArrayHasKey('x', $firstNode->position);
+        $this->assertArrayHasKey('y', $firstNode->position);
+        $this->assertArrayHasKey('width', $firstNode->position);
+        $this->assertArrayHasKey('height', $firstNode->position);
+        $this->assertIsArray($firstNode->config);
+        $this->assertSame(0, $firstNode->order_index);
+        $this->assertMatchesRegularExpression('/\p{Cyrillic}/u', $firstNode->title);
+
+        $checkNode = $scenario->nodes->firstWhere('type', 'check');
+        $this->assertInstanceOf(ScenarioNode::class, $checkNode);
+        $this->assertSame(14, $checkNode->config['dc']);
+
+        $firstTransition = $scenario->transitions->sortBy('order_index')->first();
+        $this->assertInstanceOf(ScenarioTransition::class, $firstTransition);
+        $this->assertSame($scenario->id, $firstTransition->scenario_id);
+        $this->assertTrue($scenario->nodes->contains('id', $firstTransition->from_node_id));
+        $this->assertTrue($scenario->nodes->contains('id', $firstTransition->to_node_id));
+        $this->assertIsArray($firstTransition->condition);
+        $this->assertIsArray($firstTransition->metadata);
+
+        $successTransition = $scenario->transitions->firstWhere('type', 'success');
+        $failureTransition = $scenario->transitions->firstWhere('type', 'failure');
+        $this->assertSame(['outcome' => 'success', 'dc' => 14], $successTransition->condition);
+        $this->assertSame(['outcome' => 'failure', 'dc' => 14], $failureTransition->condition);
+
+        $combatNode = $scenario->nodes->firstWhere('title', 'Засада культистов');
+        $this->assertInstanceOf(ScenarioNode::class, $combatNode);
+        $reverseTransition = $scenario->transitions
+            ->where('from_node_id', $combatNode->id)
+            ->where('to_node_id', $checkNode->id)
+            ->first();
+
+        $this->assertInstanceOf(ScenarioTransition::class, $reverseTransition);
+        $this->assertSame('Отступить к рунам', $reverseTransition->label);
     }
 
     public function test_go_box_content_seeder_is_idempotent_for_graph_data(): void

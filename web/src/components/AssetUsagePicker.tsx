@@ -1,14 +1,15 @@
 import Image from 'next/image';
 import React, { useMemo, useState } from 'react';
 import { ImageIcon, X } from 'lucide-react';
-import { Asset, AssetType } from '../types';
+import { Asset, AssetKind } from '../types';
 import { Select } from './UI';
 
 interface AssetUsagePickerProps {
   label: string;
   assets: Asset[];
   value?: string | null;
-  allowedTypes?: AssetType[];
+  allowedKinds?: AssetKind[];
+  collectionIds?: string[];
   accentColor?: string;
   onChange: (assetId: string | null) => Promise<void> | void;
 }
@@ -17,7 +18,8 @@ export const AssetUsagePicker: React.FC<AssetUsagePickerProps> = ({
   label,
   assets,
   value,
-  allowedTypes = ['image', 'token'],
+  allowedKinds = ['portrait', 'token', 'background', 'item_image'],
+  collectionIds = [],
   accentColor = 'var(--col-teal)',
   onChange
 }) => {
@@ -25,17 +27,22 @@ export const AssetUsagePicker: React.FC<AssetUsagePickerProps> = ({
   const [error, setError] = useState('');
 
   const options = useMemo(
-    () => assets.filter((asset) => allowedTypes.includes(asset.type)),
-    [allowedTypes, assets]
+    () => assets.filter((asset) => {
+      const matchesKind = asset.type === 'image' && allowedKinds.includes(asset.kind);
+      const matchesCollection = collectionIds.length === 0 || asset.collectionIds.some((id) => collectionIds.includes(id));
+      return matchesKind && matchesCollection;
+    }),
+    [allowedKinds, assets, collectionIds]
   );
   const selectedAsset = assets.find((asset) => asset.id === value);
 
   const apply = async (assetId: string | null) => {
     if (busy) return;
+    const nextAssetId = assetId || null;
     setBusy(true);
     setError('');
     try {
-      await onChange(assetId);
+      await onChange(nextAssetId);
     } catch (pickerError) {
       setError(pickerError instanceof Error ? pickerError.message : 'Не удалось обновить ассет');
     } finally {
@@ -50,7 +57,7 @@ export const AssetUsagePicker: React.FC<AssetUsagePickerProps> = ({
           <ImageIcon size={14} style={{ color: accentColor }} />
           <span className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">{label}</span>
         </div>
-        {selectedAsset && (
+        {value && (
           <button
             type="button"
             onClick={() => void apply(null)}
