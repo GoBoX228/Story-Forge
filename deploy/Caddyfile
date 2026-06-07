@@ -1,0 +1,7 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy /api/* api:8000
+	reverse_proxy /storage/* api:8000
+	reverse_proxy web:3000
+}

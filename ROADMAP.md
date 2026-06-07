@@ -32,6 +32,7 @@
 - [x] Обновлен frontend stack до Next.js 16 / React 19.
 - [x] Добавлен ESLint Flat Config и заменен `next lint` на прямой ESLint CLI.
 - [x] Обновлены Docker-настройки frontend под Node 24 и `.next`.
+- [x] Добавлена production Docker-сборка v1 для Timeweb Cloud: Caddy, Next production build, Laravel production env, закрытые внутренние сервисы.
 - [x] Пересобрана схема БД в чистый baseline миграций.
 - [x] Удалены исторические `add_*`, `fix_*`, `migrate_*` и data-fix миграции.
 - [x] Добавлены baseline-таблицы для graph, world, assets, publications, exports, notifications и idempotency.

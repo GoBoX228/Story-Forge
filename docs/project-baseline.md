@@ -24,7 +24,7 @@
 - Frontend: Next.js 16.2.4, React 19.2, TypeScript 5.9, Tailwind CSS, lucide-react.
 - Backend: Laravel 12, PHP 8.2+, Laravel Sanctum, PostgreSQL.
 - Export: Spatie Browsershot/Puppeteer для PDF.
-- Infrastructure: Docker Compose, PostgreSQL 16, Mailpit.
+- Infrastructure: Docker Compose, PostgreSQL 16, Mailpit для dev; отдельный production compose с Caddy reverse proxy для Timeweb Cloud.
 
 ## Реализовано
 
@@ -52,7 +52,7 @@
 - Базовые связи сценария с картами и персонажами.
 - PDF-экспорт сценария: graph-aware runbook по узлам/переходам с typed-полями и связанными материалами.
 - Жалобы, системные объявления, админские маршруты и audit logs.
-- Docker Compose окружение.
+- Docker Compose окружение для разработки и production Docker-сборка v1 с Caddy, Next production build и Laravel production env.
 - Чистый baseline миграций без исторических `add_*`, `fix_*`, `migrate_*` и data-fix миграций.
 
 ## Частично реализовано

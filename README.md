@@ -463,6 +463,24 @@ docker compose down
 docker compose down -v
 ```
 
+### Production deploy
+
+Для production используется отдельный compose-файл:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+Production-сборка отличается от dev-окружения:
+
+- Next.js запускается через production build, без `next dev` и HMR;
+- Laravel запускается с `APP_ENV=production` и `APP_DEBUG=false`;
+- наружу открыт только Caddy reverse proxy на `80/443`;
+- `web`, `api` и `postgres` доступны только внутри Docker-сети;
+- ассеты пока хранятся в Laravel `storage` volume.
+
+Подробная инструкция для Timeweb Cloud находится в [docs/deployment-timeweb.md](docs/deployment-timeweb.md).
+
 ---
 
 ## Переменные окружения
