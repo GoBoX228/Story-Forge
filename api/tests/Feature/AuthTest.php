@@ -474,6 +474,26 @@ class AuthTest extends TestCase
         Storage::disk('public')->assertExists($bannerPath);
     }
 
+    public function test_profile_image_upload_rejects_unsafe_public_file_types(): void
+    {
+        Storage::fake('public');
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $this->patch('/api/me', [
+            'name' => 'Unsafe User',
+            'email' => 'unsafe@example.com',
+            'avatar_file' => UploadedFile::fake()->create('avatar.svg', 1, 'image/svg+xml'),
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+
+        $this->patch('/api/me', [
+            'name' => 'Unsafe User',
+            'email' => 'unsafe@example.com',
+            'banner_file' => UploadedFile::fake()->create('banner.html', 1, 'text/html'),
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+    }
+
     public function test_user_auth_policy_allows_only_self_for_profile_actions(): void
     {
         $owner = User::factory()->create();

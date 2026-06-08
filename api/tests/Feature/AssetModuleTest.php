@@ -147,6 +147,24 @@ class AssetModuleTest extends TestCase
         ])->assertStatus(302);
     }
 
+    public function test_asset_upload_rejects_unsafe_public_file_types(): void
+    {
+        Storage::fake('public');
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $this->post('/api/assets', [
+            'file' => UploadedFile::fake()->create('payload.html', 1, 'text/html'),
+            'name' => 'Payload',
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+
+        $this->post('/api/assets', [
+            'file' => UploadedFile::fake()->create('vector.svg', 1, 'image/svg+xml'),
+            'name' => 'Vector',
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+    }
+
     public function test_user_can_manage_asset_collections_without_deleting_assets(): void
     {
         Storage::fake('public');

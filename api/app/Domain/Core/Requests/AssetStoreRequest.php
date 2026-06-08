@@ -16,7 +16,12 @@ class AssetStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'file' => ['required', 'file', 'max:10240'],
+            'file' => [
+                'required',
+                'file',
+                'max:10240',
+                'mimetypes:image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,application/zip,application/x-zip-compressed,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            ],
             'name' => ['nullable', 'string', 'max:255'],
             'type' => ['nullable', 'string', 'in:' . implode(',', Asset::TYPES)],
             'kind' => ['nullable', 'string', 'in:' . implode(',', Asset::KINDS)],
