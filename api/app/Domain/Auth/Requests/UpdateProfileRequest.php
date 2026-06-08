@@ -4,6 +4,7 @@ namespace App\Domain\Auth\Requests;
 
 use App\Domain\Auth\DTO\UpdateProfileData;
 use App\Models\User;
+use App\Support\SafePublicUpload;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -23,8 +24,8 @@ class UpdateProfileRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'bio' => ['nullable', 'string', 'max:2000'],
-            'avatar_file' => ['nullable', 'file', 'image', 'mimetypes:image/jpeg,image/png,image/webp,image/gif', 'max:2048'],
-            'banner_file' => ['nullable', 'file', 'image', 'mimetypes:image/jpeg,image/png,image/webp,image/gif', 'max:4096'],
+            'avatar_file' => ['nullable', 'file', 'image', 'mimetypes:image/jpeg,image/png,image/webp,image/gif', 'max:2048', SafePublicUpload::rule(['jpg', 'jpeg', 'png', 'webp', 'gif'])],
+            'banner_file' => ['nullable', 'file', 'image', 'mimetypes:image/jpeg,image/png,image/webp,image/gif', 'max:4096', SafePublicUpload::rule(['jpg', 'jpeg', 'png', 'webp', 'gif'])],
             'remove_avatar' => ['nullable', 'boolean'],
             'remove_banner' => ['nullable', 'boolean'],
         ];

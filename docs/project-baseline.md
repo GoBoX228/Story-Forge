@@ -2,6 +2,8 @@
 
 ## Latest Update
 
+- File Storage Security v1 is implemented: asset/profile uploads use MIME and extension allowlists, dangerous extensions and double extensions are rejected, storage paths are server-generated, and production `/storage/*` responses receive stricter headers through Caddy.
+- Rate Limits + Abuse Guardrails v1 is implemented: auth endpoints use endpoint-specific throttles; asset uploads, PDF exports and report creation have authenticated user-level limits; regression tests assert `429` responses for abuse paths.
 - Character/Item Groups v1 + Inherited Asset Sets is implemented: character and item cards can belong to one group, groups can own asset-set assignments, card pickers inherit those pools, and direct single-asset overrides remain supported.
 - Standalone World UI is temporarily hidden from the sidebar and quick navigation. Backend/API/data for `locations`, `factions` and `events` remain available for existing links and future Atlas/World redesign.
 - Asset Sets Explorer UX Alignment v1 is implemented: reusable asset sets now follow the same explorer-style interaction model as folders, with double click open, inline rename, context menus and drag/drop membership management instead of persistent card action buttons.

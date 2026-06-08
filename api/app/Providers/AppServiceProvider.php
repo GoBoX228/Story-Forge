@@ -87,8 +87,48 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Report::class, ReportPolicy::class);
         Gate::policy(Announcement::class, BroadcastPolicy::class);
 
-        RateLimiter::for('auth', function (Request $request) {
+        RateLimiter::for('auth-login', function (Request $request) {
             return Limit::perMinute(10)->by($request->ip());
         });
+
+        RateLimiter::for('auth-register', function (Request $request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        RateLimiter::for('auth-password', function (Request $request) {
+            return Limit::perMinute(5)->by(self::ipAndEmailKey($request));
+        });
+
+        RateLimiter::for('auth-2fa', function (Request $request) {
+            return Limit::perMinute(6)->by($request->ip());
+        });
+
+        RateLimiter::for('auth-refresh', function (Request $request) {
+            return Limit::perMinute(30)->by($request->ip());
+        });
+
+        RateLimiter::for('asset-upload', function (Request $request) {
+            return Limit::perHour(20)->by(self::actorKey($request));
+        });
+
+        RateLimiter::for('pdf-export', function (Request $request) {
+            return Limit::perHour(10)->by(self::actorKey($request));
+        });
+
+        RateLimiter::for('reports', function (Request $request) {
+            return Limit::perHour(10)->by(self::actorKey($request));
+        });
+    }
+
+    private static function actorKey(Request $request): string
+    {
+        return (string) ($request->user()?->id ?? $request->ip());
+    }
+
+    private static function ipAndEmailKey(Request $request): string
+    {
+        $email = strtolower(trim((string) $request->input('email', '')));
+
+        return $request->ip() . '|' . ($email !== '' ? $email : 'no-email');
     }
 }

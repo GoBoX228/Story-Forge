@@ -35,14 +35,14 @@ use App\Http\Controllers\TagController;
 use App\Http\Controllers\WorldEventController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('auth')->middleware('throttle:auth')->group(function () {
-    Route::post('/register', [SessionController::class, 'register']);
-    Route::post('/login', [SessionController::class, 'login']);
-    Route::post('/password/forgot', [PasswordController::class, 'forgotPassword']);
-    Route::post('/password/reset', [PasswordController::class, 'resetPassword']);
-    Route::post('/2fa/verify', [TwoFactorController::class, 'verifyTwoFactor']);
-    Route::post('/2fa/resend', [TwoFactorController::class, 'resendTwoFactorCode']);
-    Route::post('/refresh', [SessionController::class, 'refresh']);
+Route::prefix('auth')->group(function () {
+    Route::post('/register', [SessionController::class, 'register'])->middleware('throttle:auth-register');
+    Route::post('/login', [SessionController::class, 'login'])->middleware('throttle:auth-login');
+    Route::post('/password/forgot', [PasswordController::class, 'forgotPassword'])->middleware('throttle:auth-password');
+    Route::post('/password/reset', [PasswordController::class, 'resetPassword'])->middleware('throttle:auth-password');
+    Route::post('/2fa/verify', [TwoFactorController::class, 'verifyTwoFactor'])->middleware('throttle:auth-2fa');
+    Route::post('/2fa/resend', [TwoFactorController::class, 'resendTwoFactorCode'])->middleware('throttle:auth-2fa');
+    Route::post('/refresh', [SessionController::class, 'refresh'])->middleware('throttle:auth-refresh');
     Route::post('/logout', [SessionController::class, 'logout'])->middleware('auth:sanctum');
 });
 
@@ -108,7 +108,7 @@ Route::middleware(['auth:sanctum', 'active_user'])->group(function () {
     Route::delete('/item-groups/{id}', [ItemGroupController::class, 'destroy']);
 
     Route::get('/assets', [AssetController::class, 'index']);
-    Route::post('/assets', [AssetController::class, 'store']);
+    Route::post('/assets', [AssetController::class, 'store'])->middleware('throttle:asset-upload');
     Route::get('/assets/{id}', [AssetController::class, 'show']);
     Route::patch('/assets/{id}', [AssetController::class, 'update']);
     Route::delete('/assets/{id}', [AssetController::class, 'destroy']);
@@ -163,10 +163,10 @@ Route::middleware(['auth:sanctum', 'active_user'])->group(function () {
     Route::patch('/publications/{id}', [PublicationController::class, 'update']);
     Route::delete('/publications/{id}', [PublicationController::class, 'destroy']);
 
-    Route::post('/reports', [ReportController::class, 'store']);
+    Route::post('/reports', [ReportController::class, 'store'])->middleware('throttle:reports');
     Route::get('/broadcasts', [BroadcastController::class, 'index']);
 
-    Route::post('/scenarios/{id}/export/pdf', [ExportController::class, 'exportScenarioPdf']);
+    Route::post('/scenarios/{id}/export/pdf', [ExportController::class, 'exportScenarioPdf'])->middleware('throttle:pdf-export');
 
     Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/overview', [AdminOverviewController::class, 'overview']);

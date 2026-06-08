@@ -85,6 +85,30 @@ class ReportBroadcastExportTest extends TestCase
         $this->assertSame(1, AdminAuditLog::query()->where('action', 'REPORT_CREATED')->count());
     }
 
+    public function test_reports_are_rate_limited(): void
+    {
+        $reporter = User::factory()->create();
+        $targetUser = User::factory()->create();
+        Sanctum::actingAs($reporter);
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $expectedStatus = $attempt === 0 ? 201 : 200;
+
+            $this->postJson('/api/reports', [
+                'target_type' => 'user',
+                'target_id' => $targetUser->id,
+                'reason' => 'spam',
+                'description' => "Repeated report {$attempt}",
+            ])->assertStatus($expectedStatus);
+        }
+
+        $this->postJson('/api/reports', [
+            'target_type' => 'user',
+            'target_id' => $targetUser->id,
+            'reason' => 'spam',
+        ])->assertStatus(429);
+    }
+
     public function test_broadcast_list_keeps_limit_sorting_and_author_fallback(): void
     {
         $viewer = User::factory()->create();
@@ -165,6 +189,32 @@ class ReportBroadcastExportTest extends TestCase
         $foreignUser = User::factory()->create();
         Sanctum::actingAs($foreignUser);
         $this->post('/api/scenarios/' . $scenario->id . '/export/pdf')->assertStatus(404);
+    }
+
+    public function test_export_pdf_is_rate_limited(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $scenario = Scenario::create([
+            'user_id' => $owner->id,
+            'title' => 'Export Rate Scenario',
+        ]);
+
+        $this->mock(GenerateScenarioPdfAction::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('execute')
+                ->times(10)
+                ->andReturn('%PDF-mock%');
+        });
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->post('/api/scenarios/' . $scenario->id . '/export/pdf')
+                ->assertStatus(200)
+                ->assertHeader('Content-Type', 'application/pdf');
+        }
+
+        $this->post('/api/scenarios/' . $scenario->id . '/export/pdf')
+            ->assertStatus(429);
     }
 
     public function test_export_pdf_renders_graph_scenario_content(): void

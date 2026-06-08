@@ -2,6 +2,8 @@
 
 ## Latest Update
 
+- [x] File Storage Security v1: public uploads now require MIME and extension allowlists, unsafe double extensions are rejected, storage paths stay server-generated, and `/storage/*` receives stricter response headers.
+- [x] Rate Limits + Abuse Guardrails v1: auth endpoints now use endpoint-specific throttles, and asset upload, PDF export and report creation are rate-limited with regression coverage.
 - [x] Character/Item Groups v1 + Inherited Asset Sets: characters and items now support one group per card; groups can own asset-set assignments, cards inherit those pools in portrait/token/item image pickers, and direct asset overrides remain intact.
 - [x] Documented asset assignment decision: cards may keep direct single-asset overrides, while asset sets act as reusable pools/filters; group-level asset inheritance is now implemented for character/item groups.
 - [x] Asset Sets Integration into Map Layers v1: map layer palettes now expose connected set context per active layer and show asset source set labels while keeping fallback to all matching asset kinds when no sets are connected.

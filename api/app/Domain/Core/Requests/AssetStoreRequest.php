@@ -4,6 +4,7 @@ namespace App\Domain\Core\Requests;
 
 use App\Domain\Core\DTO\AssetStoreData;
 use App\Models\Asset;
+use App\Support\SafePublicUpload;
 use Illuminate\Foundation\Http\FormRequest;
 
 class AssetStoreRequest extends FormRequest
@@ -21,6 +22,7 @@ class AssetStoreRequest extends FormRequest
                 'file',
                 'max:10240',
                 'mimetypes:image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain,application/zip,application/x-zip-compressed,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                SafePublicUpload::rule(['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'txt', 'zip', 'docx', 'xlsx', 'pptx']),
             ],
             'name' => ['nullable', 'string', 'max:255'],
             'type' => ['nullable', 'string', 'in:' . implode(',', Asset::TYPES)],

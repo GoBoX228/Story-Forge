@@ -80,6 +80,23 @@ class AuthTest extends TestCase
             ]);
     }
 
+    public function test_login_endpoint_is_rate_limited(): void
+    {
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.10'])
+                ->postJson('/api/auth/login', [
+                    'email' => 'missing@example.com',
+                    'password' => 'wrong-password',
+                ])->assertStatus(401);
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.10'])
+            ->postJson('/api/auth/login', [
+                'email' => 'missing@example.com',
+                'password' => 'wrong-password',
+            ])->assertStatus(429);
+    }
+
     public function test_refresh_token_is_rotated_and_cannot_be_reused(): void
     {
         $user = User::factory()->create();
@@ -566,6 +583,8 @@ class AuthTest extends TestCase
         $this->assertIsString($bannerUrl);
         $this->assertStringContainsString('/storage/profile/avatars/', $avatarUrl);
         $this->assertStringContainsString('/storage/profile/banners/', $bannerUrl);
+        $this->assertStringNotContainsString('avatar.png', $avatarUrl);
+        $this->assertStringNotContainsString('banner.png', $bannerUrl);
 
         $avatarPath = ltrim(str_replace('/storage/', '', parse_url($avatarUrl, PHP_URL_PATH) ?? ''), '/');
         $bannerPath = ltrim(str_replace('/storage/', '', parse_url($bannerUrl, PHP_URL_PATH) ?? ''), '/');
@@ -591,6 +610,12 @@ class AuthTest extends TestCase
             'name' => 'Unsafe User',
             'email' => 'unsafe@example.com',
             'banner_file' => UploadedFile::fake()->create('banner.html', 1, 'text/html'),
+        ], ['Accept' => 'application/json'])->assertStatus(422);
+
+        $this->patch('/api/me', [
+            'name' => 'Unsafe User',
+            'email' => 'unsafe@example.com',
+            'avatar_file' => UploadedFile::fake()->create('avatar.php.jpg', 1, 'image/jpeg'),
         ], ['Accept' => 'application/json'])->assertStatus(422);
     }
 

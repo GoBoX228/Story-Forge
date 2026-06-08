@@ -165,6 +165,70 @@ class AssetModuleTest extends TestCase
         ], ['Accept' => 'application/json'])->assertStatus(422);
     }
 
+    public function test_asset_upload_rejects_unsafe_extensions_even_with_allowed_mime(): void
+    {
+        Storage::fake('public');
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        foreach ([
+            'payload.php',
+            'payload.phtml',
+            'payload.html',
+            'payload.svg',
+            'image.php.jpg',
+            'archive.sh.zip',
+        ] as $filename) {
+            $this->post('/api/assets', [
+                'file' => UploadedFile::fake()->create($filename, 1, 'image/jpeg'),
+                'name' => 'Unsafe Extension',
+            ], ['Accept' => 'application/json'])->assertStatus(422);
+        }
+
+        $this->assertDatabaseCount('assets', 0);
+    }
+
+    public function test_asset_upload_uses_server_generated_storage_path(): void
+    {
+        Storage::fake('public');
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        $response = $this->post('/api/assets', [
+            'file' => UploadedFile::fake()->create('original-token.png', 1, 'image/png'),
+            'name' => 'Original Token',
+        ], ['Accept' => 'application/json'])->assertStatus(201);
+
+        $path = (string) $response->json('path');
+
+        $this->assertStringStartsWith('assets/' . $user->id . '/', $path);
+        $this->assertStringNotContainsString('original-token', $path);
+        $this->assertStringNotContainsString('..', $path);
+        Storage::disk('public')->assertExists($path);
+    }
+
+    public function test_asset_upload_is_rate_limited(): void
+    {
+        Storage::fake('public');
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+
+        for ($upload = 0; $upload < 20; $upload++) {
+            $this->post('/api/assets', [
+                'file' => UploadedFile::fake()->create("token-{$upload}.png", 16, 'image/png'),
+                'name' => "Token {$upload}",
+            ], ['Accept' => 'application/json'])->assertStatus(201);
+        }
+
+        $this->post('/api/assets', [
+            'file' => UploadedFile::fake()->create('token-over-limit.png', 16, 'image/png'),
+            'name' => 'Token Over Limit',
+        ], ['Accept' => 'application/json'])->assertStatus(429);
+    }
+
     public function test_user_can_manage_asset_collections_without_deleting_assets(): void
     {
         Storage::fake('public');
