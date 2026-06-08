@@ -19,6 +19,38 @@ class SecurityAuthorizationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_guest_cannot_access_protected_api_surface(): void
+    {
+        foreach ([
+            '/api/me',
+            '/api/campaigns',
+            '/api/scenarios',
+            '/api/maps',
+            '/api/characters',
+            '/api/items',
+            '/api/assets',
+            '/api/asset-folders',
+            '/api/asset-collections',
+            '/api/tags',
+            '/api/publications',
+            '/api/admin/overview',
+        ] as $uri) {
+            $this->getJson($uri)->assertStatus(401);
+        }
+
+        foreach ([
+            '/api/campaigns',
+            '/api/scenarios',
+            '/api/maps',
+            '/api/characters',
+            '/api/items',
+            '/api/assets',
+            '/api/reports',
+        ] as $uri) {
+            $this->postJson($uri, [])->assertStatus(401);
+        }
+    }
+
     public function test_foreign_core_entity_direct_access_stays_404(): void
     {
         $owner = User::factory()->create();

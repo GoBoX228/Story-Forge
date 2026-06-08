@@ -43,7 +43,7 @@ class PasswordService
             'message' => 'If an account exists for this email, a password reset code was sent',
             'expires_in' => $this->passwordResetTokenAction->ttlMinutes() * 60,
             'delivery' => 'email',
-            'dev_code' => $devCode,
+            'dev_code' => app()->environment(['local', 'testing']) ? $devCode : null,
             'dev_code_usable' => app()->environment(['local', 'testing']) ? $devCodeUsable : null,
         ];
     }

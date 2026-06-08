@@ -80,6 +80,70 @@ class AuthTest extends TestCase
             ]);
     }
 
+    public function test_refresh_token_is_rotated_and_cannot_be_reused(): void
+    {
+        $user = User::factory()->create();
+        $issuedTokens = app(\App\Domain\Auth\Actions\IssueTokensAction::class)->execute($user);
+        $oldRefreshToken = $issuedTokens->refreshCookie->getValue();
+
+        $this->assertDatabaseHas('refresh_tokens', [
+            'token_hash' => hash('sha256', $oldRefreshToken),
+        ]);
+
+        $refresh = app(\App\Domain\Auth\Services\AuthSessionService::class)->refresh($oldRefreshToken);
+
+        $this->assertSame('success', $refresh['status']);
+        $newRefreshToken = $refresh['tokens']->refreshCookie->getValue();
+        $this->assertNotSame($oldRefreshToken, $newRefreshToken);
+        $this->assertDatabaseMissing('refresh_tokens', [
+            'token_hash' => hash('sha256', $oldRefreshToken),
+        ]);
+        $this->assertDatabaseHas('refresh_tokens', [
+            'token_hash' => hash('sha256', $newRefreshToken),
+        ]);
+
+        $reused = app(\App\Domain\Auth\Services\AuthSessionService::class)->refresh($oldRefreshToken);
+
+        $this->assertSame('invalid', $reused['status']);
+    }
+
+    public function test_logout_revokes_access_and_refresh_tokens(): void
+    {
+        $login = $this->postJson('/api/auth/register', [
+            'name' => 'Logout User',
+            'email' => 'logout@example.com',
+            'password' => 'Password#123',
+            'password_confirmation' => 'Password#123',
+        ]);
+
+        $login->assertStatus(200)->assertCookie('refresh_token');
+
+        $accessToken = $login->json('access_token');
+        $refreshToken = $this->refreshCookieValue($login);
+        $userId = $login->json('user.id');
+
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'tokenable_id' => $userId,
+        ]);
+        $this->assertDatabaseHas('refresh_tokens', [
+            'user_id' => $userId,
+            'token_hash' => hash('sha256', $refreshToken),
+        ]);
+
+        $this->withToken($accessToken)
+            ->withCookie('refresh_token', $refreshToken)
+            ->postJson('/api/auth/logout')
+            ->assertStatus(200)
+            ->assertCookieExpired('refresh_token');
+
+        $this->assertDatabaseMissing('personal_access_tokens', [
+            'tokenable_id' => $userId,
+        ]);
+        $this->assertDatabaseMissing('refresh_tokens', [
+            'user_id' => $userId,
+        ]);
+    }
+
     public function test_login_returns_two_factor_challenge_when_enabled(): void
     {
         $user = User::factory()->create([
@@ -99,6 +163,23 @@ class AuthTest extends TestCase
                 'expires_in',
             ])
             ->assertJsonPath('requires_2fa', true);
+    }
+
+    public function test_two_factor_challenge_does_not_expose_dev_code_in_production(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+
+        $user = User::factory()->create([
+            'password' => bcrypt('password123'),
+            'two_factor_enabled' => true,
+        ]);
+
+        $this->postJson('/api/auth/login', [
+            'email' => $user->email,
+            'password' => 'password123',
+        ])->assertStatus(202)
+            ->assertJsonPath('requires_2fa', true)
+            ->assertJsonPath('dev_code', null);
     }
 
     public function test_two_factor_verify_returns_access_token_after_login_challenge(): void
@@ -327,6 +408,25 @@ class AuthTest extends TestCase
         $this->assertDatabaseMissing('password_reset_tokens', ['email' => $email]);
     }
 
+    public function test_forgot_password_does_not_expose_dev_code_in_production(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+
+        $user = User::factory()->create([
+            'email' => 'prod-reset@example.com',
+        ]);
+
+        $this->postJson('/api/auth/password/forgot', [
+            'email' => $user->email,
+        ])->assertStatus(200)
+            ->assertJsonPath('dev_code', null)
+            ->assertJsonPath('dev_code_usable', null);
+
+        $this->assertDatabaseHas('password_reset_tokens', [
+            'email' => $user->email,
+        ]);
+    }
+
     public function test_login_is_temporarily_locked_after_failed_attempts(): void
     {
         $user = User::factory()->create([
@@ -509,5 +609,16 @@ class AuthTest extends TestCase
         $this->assertFalse($gate->allows('changePassword', $other));
         $this->assertTrue($gate->allows('manageTwoFactor', $owner));
         $this->assertFalse($gate->allows('manageTwoFactor', $other));
+    }
+
+    private function refreshCookieValue($response): string
+    {
+        foreach ($response->headers->getCookies() as $cookie) {
+            if ($cookie->getName() === 'refresh_token') {
+                return $cookie->getValue();
+            }
+        }
+
+        $this->fail('Response does not contain refresh_token cookie.');
     }
 }
