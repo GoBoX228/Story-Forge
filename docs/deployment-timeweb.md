@@ -44,6 +44,15 @@ CORS_ALLOWED_ORIGINS=https://your-domain.ru
 DB_PASSWORD=CHANGE_ME
 ```
 
+Replace `CHANGE_ME` with a real password before startup. The production API entrypoint fails fast when unsafe values are detected:
+
+- `APP_ENV` is not `production`;
+- `APP_DEBUG` is not false;
+- `APP_URL` does not use `https://`;
+- `APP_KEY` is empty or still `base64:REPLACE_WITH_REAL_KEY`;
+- `DB_PASSWORD` is still `CHANGE_ME`, `storyforge`, or another default value;
+- `CORS_ALLOWED_ORIGINS` contains `localhost`, `127.0.0.1`, or `http://`.
+
 ## 3. Start
 
 ```bash
