@@ -2,6 +2,7 @@
 
 ## Latest Update
 
+- [x] Security Headers + CSP v2: production Caddy now sends a fuller app CSP for scripts/styles/images/fonts/connect/media/workers/forms/frames while keeping a separate strict `/storage/*` CSP; nonce-based CSP remains future hardening.
 - [x] File Storage Security v1: public uploads now require MIME and extension allowlists, unsafe double extensions are rejected, storage paths stay server-generated, and `/storage/*` receives stricter response headers.
 - [x] Rate Limits + Abuse Guardrails v1: auth endpoints now use endpoint-specific throttles, and asset upload, PDF export and report creation are rate-limited with regression coverage.
 - [x] Character/Item Groups v1 + Inherited Asset Sets: characters and items now support one group per card; groups can own asset-set assignments, cards inherit those pools in portrait/token/item image pickers, and direct asset overrides remain intact.

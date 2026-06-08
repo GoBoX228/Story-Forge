@@ -2,6 +2,7 @@
 
 ## Latest Update
 
+- Security Headers + CSP v2 is implemented: production Caddy sends a fuller application CSP for default/script/style/image/font/connect/media/worker/form/frame policies, with a separate strict `/storage/*` CSP; inline scripts/styles are temporarily allowed for the current Next.js build until nonce-based CSP is introduced.
 - File Storage Security v1 is implemented: asset/profile uploads use MIME and extension allowlists, dangerous extensions and double extensions are rejected, storage paths are server-generated, and production `/storage/*` responses receive stricter headers through Caddy.
 - Rate Limits + Abuse Guardrails v1 is implemented: auth endpoints use endpoint-specific throttles; asset uploads, PDF exports and report creation have authenticated user-level limits; regression tests assert `429` responses for abuse paths.
 - Character/Item Groups v1 + Inherited Asset Sets is implemented: character and item cards can belong to one group, groups can own asset-set assignments, card pickers inherit those pools, and direct single-asset overrides remain supported.

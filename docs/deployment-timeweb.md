@@ -82,6 +82,7 @@ docker image prune -f
 - Only Caddy publishes public ports `80` and `443`.
 - `web`, `api`, and `postgres` are internal Docker services.
 - Rate limits are enabled for auth endpoints, asset uploads, PDF exports and report creation. Current limits are defined in `api/app/Providers/AppServiceProvider.php`.
+- Production Caddy sends application security headers, including CSP. The app CSP allows inline scripts/styles for the current Next.js production build; move to nonce-based CSP before removing those allowances. If object storage, CDN, external fonts, analytics, or third-party APIs are added, update `img-src`, `font-src`, `connect-src`, and related directives explicitly.
 - Assets are still stored in Laravel `storage` via the `api_storage` Docker volume. Public uploads use MIME and extension allowlists, server-generated paths, and stricter `/storage/*` response headers.
 - Object storage, queue workers, and real SMTP are future production hardening tasks.
 - Mail is logged by default in `.env.prod.example`; configure a real SMTP provider before enabling password reset emails.
