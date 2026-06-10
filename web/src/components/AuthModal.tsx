@@ -13,7 +13,7 @@ import {
   Shield,
   User,
 } from 'lucide-react';
-import { apiRequest, localizeApiMessage, setAccessToken } from '../lib/api';
+import { apiRequest, localizeApiMessage } from '../lib/api';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -22,8 +22,8 @@ interface AuthModalProps {
   initialMode?: 'login' | 'register';
 }
 
-interface TokenResponse {
-  access_token: string;
+interface SessionResponse {
+  user: unknown;
 }
 
 interface TwoFactorChallengeResponse {
@@ -49,8 +49,8 @@ interface PasswordForgotResponse {
   dev_code_usable?: boolean | null;
 }
 
-const isTokenResponse = (data: any): data is TokenResponse =>
-  typeof data?.access_token === 'string' && data.access_token.length > 0;
+const isSessionResponse = (data: any): data is SessionResponse =>
+  data?.user !== null && typeof data?.user === 'object';
 
 const isTwoFactorChallengeResponse = (data: any): data is TwoFactorChallengeResponse =>
   data?.requires_2fa === true && typeof data?.challenge_token === 'string';
@@ -138,7 +138,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
         throw new Error('Введите имя пользователя');
       }
 
-      const data = await apiRequest<TokenResponse>('/auth/register', {
+      const data = await apiRequest<SessionResponse>('/auth/register', {
         method: 'POST',
         body: JSON.stringify({
           name: displayName,
@@ -148,11 +148,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
         }),
       });
 
-      if (!isTokenResponse(data)) {
+      if (!isSessionResponse(data)) {
         throw new Error('Не удалось создать аккаунт');
       }
 
-      setAccessToken(data.access_token);
       onLogin();
       return;
     }
@@ -162,8 +161,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
       body: JSON.stringify({ email, password }),
     });
 
-    if (isTokenResponse(data)) {
-      setAccessToken(data.access_token);
+    if (isSessionResponse(data)) {
       onLogin();
       return;
     }
@@ -185,7 +183,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
       throw new Error('Сессия подтверждения отсутствует');
     }
 
-    const data = await apiRequest<TokenResponse>('/auth/2fa/verify', {
+    const data = await apiRequest<SessionResponse>('/auth/2fa/verify', {
       method: 'POST',
       body: JSON.stringify({
         challenge_token: challengeToken,
@@ -193,11 +191,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
       }),
     });
 
-    if (!isTokenResponse(data)) {
+    if (!isSessionResponse(data)) {
       throw new Error('Не удалось подтвердить код');
     }
 
-    setAccessToken(data.access_token);
     onLogin();
   };
 

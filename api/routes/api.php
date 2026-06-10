@@ -36,17 +36,18 @@ use App\Http\Controllers\WorldEventController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
+    Route::get('/csrf', [SessionController::class, 'csrf'])->middleware('throttle:auth-refresh');
     Route::post('/register', [SessionController::class, 'register'])->middleware('throttle:auth-register');
     Route::post('/login', [SessionController::class, 'login'])->middleware('throttle:auth-login');
     Route::post('/password/forgot', [PasswordController::class, 'forgotPassword'])->middleware('throttle:auth-password');
     Route::post('/password/reset', [PasswordController::class, 'resetPassword'])->middleware('throttle:auth-password');
     Route::post('/2fa/verify', [TwoFactorController::class, 'verifyTwoFactor'])->middleware('throttle:auth-2fa');
     Route::post('/2fa/resend', [TwoFactorController::class, 'resendTwoFactorCode'])->middleware('throttle:auth-2fa');
-    Route::post('/refresh', [SessionController::class, 'refresh'])->middleware('throttle:auth-refresh');
-    Route::post('/logout', [SessionController::class, 'logout'])->middleware('auth:sanctum');
+    Route::post('/refresh', [SessionController::class, 'refresh'])->middleware(['throttle:auth-refresh', 'csrf_cookie:always']);
+    Route::post('/logout', [SessionController::class, 'logout'])->middleware(['cookie_auth', 'csrf_cookie:always']);
 });
 
-Route::middleware(['auth:sanctum', 'active_user'])->group(function () {
+Route::middleware(['cookie_auth', 'active_user', 'csrf_cookie'])->group(function () {
     Route::get('/me', [ProfileController::class, 'me']);
     Route::patch('/me', [ProfileController::class, 'updateMe']);
     Route::post('/auth/password/change', [PasswordController::class, 'changePassword']);
@@ -168,7 +169,7 @@ Route::middleware(['auth:sanctum', 'active_user'])->group(function () {
 
     Route::post('/scenarios/{id}/export/pdf', [ExportController::class, 'exportScenarioPdf'])->middleware('throttle:pdf-export');
 
-    Route::prefix('admin')->middleware('admin')->group(function () {
+    Route::prefix('admin')->middleware(['admin', 'throttle:admin'])->group(function () {
         Route::get('/overview', [AdminOverviewController::class, 'overview']);
         Route::get('/users', [AdminUsersController::class, 'index']);
         Route::patch('/users/{id}', [AdminUsersController::class, 'update']);

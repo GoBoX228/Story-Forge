@@ -25,6 +25,19 @@ class AdminAccessTest extends TestCase
             ->assertStatus(403);
     }
 
+    public function test_admin_routes_are_rate_limited(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        Sanctum::actingAs($admin);
+
+        for ($attempt = 0; $attempt < 60; $attempt++) {
+            $this->getJson('/api/admin/overview')->assertOk();
+        }
+
+        $this->getJson('/api/admin/overview')->assertStatus(429);
+    }
+
     public function test_admin_can_view_and_update_users(): void
     {
         $admin = User::factory()->admin()->create();
@@ -93,4 +106,3 @@ class AdminAccessTest extends TestCase
         ]);
     }
 }
-

@@ -53,7 +53,7 @@ import {
   WorldEventUpdatePayload,
   WorldLocation
 } from './types';
-import { apiRequest, clearAccessToken, getAccessToken } from './lib/api';
+import { apiRequest, clearAccessToken, refreshAccessToken } from './lib/api';
 import {
   entityLinkAssignmentKey,
   assetCollectionAssignmentKey,
@@ -430,17 +430,19 @@ const App: React.FC = () => {
     let mounted = true;
 
     const bootstrap = async () => {
-      if (!getAccessToken()) {
+      if (mounted) {
+        setIsBootstrapping(true);
+      }
+
+      const refreshed = await refreshAccessToken();
+      if (!refreshed) {
         if (mounted) {
+          clearAccessToken();
           setIsAuthenticated(false);
           setCurrentUser(null);
           setIsBootstrapping(false);
         }
         return;
-      }
-
-      if (mounted) {
-        setIsBootstrapping(true);
       }
 
       try {
@@ -453,6 +455,7 @@ const App: React.FC = () => {
         clearAccessToken();
         setIsAuthenticated(false);
         setCurrentUser(null);
+        setIsBootstrapping(false);
         return;
       }
 

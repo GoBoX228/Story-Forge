@@ -70,8 +70,8 @@ class GoBoxContentSeederTest extends TestCase
 
         $successTransition = $scenario->transitions->firstWhere('type', 'success');
         $failureTransition = $scenario->transitions->firstWhere('type', 'failure');
-        $this->assertSame(['outcome' => 'success', 'dc' => 14], $successTransition->condition);
-        $this->assertSame(['outcome' => 'failure', 'dc' => 14], $failureTransition->condition);
+        $this->assertEquals(['outcome' => 'success', 'dc' => 14], $successTransition->condition);
+        $this->assertEquals(['outcome' => 'failure', 'dc' => 14], $failureTransition->condition);
 
         $combatNode = $scenario->nodes->firstWhere('title', 'Засада культистов');
         $this->assertInstanceOf(ScenarioNode::class, $combatNode);

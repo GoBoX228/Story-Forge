@@ -118,6 +118,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('reports', function (Request $request) {
             return Limit::perHour(10)->by(self::actorKey($request));
         });
+
+        RateLimiter::for('admin', function (Request $request) {
+            return Limit::perMinute(60)->by(self::actorKey($request));
+        });
     }
 
     private static function actorKey(Request $request): string

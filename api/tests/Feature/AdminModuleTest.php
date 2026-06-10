@@ -328,4 +328,38 @@ class AdminModuleTest extends TestCase
                 'action' => 'ADMIN_BROADCAST_CREATED',
             ]);
     }
+
+    public function test_admin_logs_redact_sensitive_context_values(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        AdminAuditLog::query()->create([
+            'user_id' => $admin->id,
+            'action' => 'ADMIN_SECRET_TEST',
+            'details' => 'safe details',
+            'context' => [
+                'safe_id' => 123,
+                'password' => 'secret-password',
+                'nested' => [
+                    'api_token' => 'secret-token',
+                    'stack_trace' => 'Exception stack trace',
+                    'safe_value' => 'visible',
+                ],
+            ],
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/admin/logs')
+            ->assertOk()
+            ->assertJsonPath('0.action', 'ADMIN_SECRET_TEST')
+            ->assertJsonPath('0.context.safe_id', 123)
+            ->assertJsonPath('0.context.password', '[redacted]')
+            ->assertJsonPath('0.context.nested.api_token', '[redacted]')
+            ->assertJsonPath('0.context.nested.stack_trace', '[redacted]')
+            ->assertJsonPath('0.context.nested.safe_value', 'visible')
+            ->assertDontSee('secret-password')
+            ->assertDontSee('secret-token')
+            ->assertDontSee('Exception stack trace');
+    }
 }

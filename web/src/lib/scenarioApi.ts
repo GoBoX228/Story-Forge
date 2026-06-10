@@ -8,7 +8,7 @@ import {
   ScenarioTransitionCreatePayload,
   ScenarioTransitionUpdatePayload
 } from '../types';
-import { API_BASE_URL, apiRequest, getAccessToken } from './api';
+import { API_BASE_URL, apiRequest, refreshAccessToken, withCsrfHeader } from './api';
 import {
   mapScenarioNodeFromApi,
   mapScenarioNodeEntityLinkFromApi,
@@ -106,15 +106,23 @@ export const deleteScenarioTransition = async (transitionId: string): Promise<vo
 };
 
 export const exportScenarioPdf = async (scenarioId: string): Promise<Blob | null> => {
-  const token = getAccessToken();
-  const response = await fetch(`${API_BASE_URL}/api/scenarios/${scenarioId}/export/pdf`, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/pdf',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    credentials: 'include'
-  });
+  const requestPdf = async (): Promise<Response> => {
+    const headers = await withCsrfHeader({
+      Accept: 'application/pdf'
+    });
+
+    return fetch(`${API_BASE_URL}/api/scenarios/${scenarioId}/export/pdf`, {
+      method: 'POST',
+      headers,
+      credentials: 'include'
+    });
+  };
+
+  let response = await requestPdf();
+
+  if (response.status === 401 && await refreshAccessToken()) {
+    response = await requestPdf();
+  }
 
   if (!response.ok) {
     return null;

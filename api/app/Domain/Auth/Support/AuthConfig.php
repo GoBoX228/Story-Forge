@@ -12,14 +12,14 @@ class AuthConfig
     public const LOGIN_MAX_FAILED_ATTEMPTS = 5;
     public const LOGIN_LOCK_MINUTES = 15;
 
-    public static function accessTokenTtlMinutes(): int
-    {
-        return (int) config('tokens.access_ttl_minutes', 15);
-    }
-
     public static function refreshTokenTtlMinutes(): int
     {
         return (int) config('tokens.refresh_ttl_minutes', 43200);
+    }
+
+    public static function csrfTokenTtlMinutes(): int
+    {
+        return (int) config('tokens.csrf_ttl_minutes', 120);
     }
 
     public static function passwordResetTtlMinutes(): int

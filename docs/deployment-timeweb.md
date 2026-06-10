@@ -42,6 +42,7 @@ NEXT_PUBLIC_API_URL=https://your-domain.ru
 APP_URL=https://your-domain.ru
 CORS_ALLOWED_ORIGINS=https://your-domain.ru
 DB_PASSWORD=CHANGE_ME
+CSRF_TOKEN_TTL=120
 ```
 
 Replace `CHANGE_ME` with a real password before startup. The production API entrypoint fails fast when unsafe values are detected:
@@ -56,7 +57,7 @@ Replace `CHANGE_ME` with a real password before startup. The production API entr
 ## 3. Start
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build --remove-orphans
 ```
 
 Check containers:
@@ -73,15 +74,28 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=100 c
 ```bash
 cd /opt/story-forge
 git pull
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build --remove-orphans
 docker image prune -f
 ```
+
+## 5. Server Hardening
+
+After the application is reachable over HTTPS, follow the server hardening runbook:
+
+- SSH key-only login;
+- UFW firewall with only `22`, `80` and `443` open;
+- cleanup of dev/orphan containers;
+- database and storage backup commands;
+- production health checks.
+
+See [server-hardening-timeweb.md](server-hardening-timeweb.md).
 
 ## Notes
 
 - Only Caddy publishes public ports `80` and `443`.
 - `web`, `api`, and `postgres` are internal Docker services.
 - Rate limits are enabled for auth endpoints, asset uploads, PDF exports and report creation. Current limits are defined in `api/app/Providers/AppServiceProvider.php`.
+- Cookie-authenticated write requests use `GET /api/auth/csrf`, `X-CSRF-TOKEN` and an HttpOnly CSRF signature cookie. `CSRF_TOKEN_TTL` controls the token lifetime in minutes.
 - Production Caddy sends application security headers, including CSP. The app CSP allows inline scripts/styles for the current Next.js production build; move to nonce-based CSP before removing those allowances. If object storage, CDN, external fonts, analytics, or third-party APIs are added, update `img-src`, `font-src`, `connect-src`, and related directives explicitly.
 - Assets are still stored in Laravel `storage` via the `api_storage` Docker volume. Public uploads use MIME and extension allowlists, server-generated paths, and stricter `/storage/*` response headers.
 - Object storage, queue workers, and real SMTP are future production hardening tasks.

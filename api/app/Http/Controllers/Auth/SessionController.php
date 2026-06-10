@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Domain\Auth\Actions\ForgetRefreshCookieAction;
+use App\Domain\Auth\Actions\IssueCsrfTokenAction;
 use App\Domain\Auth\DTO\IssuedTokensData;
 use App\Domain\Auth\Requests\LoginRequest;
 use App\Domain\Auth\Requests\LogoutRequest;
@@ -19,7 +20,17 @@ class SessionController extends Controller
     public function __construct(
         private readonly AuthSessionService $authSessionService,
         private readonly ForgetRefreshCookieAction $forgetRefreshCookieAction,
+        private readonly IssueCsrfTokenAction $issueCsrfTokenAction,
     ) {
+    }
+
+    public function csrf(): JsonResponse
+    {
+        $issued = $this->issueCsrfTokenAction->execute();
+
+        return response()
+            ->json(['csrf_token' => $issued['token']])
+            ->withCookie($issued['cookie']);
     }
 
     public function register(RegisterRequest $request): JsonResponse

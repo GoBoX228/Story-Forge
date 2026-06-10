@@ -12,10 +12,7 @@ class IssueTokensAction
 {
     public function execute(User $user): IssuedTokensData
     {
-        $accessTtl = AuthConfig::accessTokenTtlMinutes();
         $refreshTtl = AuthConfig::refreshTokenTtlMinutes();
-
-        $accessToken = $user->createToken('access', ['*'], now()->addMinutes($accessTtl));
 
         $refreshPlain = Str::random(64);
         RefreshToken::query()->create([
@@ -37,9 +34,6 @@ class IssueTokensAction
         );
 
         return new IssuedTokensData(
-            $accessToken->plainTextToken,
-            'Bearer',
-            $accessTtl * 60,
             $user,
             $cookie
         );

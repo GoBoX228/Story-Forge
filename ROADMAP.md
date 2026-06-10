@@ -2,9 +2,13 @@
 
 ## Latest Update
 
+- [x] Dependency Security Patch v1: frontend dependencies were updated to Next.js 16.2.7 with a PostCSS override, backend dependencies were updated to Laravel 12.61.1 / Symfony 7.4.13, and both `npm audit` and `composer audit` now report no advisories.
 - [x] Security Headers + CSP v2: production Caddy now sends a fuller app CSP for scripts/styles/images/fonts/connect/media/workers/forms/frames while keeping a separate strict `/storage/*` CSP; nonce-based CSP remains future hardening.
 - [x] File Storage Security v1: public uploads now require MIME and extension allowlists, unsafe double extensions are rejected, storage paths stay server-generated, and `/storage/*` receives stricter response headers.
 - [x] Rate Limits + Abuse Guardrails v1: auth endpoints now use endpoint-specific throttles, and asset upload, PDF export and report creation are rate-limited with regression coverage.
+- [x] Admin Surface Hardening v1: admin routes now have a dedicated throttle, moderation actions keep audit coverage, and admin audit log responses redact sensitive context keys before returning them to the UI.
+- [x] Cookie-First Auth v1: frontend bearer access tokens were removed; protected API calls now authenticate through the HttpOnly refresh cookie, and legacy `localStorage` tokens are still cleared on bootstrap/logout.
+- [x] Server/Deploy Hardening v1: Timeweb production runbook now covers SSH key-only login, UFW firewall, orphan dev container cleanup, backup/restore commands and production health checks.
 - [x] Character/Item Groups v1 + Inherited Asset Sets: characters and items now support one group per card; groups can own asset-set assignments, cards inherit those pools in portrait/token/item image pickers, and direct asset overrides remain intact.
 - [x] Documented asset assignment decision: cards may keep direct single-asset overrides, while asset sets act as reusable pools/filters; group-level asset inheritance is now implemented for character/item groups.
 - [x] Asset Sets Integration into Map Layers v1: map layer palettes now expose connected set context per active layer and show asset source set labels while keeping fallback to all matching asset kinds when no sets are connected.
@@ -22,8 +26,8 @@
 
 ## Текущий baseline
 
-- Frontend: Next.js 16.2.4, React 19.2, TypeScript, Tailwind CSS.
-- Backend: Laravel 12, PHP 8.2+, PostgreSQL, Laravel Sanctum.
+- Frontend: Next.js 16.2.7, React 19.2, TypeScript, Tailwind CSS.
+- Backend: Laravel 12.61.1, PHP 8.2+, PostgreSQL, Laravel Sanctum.
 - Инфраструктура: Docker Compose, PostgreSQL 16, Mailpit.
 - База данных пересобирается через чистый baseline миграций и `migrate:fresh`.
 - Backend legacy-сценарии `scenarios -> chapters -> blocks` удалены; сценарный модуль работает graph-first.
@@ -194,7 +198,8 @@
 - [ ] Постепенно разделить крупные frontend-редакторы на feature-модули.
 - [ ] Разделить крупный `GraphCanvas.tsx` на canvas layers/hooks и вынести graph orchestration из `ScenarioEditor.tsx` в более мелкие модули.
 - [ ] Разгрузить `App.tsx`: вынести navigation wiring/return context в отдельный shell/router слой.
-- [ ] Улучшить auth-модель: уйти от access token в `localStorage` к cookie-first Sanctum SPA flow.
+- [x] Remove frontend bearer access tokens and route protected API auth through the HttpOnly refresh cookie.
+- [x] Add a dedicated CSRF token handshake for cookie-authenticated write requests.
 - [x] Убрать старые lint warnings в `App.tsx`, `MapEditor.tsx`, `ProfileEditor.tsx`, `layout.tsx`.
 - [ ] Добавить e2e smoke-тесты для ключевых пользовательских сценариев.
 

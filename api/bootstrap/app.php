@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
             'active_user' => \App\Http\Middleware\EnsureUserIsActive::class,
+            'cookie_auth' => \App\Http\Middleware\AuthenticateWithRefreshCookie::class,
+            'csrf_cookie' => \App\Http\Middleware\ValidateCsrfHeader::class,
         ]);
 
         $middleware->api(prepend: [

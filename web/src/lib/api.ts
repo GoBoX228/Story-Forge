@@ -1,5 +1,10 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-const ACCESS_TOKEN_KEY = 'sf_access_token';
+const LEGACY_ACCESS_TOKEN_KEY = 'sf_access_token';
+const CSRF_HEADER_NAME = 'X-CSRF-TOKEN';
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+let csrfToken: string | null = null;
+let csrfTokenRequest: Promise<string> | null = null;
 
 const FIELD_LABELS: Record<string, string> = {
   email: 'Электронная почта',
@@ -79,19 +84,12 @@ export const localizeApiMessage = (raw: string): string => {
   return message;
 };
 
-export const getAccessToken = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(ACCESS_TOKEN_KEY);
-};
-
-export const setAccessToken = (token: string): void => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(ACCESS_TOKEN_KEY, token);
-};
-
 export const clearAccessToken = (): void => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+  clearCsrfToken();
+
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
+  }
 };
 
 const isFormDataBody = (body: BodyInit | null | undefined): body is FormData =>
@@ -105,10 +103,56 @@ const buildHeaders = (headers?: HeadersInit, body?: BodyInit | null): Headers =>
   if (!result.has('Content-Type') && !isFormDataBody(body)) {
     result.set('Content-Type', 'application/json');
   }
-  const token = getAccessToken();
-  if (token) {
-    result.set('Authorization', `Bearer ${token}`);
+  return result;
+};
+
+const requestMethod = (method?: string): string => (method ?? 'GET').toUpperCase();
+
+const isUnsafeRequest = (method?: string): boolean => UNSAFE_METHODS.has(requestMethod(method));
+
+const fetchCsrfToken = async (): Promise<string> => {
+  const response = await fetch(`${API_BASE_URL}/api/auth/csrf`, {
+    method: 'GET',
+    headers: buildHeaders(undefined, null),
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
   }
+
+  const data = await response.json().catch(() => null);
+  const token = typeof data?.csrf_token === 'string' ? data.csrf_token : '';
+  if (!token) {
+    throw new Error('CSRF token missing');
+  }
+
+  csrfToken = token;
+  return token;
+};
+
+export const clearCsrfToken = (): void => {
+  csrfToken = null;
+  csrfTokenRequest = null;
+};
+
+export const ensureCsrfToken = async (): Promise<string> => {
+  if (csrfToken) {
+    return csrfToken;
+  }
+
+  if (!csrfTokenRequest) {
+    csrfTokenRequest = fetchCsrfToken().finally(() => {
+      csrfTokenRequest = null;
+    });
+  }
+
+  return csrfTokenRequest;
+};
+
+export const withCsrfHeader = async (headers?: HeadersInit): Promise<Headers> => {
+  const result = new Headers(headers);
+  result.set(CSRF_HEADER_NAME, await ensureCsrfToken());
   return result;
 };
 
@@ -127,37 +171,55 @@ const parseError = async (response: Response): Promise<string> => {
   return `Ошибка запроса (${response.status})`;
 };
 
-export const refreshAccessToken = async (): Promise<boolean> => {
+export const refreshAccessToken = async (retryOnCsrf = true): Promise<boolean> => {
+  const headers = buildHeaders(undefined, null);
+  headers.set(CSRF_HEADER_NAME, await ensureCsrfToken());
+
   const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
     method: 'POST',
-    headers: buildHeaders(undefined, null),
+    headers,
     credentials: 'include',
   });
+
+  if (response.status === 419 && retryOnCsrf) {
+    clearCsrfToken();
+    return refreshAccessToken(false);
+  }
 
   if (!response.ok) {
     return false;
   }
 
   const data = await response.json().catch(() => null);
-  if (data?.access_token) {
-    setAccessToken(data.access_token);
-    return true;
-  }
-
-  return false;
+  return Boolean(data?.user);
 };
 
-export const apiRequest = async <T>(path: string, options: RequestInit = {}, retryOnAuth = true): Promise<T> => {
+export const apiRequest = async <T>(
+  path: string,
+  options: RequestInit = {},
+  retryOnAuth = true,
+  retryOnCsrf = true
+): Promise<T> => {
+  const headers = buildHeaders(options.headers, options.body ?? null);
+  if (isUnsafeRequest(options.method)) {
+    headers.set(CSRF_HEADER_NAME, await ensureCsrfToken());
+  }
+
   const response = await fetch(`${API_BASE_URL}/api${path}`, {
     ...options,
-    headers: buildHeaders(options.headers, options.body ?? null),
+    headers,
     credentials: 'include',
   });
+
+  if (response.status === 419 && retryOnCsrf) {
+    clearCsrfToken();
+    return apiRequest<T>(path, options, retryOnAuth, false);
+  }
 
   if (response.status === 401 && retryOnAuth) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      return apiRequest<T>(path, options, false);
+      return apiRequest<T>(path, options, false, retryOnCsrf);
     }
   }
 

@@ -465,11 +465,15 @@ docker compose down -v
 
 ### Production deploy
 
+Timeweb production deploy guide: [docs/deployment-timeweb.md](docs/deployment-timeweb.md). Server hardening checklist: [docs/server-hardening-timeweb.md](docs/server-hardening-timeweb.md).
+
 Для production используется отдельный compose-файл:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build --remove-orphans
 ```
+
+Production server hardening checklist is documented in [docs/server-hardening-timeweb.md](docs/server-hardening-timeweb.md).
 
 Production-сборка отличается от dev-окружения:
 
@@ -611,6 +615,8 @@ POST   /api/admin/broadcasts
 GET    /api/admin/logs
 ```
 
+Admin routes use a dedicated `/api/admin/*` throttle, admin audit log API responses redact sensitive context keys, and frontend bearer access tokens have been removed. Protected API calls authenticate through the HttpOnly refresh cookie, legacy `localStorage` tokens are cleared, and dependency security checks are currently clean for both `npm audit` and `composer audit`.
+
 ---
 
 ## Безопасность
@@ -630,13 +636,16 @@ GET    /api/admin/logs
 
 ### Важное направление переработки авторизации
 
-Текущая реализация использует access token на клиенте. В перспективе рекомендуется перейти к более чистой схеме:
+Текущая реализация больше не использует frontend bearer access token. Сессия восстанавливается и используется через HttpOnly refresh cookie; старые access token из `localStorage` удаляются при bootstrap/logout.
 
-- Laravel Sanctum SPA authentication;
-- HttpOnly cookie;
-- CSRF-защита;
-- SameSite cookie;
-- отказ от хранения access token в `localStorage`.
+Текущий auth hardening:
+
+- dedicated CSRF token handshake for cookie-authenticated write requests is implemented through `GET /api/auth/csrf`, the `X-CSRF-TOKEN` header and an HttpOnly CSRF signature cookie.
+
+Следующий слой hardening:
+
+- stricter session-cookie rotation/audit around sensitive auth actions;
+- periodic review of CORS and production security headers.
 
 ---
 
@@ -683,6 +692,7 @@ php artisan test
 
 ```bash
 docker compose exec api php artisan test
+docker compose exec api composer audit
 ```
 
 ### Frontend
@@ -703,7 +713,7 @@ npm ci
 npm run typecheck
 npm run lint
 npm run build
-npm audit --omit=dev --audit-level=high
+npm audit
 ```
 
 В перспективе можно добавить e2e-тесты через Playwright.

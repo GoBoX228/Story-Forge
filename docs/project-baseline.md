@@ -2,9 +2,13 @@
 
 ## Latest Update
 
+- Dependency Security Patch v1 is implemented: frontend dependencies are updated to Next.js 16.2.7 with a PostCSS override, backend dependencies are updated to Laravel 12.61.1 / Symfony 7.4.13, and both `npm audit` and `composer audit` report no advisories.
 - Security Headers + CSP v2 is implemented: production Caddy sends a fuller application CSP for default/script/style/image/font/connect/media/worker/form/frame policies, with a separate strict `/storage/*` CSP; inline scripts/styles are temporarily allowed for the current Next.js build until nonce-based CSP is introduced.
 - File Storage Security v1 is implemented: asset/profile uploads use MIME and extension allowlists, dangerous extensions and double extensions are rejected, storage paths are server-generated, and production `/storage/*` responses receive stricter headers through Caddy.
 - Rate Limits + Abuse Guardrails v1 is implemented: auth endpoints use endpoint-specific throttles; asset uploads, PDF exports and report creation have authenticated user-level limits; regression tests assert `429` responses for abuse paths.
+- Admin Surface Hardening v1 is implemented: `/api/admin/*` uses a dedicated admin throttle, user/content/broadcast moderation keeps audit log coverage, and audit log API responses redact sensitive context keys such as passwords, tokens, secrets, keys, cookies and traces.
+- Cookie-First Auth v1 is implemented: frontend bearer access tokens are removed, protected API calls authenticate through the HttpOnly refresh cookie, and legacy `localStorage` access tokens are cleared on bootstrap/logout.
+- Server/Deploy Hardening v1 is documented for Timeweb: production operations now have a runbook for SSH key-only login, UFW firewall, orphan container cleanup, PostgreSQL/storage backups and post-deploy health checks.
 - Character/Item Groups v1 + Inherited Asset Sets is implemented: character and item cards can belong to one group, groups can own asset-set assignments, card pickers inherit those pools, and direct single-asset overrides remain supported.
 - Standalone World UI is temporarily hidden from the sidebar and quick navigation. Backend/API/data for `locations`, `factions` and `events` remain available for existing links and future Atlas/World redesign.
 - Asset Sets Explorer UX Alignment v1 is implemented: reusable asset sets now follow the same explorer-style interaction model as folders, with double click open, inline rename, context menus and drag/drop membership management instead of persistent card action buttons.
@@ -24,8 +28,8 @@
 
 ## Технологический baseline
 
-- Frontend: Next.js 16.2.4, React 19.2, TypeScript 5.9, Tailwind CSS, lucide-react.
-- Backend: Laravel 12, PHP 8.2+, Laravel Sanctum, PostgreSQL.
+- Frontend: Next.js 16.2.7, React 19.2, TypeScript 5.9, Tailwind CSS, lucide-react.
+- Backend: Laravel 12.61.1, PHP 8.2+, Laravel Sanctum, PostgreSQL.
 - Export: Spatie Browsershot/Puppeteer для PDF.
 - Infrastructure: Docker Compose, PostgreSQL 16, Mailpit для dev; отдельный production compose с Caddy reverse proxy для Timeweb Cloud.
 
@@ -79,7 +83,6 @@
 - Friends/messages backend.
 - Notifications API.
 - Search/filter/pagination по всем основным спискам.
-- Cookie-only Sanctum SPA auth с CSRF без access token в `localStorage`.
 - Route-based frontend architecture поверх Next.js routes.
 
 ## Database baseline
@@ -118,7 +121,7 @@
 
 - Документация и UI местами описывают перспективные функции как уже существующие.
 - Frontend построен вокруг `App.tsx` и `activeView`, что усложнит рост маршрутов и модулей.
-- Текущая auth-модель использует access token в `localStorage`; это расходится с целевой моделью безопасности из ТЗ.
+- Auth no longer uses frontend bearer access tokens. Cookie-authenticated write requests use a dedicated CSRF handshake through `GET /api/auth/csrf`, `X-CSRF-TOKEN` and an HttpOnly CSRF signature cookie.
 - Социальная модель требует отдельной переработки: community должен стать слоем кружков/интересов, а не простой лентой публикаций.
 - Frontend build/typecheck зависят от установленного `node_modules`; при чистом checkout их нужно воспроизводить через `npm ci`.
 
@@ -140,7 +143,7 @@ npm ci
 npm run typecheck
 npm run lint
 npm run build
-npm audit --omit=dev --audit-level=high
+npm audit
 ```
 
 На момент выполнения baseline-задачи подтверждены:
@@ -149,15 +152,16 @@ npm audit --omit=dev --audit-level=high
 - `npm run typecheck`;
 - `npm run lint`;
 - `npm run build`;
-- `npm audit --omit=dev --audit-level=high`;
+- `npm audit`;
 - `docker compose --progress=plain build web`;
+- `composer audit`;
 - `docker compose exec -T api php artisan migrate:fresh --seed`;
 - SQLite `php artisan migrate:fresh` для чистой схемы;
 - `php artisan test`.
 
 После Graph API/UI задач подтверждены backend feature-тесты для graph endpoints, seeder-тесты для demo graph data, frontend `typecheck`, `lint`, `build` и API smoke под demo user. Typed graph contract v2 дополнительно покрывает допустимые node/transition types, type-specific `config`, transition `condition` и outcomes. Graph Rules / Validation v1 работает на frontend как warning-layer и не блокирует сохранение.
 
-После миграции на Next.js 16.2.4 проверка `npm audit --omit=dev --audit-level=high` не показывает runtime high/critical уязвимости. Полный `npm audit --omit=dev` все еще сообщает о moderate advisory во вложенном `next/node_modules/postcss`; автоматический fix предлагает breaking downgrade и не применяется.
+После Dependency Security Patch v1 проверки `npm audit` и `composer audit` не показывают известных advisory. Next.js обновлен до 16.2.7, Laravel до 12.61.1, Symfony runtime packages до 7.4.13, а PostCSS закреплен через npm override на безопасной версии.
 
 ## Текущий ближайший фокус
 

@@ -15,7 +15,7 @@ class AuthTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_register_returns_access_token_and_refresh_cookie(): void
+    public function test_register_returns_user_and_refresh_cookie_without_access_token(): void
     {
         $response = $this->postJson('/api/auth/register', [
             'name' => 'Test User',
@@ -26,11 +26,11 @@ class AuthTest extends TestCase
 
         $response->assertStatus(200)
             ->assertJsonStructure([
-                'access_token',
-                'token_type',
-                'expires_in',
                 'user' => ['id', 'name', 'email', 'role', 'status'],
             ])
+            ->assertJsonMissingPath('access_token')
+            ->assertJsonMissingPath('token_type')
+            ->assertJsonMissingPath('expires_in')
             ->assertCookie('refresh_token');
     }
 
@@ -60,7 +60,7 @@ class AuthTest extends TestCase
             ->assertJsonValidationErrors(['password']);
     }
 
-    public function test_login_returns_access_token(): void
+    public function test_login_returns_user_and_refresh_cookie_without_access_token(): void
     {
         $user = User::factory()->create([
             'password' => bcrypt('password123'),
@@ -73,11 +73,12 @@ class AuthTest extends TestCase
 
         $response->assertStatus(200)
             ->assertJsonStructure([
-                'access_token',
-                'token_type',
-                'expires_in',
                 'user' => ['id', 'name', 'email', 'role', 'status'],
-            ]);
+            ])
+            ->assertJsonMissingPath('access_token')
+            ->assertJsonMissingPath('token_type')
+            ->assertJsonMissingPath('expires_in')
+            ->assertCookie('refresh_token');
     }
 
     public function test_login_endpoint_is_rate_limited(): void
@@ -124,7 +125,7 @@ class AuthTest extends TestCase
         $this->assertSame('invalid', $reused['status']);
     }
 
-    public function test_logout_revokes_access_and_refresh_tokens(): void
+    public function test_logout_revokes_refresh_cookie_session(): void
     {
         $login = $this->postJson('/api/auth/register', [
             'name' => 'Logout User',
@@ -135,11 +136,10 @@ class AuthTest extends TestCase
 
         $login->assertStatus(200)->assertCookie('refresh_token');
 
-        $accessToken = $login->json('access_token');
         $refreshToken = $this->refreshCookieValue($login);
         $userId = $login->json('user.id');
 
-        $this->assertDatabaseHas('personal_access_tokens', [
+        $this->assertDatabaseMissing('personal_access_tokens', [
             'tokenable_id' => $userId,
         ]);
         $this->assertDatabaseHas('refresh_tokens', [
@@ -147,15 +147,16 @@ class AuthTest extends TestCase
             'token_hash' => hash('sha256', $refreshToken),
         ]);
 
-        $this->withToken($accessToken)
-            ->withCookie('refresh_token', $refreshToken)
+        $csrf = $this->csrfTokenPair();
+
+        $this->withCredentials()
+            ->withUnencryptedCookie('refresh_token', $refreshToken)
+            ->withUnencryptedCookie('csrf_token_signature', $csrf['signature'])
+            ->withHeader('X-CSRF-TOKEN', $csrf['token'])
             ->postJson('/api/auth/logout')
             ->assertStatus(200)
             ->assertCookieExpired('refresh_token');
 
-        $this->assertDatabaseMissing('personal_access_tokens', [
-            'tokenable_id' => $userId,
-        ]);
         $this->assertDatabaseMissing('refresh_tokens', [
             'user_id' => $userId,
         ]);
@@ -199,7 +200,7 @@ class AuthTest extends TestCase
             ->assertJsonPath('dev_code', null);
     }
 
-    public function test_two_factor_verify_returns_access_token_after_login_challenge(): void
+    public function test_two_factor_verify_returns_user_and_refresh_cookie_after_login_challenge(): void
     {
         $user = User::factory()->create([
             'password' => bcrypt('password123'),
@@ -222,11 +223,12 @@ class AuthTest extends TestCase
 
         $verify->assertStatus(200)
             ->assertJsonStructure([
-                'access_token',
-                'token_type',
-                'expires_in',
                 'user' => ['id', 'name', 'email', 'role', 'status'],
-            ]);
+            ])
+            ->assertJsonMissingPath('access_token')
+            ->assertJsonMissingPath('token_type')
+            ->assertJsonMissingPath('expires_in')
+            ->assertCookie('refresh_token');
     }
 
     public function test_two_factor_resend_is_rate_limited_and_then_succeeds(): void
@@ -619,6 +621,60 @@ class AuthTest extends TestCase
         ], ['Accept' => 'application/json'])->assertStatus(422);
     }
 
+    public function test_refresh_cookie_authenticates_protected_api_without_bearer_token(): void
+    {
+        $user = User::factory()->create();
+        $issuedTokens = app(\App\Domain\Auth\Actions\IssueTokensAction::class)->execute($user);
+        $refreshToken = $issuedTokens->refreshCookie->getValue();
+
+        $this->getJson('/api/me')->assertStatus(401);
+
+        $this->withCredentials()
+            ->withUnencryptedCookie('refresh_token', $refreshToken)
+            ->getJson('/api/me')
+            ->assertStatus(200)
+            ->assertJsonPath('id', $user->id);
+    }
+
+    public function test_refresh_endpoint_requires_csrf_header_with_refresh_cookie(): void
+    {
+        $user = User::factory()->create();
+        $issuedTokens = app(\App\Domain\Auth\Actions\IssueTokensAction::class)->execute($user);
+        $refreshToken = $issuedTokens->refreshCookie->getValue();
+
+        $this->withCredentials()
+            ->withUnencryptedCookie('refresh_token', $refreshToken)
+            ->postJson('/api/auth/refresh')
+            ->assertStatus(419)
+            ->assertCookieExpired('csrf_token_signature');
+
+        $csrf = $this->csrfTokenPair();
+
+        $this->withCredentials()
+            ->withUnencryptedCookie('refresh_token', $refreshToken)
+            ->withUnencryptedCookie('csrf_token_signature', $csrf['signature'])
+            ->withHeader('X-CSRF-TOKEN', $csrf['token'])
+            ->postJson('/api/auth/refresh')
+            ->assertStatus(200)
+            ->assertJsonStructure(['user'])
+            ->assertCookie('refresh_token');
+    }
+
+    public function test_csrf_endpoint_issues_token_and_http_only_signature_cookie(): void
+    {
+        $response = $this->getJson('/api/auth/csrf')
+            ->assertStatus(200)
+            ->assertJsonStructure(['csrf_token'])
+            ->assertCookie('csrf_token_signature');
+
+        $cookie = $response->getCookie('csrf_token_signature', false);
+
+        $this->assertNotEmpty($response->json('csrf_token'));
+        $this->assertNotNull($cookie);
+        $this->assertTrue($cookie->isHttpOnly());
+        $this->assertSame('lax', strtolower((string) $cookie->getSameSite()));
+    }
+
     public function test_user_auth_policy_allows_only_self_for_profile_actions(): void
     {
         $owner = User::factory()->create();
@@ -638,12 +694,27 @@ class AuthTest extends TestCase
 
     private function refreshCookieValue($response): string
     {
-        foreach ($response->headers->getCookies() as $cookie) {
-            if ($cookie->getName() === 'refresh_token') {
-                return $cookie->getValue();
-            }
+        $cookie = $response->getCookie('refresh_token', false);
+
+        if ($cookie) {
+            return $cookie->getValue();
         }
 
         $this->fail('Response does not contain refresh_token cookie.');
+    }
+
+    private function csrfTokenPair(): array
+    {
+        $response = $this->getJson('/api/auth/csrf')->assertStatus(200);
+        $cookie = $response->getCookie('csrf_token_signature', false);
+
+        if (!$cookie) {
+            $this->fail('Response does not contain csrf_token_signature cookie.');
+        }
+
+        return [
+            'token' => $response->json('csrf_token'),
+            'signature' => $cookie->getValue(),
+        ];
     }
 }

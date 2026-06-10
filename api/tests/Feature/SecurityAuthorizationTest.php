@@ -173,4 +173,51 @@ class SecurityAuthorizationTest extends TestCase
         $this->deleteJson("/api/admin/content/scenario/{$scenario->id}")
             ->assertStatus(403);
     }
+
+    public function test_cookie_authenticated_write_requests_require_csrf_header(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'csrf-user@example.com',
+            'status' => User::STATUS_ACTIVE,
+        ]);
+        $issuedTokens = app(\App\Domain\Auth\Actions\IssueTokensAction::class)->execute($user);
+        $refreshToken = $issuedTokens->refreshCookie->getValue();
+
+        $this->withCredentials()
+            ->withUnencryptedCookie('refresh_token', $refreshToken)
+            ->patchJson('/api/me', [
+                'name' => 'Blocked CSRF Update',
+                'email' => 'csrf-user@example.com',
+            ])
+            ->assertStatus(419)
+            ->assertCookieExpired('csrf_token_signature');
+
+        $csrf = $this->csrfTokenPair();
+
+        $this->withCredentials()
+            ->withUnencryptedCookie('refresh_token', $refreshToken)
+            ->withUnencryptedCookie('csrf_token_signature', $csrf['signature'])
+            ->withHeader('X-CSRF-TOKEN', $csrf['token'])
+            ->patchJson('/api/me', [
+                'name' => 'Allowed CSRF Update',
+                'email' => 'csrf-user@example.com',
+            ])
+            ->assertStatus(200)
+            ->assertJsonPath('name', 'Allowed CSRF Update');
+    }
+
+    private function csrfTokenPair(): array
+    {
+        $response = $this->getJson('/api/auth/csrf')->assertStatus(200);
+        $cookie = $response->getCookie('csrf_token_signature', false);
+
+        if (!$cookie) {
+            $this->fail('Response does not contain csrf_token_signature cookie.');
+        }
+
+        return [
+            'token' => $response->json('csrf_token'),
+            'signature' => $cookie->getValue(),
+        ];
+    }
 }
