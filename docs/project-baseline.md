@@ -3,7 +3,7 @@
 ## Latest Update
 
 - Dependency Security Patch v1 is implemented: frontend dependencies are updated to Next.js 16.2.7 with a PostCSS override, backend dependencies are updated to Laravel 12.61.1 / Symfony 7.4.13, and both `npm audit` and `composer audit` report no advisories.
-- Security Headers + CSP v2 is implemented: production Caddy sends a fuller application CSP for default/script/style/image/font/connect/media/worker/form/frame policies, with a separate strict `/storage/*` CSP; inline scripts/styles are temporarily allowed for the current Next.js build until nonce-based CSP is introduced.
+- Security Headers + CSP v2 is implemented: production Caddy sends a fuller application CSP for default/script/style/image/font/connect/media/worker/form/frame policies, with explicit external analytics allowlists and a separate strict `/storage/*` CSP; inline scripts/styles are temporarily allowed for the current Next.js build until nonce-based CSP is introduced.
 - File Storage Security v1 is implemented: asset/profile uploads use MIME and extension allowlists, dangerous extensions and double extensions are rejected, storage paths are server-generated, and production `/storage/*` responses receive stricter headers through Caddy.
 - Rate Limits + Abuse Guardrails v1 is implemented: auth endpoints use endpoint-specific throttles; asset uploads, PDF exports and report creation have authenticated user-level limits; regression tests assert `429` responses for abuse paths.
 - Admin Surface Hardening v1 is implemented: `/api/admin/*` uses a dedicated admin throttle, user/content/broadcast moderation keeps audit log coverage, and audit log API responses redact sensitive context keys such as passwords, tokens, secrets, keys, cookies and traces.

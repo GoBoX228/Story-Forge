@@ -475,6 +475,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build --r
 
 Production server hardening checklist is documented in [docs/server-hardening-timeweb.md](docs/server-hardening-timeweb.md).
 
+Production `.env.prod` must set both `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SITE_URL` to the real HTTPS domain so metadata, sitemap and browser API calls do not fall back to example/local URLs.
+
 Production-сборка отличается от dev-окружения:
 
 - Next.js запускается через production build, без `next dev` и HMR;
