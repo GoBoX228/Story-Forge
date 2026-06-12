@@ -3,6 +3,9 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
+  turbopack: {
+    root: __dirname
+  },
   experimental: {
     optimizePackageImports: ['lucide-react']
   }

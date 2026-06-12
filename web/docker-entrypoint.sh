@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-if [ ! -d node_modules ] || [ ! -d node_modules/tailwindcss ]; then
+if [ ! -x node_modules/.bin/next ]; then
   npm install
 fi
 

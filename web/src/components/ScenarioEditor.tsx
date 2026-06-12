@@ -164,12 +164,10 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
   onUpdateTag,
   onDeleteTag,
   onCreateMaterialLink,
-  onUpdateMaterialLink,
   onDeleteMaterialLink,
   onUpsertPublication,
   onUpdatePublication,
   onDeletePublication,
-  onOpenMaterialLink,
   initialScenarioId,
   onOpenEntityLink
 }) => {
@@ -214,10 +212,32 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
     [scenarioNodes, scenarioTransitions]
   );
 
-  const relatedCharacters = activeScenario
-    ? characters.filter((character) => character.scenarioId === activeScenario.id)
+  const activeScenarioEntityLinks = activeScenario
+    ? entityLinks[entityLinkAssignmentKey('scenario', activeScenario.id)] ?? []
     : [];
-  const relatedMaps = activeScenario ? maps.filter((map) => map.scenarioId === activeScenario.id) : [];
+  const activeScenarioCompositionLinks = activeScenarioEntityLinks.filter((link) => link.relationType === 'uses');
+  const compositionCharacterIds = new Set(
+    activeScenarioCompositionLinks
+      .filter((link) => link.targetType === 'character')
+      .map((link) => link.targetId)
+  );
+  const compositionMapIds = new Set(
+    activeScenarioCompositionLinks
+      .filter((link) => link.targetType === 'map')
+      .map((link) => link.targetId)
+  );
+  const compositionItemIds = new Set(
+    activeScenarioCompositionLinks
+      .filter((link) => link.targetType === 'item')
+      .map((link) => link.targetId)
+  );
+  const relatedCharacters = activeScenario
+    ? characters.filter((character) => character.scenarioId === activeScenario.id || compositionCharacterIds.has(character.id))
+    : [];
+  const relatedMaps = activeScenario
+    ? maps.filter((map) => map.scenarioId === activeScenario.id || compositionMapIds.has(map.id))
+    : [];
+  const relatedItems = activeScenario ? items.filter((item) => compositionItemIds.has(item.id)) : [];
   const visibleScenarios = data.filter((scenario) => {
     const matchesSearch = scenario.title.toLowerCase().includes(searchQuery.toLowerCase());
     const assignedTags = tagAssignments[tagAssignmentKey('scenario', scenario.id)] ?? [];
@@ -226,9 +246,6 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
   });
   const activeScenarioTags = activeScenario
     ? tagAssignments[tagAssignmentKey('scenario', activeScenario.id)] ?? []
-    : [];
-  const activeScenarioEntityLinks = activeScenario
-    ? entityLinks[entityLinkAssignmentKey('scenario', activeScenario.id)] ?? []
     : [];
   const activeScenarioPublication = activeScenario
     ? publicationAssignments[publicationAssignmentKey('scenario', activeScenario.id)]
@@ -470,35 +487,60 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
     }
   };
 
-  const toggleCharacterRelation = async (id: string) => {
+  const findScenarioCompositionLink = (targetType: EntityLinkTargetType, targetId: string): EntityLink | undefined =>
+    activeScenarioCompositionLinks.find((link) => link.targetType === targetType && link.targetId === targetId);
+
+  const removeLegacyScenarioRelation = async (targetType: EntityLinkTargetType, targetId: string) => {
     if (!activeScenario) return;
-    const target = characters.find((character) => character.id === id);
-    if (!target) return;
-    const nextScenarioId = target.scenarioId === activeScenario.id ? null : activeScenario.id;
-    try {
-      const updated = await apiRequest(`/characters/${id}`, {
+
+    if (targetType === 'character') {
+      const target = characters.find((character) => character.id === targetId);
+      if (target?.scenarioId !== activeScenario.id) return;
+
+      const updated = await apiRequest(`/characters/${targetId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ scenario_id: nextScenarioId })
+        body: JSON.stringify({ scenario_id: null })
       });
       const mapped = mapCharacterFromApi(updated);
       onUpdateCharacters(characters.map((character) => (character.id === mapped.id ? mapped : character)));
-    } catch {
-      // ignore
     }
-  };
 
-  const toggleMapRelation = async (id: string) => {
-    if (!activeScenario) return;
-    const target = maps.find((map) => map.id === id);
-    if (!target) return;
-    const nextScenarioId = target.scenarioId === activeScenario.id ? null : activeScenario.id;
-    try {
-      const updated = await apiRequest(`/maps/${id}`, {
+    if (targetType === 'map') {
+      const target = maps.find((map) => map.id === targetId);
+      if (target?.scenarioId !== activeScenario.id) return;
+
+      const updated = await apiRequest(`/maps/${targetId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ scenario_id: nextScenarioId })
+        body: JSON.stringify({ scenario_id: null })
       });
       const mapped = mapMapFromApi(updated);
       onUpdateMaps(maps.map((map) => (map.id === mapped.id ? mapped : map)));
+    }
+  };
+
+  const toggleScenarioComposition = async (targetType: EntityLinkTargetType, targetId: string) => {
+    if (!activeScenario || !['character', 'map', 'item'].includes(targetType)) return;
+
+    const existingLink = findScenarioCompositionLink(targetType, targetId);
+    const isLegacyCharacter = targetType === 'character'
+      && characters.some((character) => character.id === targetId && character.scenarioId === activeScenario.id);
+    const isLegacyMap = targetType === 'map'
+      && maps.some((map) => map.id === targetId && map.scenarioId === activeScenario.id);
+    const isAssigned = Boolean(existingLink || isLegacyCharacter || isLegacyMap);
+
+    try {
+      if (isAssigned) {
+        if (existingLink) await onDeleteMaterialLink(existingLink.id);
+        await removeLegacyScenarioRelation(targetType, targetId);
+        return;
+      }
+
+      await onCreateMaterialLink('scenario', activeScenario.id, {
+        targetType,
+        targetId,
+        relationType: 'uses',
+        label: null,
+      });
     } catch {
       // ignore
     }
@@ -892,11 +934,45 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
 
   const handleDeleteEntityLink = async (linkId: string) => {
     if (graphActionPending) return;
+    const deletedLink = selectedNodeEntityLinks.find((link) => link.id === linkId);
     setGraphActionPending(true);
     setGraphError(null);
     try {
       await deleteScenarioNodeEntityLink(linkId);
       setSelectedNodeEntityLinks((current) => current.filter((link) => link.id !== linkId));
+      if (selectedNode && deletedLink) {
+        const config = selectedNode.config as Record<string, unknown>;
+        const nextConfig = { ...config };
+        let shouldUpdateConfig = false;
+
+        if (deletedLink.targetType === 'character' && nextConfig.speaker_entity_id === deletedLink.targetId) {
+          delete nextConfig.speaker_entity_id;
+          shouldUpdateConfig = true;
+        }
+
+        if (deletedLink.targetType === 'item' && Array.isArray(nextConfig.reward_item_ids)) {
+          const currentRewardIds = nextConfig.reward_item_ids.filter((id): id is string => typeof id === 'string');
+          const nextRewardIds = currentRewardIds.filter((id) => id !== deletedLink.targetId);
+          if (nextRewardIds.length !== currentRewardIds.length) {
+            if (nextRewardIds.length > 0) {
+              nextConfig.reward_item_ids = nextRewardIds;
+            } else {
+              delete nextConfig.reward_item_ids;
+            }
+            shouldUpdateConfig = true;
+          }
+        }
+
+        if (shouldUpdateConfig) {
+          const updatedNode = await updateScenarioNode(selectedNode.id, {
+            type: selectedNode.type,
+            title: selectedNode.title ?? '',
+            content: selectedNode.content ?? '',
+            config: nextConfig as ScenarioNodeConfig
+          });
+          setScenarioNodes((current) => current.map((node) => (node.id === updatedNode.id ? updatedNode : node)));
+        }
+      }
       setGraphError(null);
     } catch (error) {
       setGraphError(getErrorMessage(error, 'Не удалось удалить связь узла'));
@@ -1079,6 +1155,9 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
             maps={maps}
             characters={characters}
             items={items}
+            scenarioCharacters={relatedCharacters}
+            scenarioMaps={relatedMaps}
+            scenarioItems={relatedItems}
             assets={assets}
             locations={locations}
             factions={factions}
@@ -1157,35 +1236,25 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
       >
         <ScenarioSettingsPanel
           scenario={activeScenario}
-          scenarios={data}
           campaigns={campaigns}
           characters={characters}
           maps={maps}
           items={items}
-          assets={assets}
-          locations={locations}
-          factions={factions}
-          events={events}
           relatedCharacters={relatedCharacters}
           relatedMaps={relatedMaps}
+          relatedItems={relatedItems}
           tags={tags}
           selectedTags={activeScenarioTags}
-          entityLinks={activeScenarioEntityLinks}
           publication={activeScenarioPublication}
           validationSummary={{ errorCount: graphValidation.errorCount, warningCount: graphValidation.warningCount }}
           onReplaceTags={(tagIds, newTags) => onReplaceTargetTags('scenario', activeScenario.id, tagIds, newTags)}
           onUpdateTag={onUpdateTag}
           onDeleteTag={onDeleteTag}
-          onCreateMaterialLink={onCreateMaterialLink}
-          onUpdateMaterialLink={onUpdateMaterialLink}
-          onDeleteMaterialLink={onDeleteMaterialLink}
           onUpsertPublication={onUpsertPublication}
           onUpdatePublication={onUpdatePublication}
           onDeletePublication={onDeletePublication}
-          onOpenMaterialLink={onOpenMaterialLink}
           onUpdateField={updateScenarioField}
-          onToggleCharacterRelation={toggleCharacterRelation}
-          onToggleMapRelation={toggleMapRelation}
+          onToggleComposition={toggleScenarioComposition}
           onExportPdf={handleExportPdf}
           embedded
         />

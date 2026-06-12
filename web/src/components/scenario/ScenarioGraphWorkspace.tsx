@@ -25,6 +25,41 @@ import { GraphInspector, GraphInspectorTab } from './GraphInspector';
 import { GraphNodeList } from './GraphNodeList';
 import { GraphValidationIssue, GraphValidationResult } from './graphValidation';
 
+interface GraphToolbarButtonProps {
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+const GraphToolbarButton: React.FC<GraphToolbarButtonProps> = ({
+  icon: Icon,
+  label,
+  active = false,
+  disabled = false,
+  onClick
+}) => (
+  <button
+    type="button"
+    title={label}
+    aria-label={label}
+    disabled={disabled}
+    onClick={onClick}
+    className={`w-9 h-9 flex items-center justify-center border transition-all ${
+      active
+        ? 'bg-[var(--col-red)] text-[var(--bg-main)] border-[var(--col-red)]'
+        : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--text-main)]/10'
+    } disabled:opacity-30 disabled:pointer-events-none`}
+  >
+    <Icon size={18} />
+  </button>
+);
+
+const GraphToolbarDivider: React.FC = () => (
+  <div className="w-full h-[1px] bg-[var(--border-color)] my-1" />
+);
+
 interface ScenarioGraphWorkspaceProps {
   nodes: ScenarioNode[];
   transitions: ScenarioTransition[];
@@ -48,6 +83,9 @@ interface ScenarioGraphWorkspaceProps {
   maps: MapData[];
   characters: Character[];
   items: Item[];
+  scenarioCharacters: Character[];
+  scenarioMaps: MapData[];
+  scenarioItems: Item[];
   assets: Asset[];
   locations: WorldLocation[];
   factions: Faction[];
@@ -112,6 +150,9 @@ export const ScenarioGraphWorkspace: React.FC<ScenarioGraphWorkspaceProps> = ({
   maps,
   characters,
   items,
+  scenarioCharacters,
+  scenarioMaps,
+  scenarioItems,
   assets,
   locations,
   factions,
@@ -140,135 +181,140 @@ export const ScenarioGraphWorkspace: React.FC<ScenarioGraphWorkspaceProps> = ({
   onUndo,
   onRedo,
   onCloseInspector
-}) => (
-  <div className="flex flex-1 min-h-0 flex-col">
-    <div className="h-12 shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-4 flex items-center justify-between gap-4">
-      <div className="flex items-center gap-2 min-w-0">
-        <Button variant="accent-red" size="sm" inverted={!nodeListOpen} onClick={onToggleNodeList}>
-          <ListTree size={13} /> УЗЛЫ
-        </Button>
-        <Button variant="accent-red" size="sm" inverted={!inspectorOpen} onClick={onToggleInspector}>
-          <SlidersHorizontal size={13} /> ИНСПЕКТОР
-        </Button>
+}) => {
+  const controlsDisabled = graphLoading || graphActionPending;
+
+  return (
+    <div className="flex flex-1 min-h-0 flex-col">
+      <div className="h-12 shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-4 flex items-center justify-between gap-4">
         <div className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">
-          {graphLoading ? 'ЗАГРУЗКА ГРАФА...' : `${nodes.length} УЗЛОВ / ${transitions.length} ПЕРЕХОДОВ`}
+          {graphLoading ? 'Загрузка графа...' : `${nodes.length} узлов / ${transitions.length} переходов`}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant={validation.hasErrors ? 'accent-red' : 'accent-yellow'}
+            size="sm"
+            inverted
+            onClick={() => {
+              onInspectorTabChange('validation');
+              if (!inspectorOpen) onToggleInspector();
+            }}
+          >
+            <AlertTriangle size={13} /> Проверка
+            {(validation.errorCount > 0 || validation.warningCount > 0) && (
+              <span className="ml-1 mono text-[9px] font-black">
+                {validation.errorCount > 0 ? validation.errorCount : validation.warningCount}
+              </span>
+            )}
+          </Button>
+          <Button
+            variant="accent-red"
+            size="sm"
+            inverted
+            disabled={controlsDisabled || !activeScenarioId}
+            onClick={() => activeScenarioId && onReloadGraph(activeScenarioId)}
+          >
+            <RefreshCw size={13} className={graphLoading ? 'animate-spin' : ''} /> Перезагрузить
+          </Button>
         </div>
       </div>
-      <Button
-        variant="accent-red"
-        size="sm"
-        inverted
-        disabled={graphLoading || graphActionPending || !canUndo}
-        onClick={onUndo}
-      >
-        <Undo2 size={13} /> UNDO
-      </Button>
-      <Button
-        variant="accent-red"
-        size="sm"
-        inverted
-        disabled={graphLoading || graphActionPending || !canRedo}
-        onClick={onRedo}
-      >
-        <Redo2 size={13} /> REDO
-      </Button>
-      <Button
-        variant={validation.hasErrors ? 'accent-red' : 'accent-yellow'}
-        size="sm"
-        inverted
-        onClick={() => {
-          onInspectorTabChange('validation');
-          if (!inspectorOpen) onToggleInspector();
-        }}
-      >
-        <AlertTriangle size={13} /> ПРОВЕРКА
-        {(validation.errorCount > 0 || validation.warningCount > 0) && (
-          <span className="ml-1 mono text-[9px] font-black">
-            {validation.errorCount > 0 ? validation.errorCount : validation.warningCount}
-          </span>
-        )}
-      </Button>
-      <Button
-        variant="accent-red"
-        size="sm"
-        inverted
-        disabled={graphLoading || graphActionPending || !activeScenarioId}
-        onClick={() => activeScenarioId && onReloadGraph(activeScenarioId)}
-      >
-        <RefreshCw size={13} className={graphLoading ? 'animate-spin' : ''} /> ПЕРЕЗАГРУЗИТЬ
-      </Button>
-    </div>
-    {graphError && (
-      <div className="shrink-0 border-b border-[var(--col-red)] bg-[var(--col-red)]/10 px-4 py-3 mono text-[10px] uppercase font-black text-[var(--col-red)]">
-        {graphError}
-      </div>
-    )}
-    <div className="relative flex flex-1 w-full min-h-0 overflow-hidden">
-      {nodeListOpen && (
-        <div className="absolute inset-y-0 left-0 z-30 flex shadow-2xl">
-          <GraphNodeList
-            nodes={nodes}
-            transitions={transitions}
-            activeNodeId={activeNodeId}
-            newNodeType={newNodeType}
-            loading={graphLoading}
-            disabled={graphActionPending}
-            onNewNodeTypeChange={onNewNodeTypeChange}
-            onCreateNode={onCreateNode}
-            onSelectNode={onSelectNode}
-          />
+      {graphError && (
+        <div className="shrink-0 border-b border-[var(--col-red)] bg-[var(--col-red)]/10 px-4 py-3 mono text-[10px] uppercase font-black text-[var(--col-red)]">
+          {graphError}
         </div>
       )}
-      <GraphCanvas
-        nodes={nodes}
-        transitions={transitions}
-        activeNodeId={activeNodeId}
-        activeTransitionId={activeTransitionId}
-        validation={validation}
-        disabled={graphLoading || graphActionPending}
-        onSelectNode={onSelectNode}
-        onSelectTransition={onSelectTransition}
-        onClearSelection={onClearSelection}
-        onMoveNode={onMoveNode}
-        onLayoutNodes={onLayoutNodes}
-        onCreateTransition={onCreateTransitionBetween}
-        onUpdateTransition={onUpdateTransition}
-        onDeleteNode={onDeleteNode}
-        onDeleteTransition={onDeleteTransition}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        onUndo={onUndo}
-        onRedo={onRedo}
-      />
-      <GraphInspector
-        isOpen={inspectorOpen}
-        activeTab={inspectorTab}
-        selectedNode={selectedNode}
-        nodes={nodes}
-        transitions={selectedNodeTransitions}
-        validation={validation}
-        entityLinks={entityLinks}
-        entityLinksLoading={entityLinksLoading}
-        busy={graphActionPending}
-        maps={maps}
-        characters={characters}
-        items={items}
-        assets={assets}
-        locations={locations}
-        factions={factions}
-        events={events}
-        onClose={onCloseInspector}
-        onTabChange={onInspectorTabChange}
-        onUpdateNode={onUpdateNode}
-        onDeleteNode={onDeleteNode}
-        onCreateEntityLink={onCreateEntityLink}
-        onDeleteEntityLink={onDeleteEntityLink}
-        onOpenEntityLink={onOpenEntityLink}
-        onCreateTransition={onCreateTransition}
-        onUpdateTransition={onUpdateTransition}
-        onDeleteTransition={onDeleteTransition}
-        onSelectValidationIssue={onSelectValidationIssue}
-      />
+      <div className="relative flex flex-1 w-full min-h-0 overflow-hidden">
+        <div className="z-30 flex w-14 shrink-0 flex-col items-center gap-1 border-r border-[var(--border-color)] bg-[var(--bg-surface)] px-2 py-4">
+          <GraphToolbarButton icon={ListTree} label="Узлы" active={nodeListOpen} onClick={onToggleNodeList} />
+          <GraphToolbarButton
+            icon={SlidersHorizontal}
+            label="Инспектор"
+            active={inspectorOpen}
+            onClick={onToggleInspector}
+          />
+          <GraphToolbarDivider />
+          <GraphToolbarButton
+            icon={Undo2}
+            label="Отменить"
+            disabled={controlsDisabled || !canUndo}
+            onClick={onUndo}
+          />
+          <GraphToolbarButton
+            icon={Redo2}
+            label="Повторить"
+            disabled={controlsDisabled || !canRedo}
+            onClick={onRedo}
+          />
+        </div>
+        {nodeListOpen && (
+          <div className="absolute inset-y-0 left-14 z-30 flex shadow-2xl">
+            <GraphNodeList
+              nodes={nodes}
+              transitions={transitions}
+              activeNodeId={activeNodeId}
+              newNodeType={newNodeType}
+              loading={graphLoading}
+              disabled={graphActionPending}
+              onNewNodeTypeChange={onNewNodeTypeChange}
+              onCreateNode={onCreateNode}
+              onSelectNode={onSelectNode}
+            />
+          </div>
+        )}
+        <GraphCanvas
+          nodes={nodes}
+          transitions={transitions}
+          activeNodeId={activeNodeId}
+          activeTransitionId={activeTransitionId}
+          validation={validation}
+          disabled={controlsDisabled}
+          onSelectNode={onSelectNode}
+          onSelectTransition={onSelectTransition}
+          onClearSelection={onClearSelection}
+          onMoveNode={onMoveNode}
+          onLayoutNodes={onLayoutNodes}
+          onCreateTransition={onCreateTransitionBetween}
+          onUpdateTransition={onUpdateTransition}
+          onDeleteNode={onDeleteNode}
+          onDeleteTransition={onDeleteTransition}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={onUndo}
+          onRedo={onRedo}
+        />
+        <GraphInspector
+          isOpen={inspectorOpen}
+          activeTab={inspectorTab}
+          selectedNode={selectedNode}
+          nodes={nodes}
+          transitions={selectedNodeTransitions}
+          validation={validation}
+          entityLinks={entityLinks}
+          entityLinksLoading={entityLinksLoading}
+          busy={graphActionPending}
+          maps={maps}
+          characters={characters}
+          items={items}
+          scenarioCharacters={scenarioCharacters}
+          scenarioMaps={scenarioMaps}
+          scenarioItems={scenarioItems}
+          assets={assets}
+          locations={locations}
+          factions={factions}
+          events={events}
+          onClose={onCloseInspector}
+          onTabChange={onInspectorTabChange}
+          onUpdateNode={onUpdateNode}
+          onDeleteNode={onDeleteNode}
+          onCreateEntityLink={onCreateEntityLink}
+          onDeleteEntityLink={onDeleteEntityLink}
+          onOpenEntityLink={onOpenEntityLink}
+          onCreateTransition={onCreateTransition}
+          onUpdateTransition={onUpdateTransition}
+          onDeleteTransition={onDeleteTransition}
+          onSelectValidationIssue={onSelectValidationIssue}
+        />
+      </div>
     </div>
-  </div>
-);
+  );
+};

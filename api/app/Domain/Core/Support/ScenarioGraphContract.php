@@ -143,6 +143,7 @@ class ScenarioGraphContract
             ],
             'dialog' => [
                 'speaker' => ['nullable', 'string', 'max:120'],
+                'speaker_entity_id' => ['nullable', 'integer'],
             ],
             'location' => [
                 'map_hint' => ['nullable', 'string', 'max:120'],
@@ -153,6 +154,8 @@ class ScenarioGraphContract
             ],
             'loot' => [
                 'item_hint' => ['nullable', 'string', 'max:120'],
+                'reward_item_ids' => ['nullable', 'array'],
+                'reward_item_ids.*' => ['integer'],
             ],
             'combat' => [
                 'encounter' => ['nullable', 'string', 'max:120'],

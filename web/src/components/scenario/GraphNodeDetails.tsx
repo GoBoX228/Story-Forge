@@ -34,6 +34,11 @@ const getConfigNumberString = (config: ScenarioNodeConfig, key: string): string 
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
 };
 
+const getConfigStringArray = (config: ScenarioNodeConfig, key: string): string[] => {
+  const value = (config as Record<string, unknown>)[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+};
+
 const EMPTY_CONFIG_VALUES: GraphNodeConfigValues = {
   scene: '',
   speaker: '',
@@ -72,6 +77,8 @@ interface GraphNodeDetailsProps {
   maps: MapData[];
   characters: Character[];
   items: Item[];
+  scenarioCharacters?: Character[];
+  scenarioItems?: Item[];
   assets?: Asset[];
   locations?: WorldLocation[];
   factions?: Faction[];
@@ -96,6 +103,8 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
   maps,
   characters,
   items,
+  scenarioCharacters = [],
+  scenarioItems = [],
   assets = [],
   locations = [],
   factions = [],
@@ -111,10 +120,12 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
   const [content, setContent] = useState('');
   const [scene, setScene] = useState('');
   const [speaker, setSpeaker] = useState('');
+  const [speakerEntityId, setSpeakerEntityId] = useState('');
   const [mapHint, setMapHint] = useState('');
   const [skill, setSkill] = useState('');
   const [dc, setDc] = useState('');
   const [itemHint, setItemHint] = useState('');
+  const [rewardItemIds, setRewardItemIds] = useState<string[]>([]);
   const [encounter, setEncounter] = useState('');
   const [configErrors, setConfigErrors] = useState<GraphNodeConfigErrors>({});
   const [targetType, setTargetType] = useState<ScenarioNodeEntityTargetType>('map');
@@ -128,10 +139,12 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
       setContent('');
       setScene('');
       setSpeaker('');
+      setSpeakerEntityId('');
       setMapHint('');
       setSkill('');
       setDc('');
       setItemHint('');
+      setRewardItemIds([]);
       setEncounter('');
       setConfigErrors({});
       return;
@@ -142,17 +155,19 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
     setContent(node.content ?? '');
     setScene(getConfigString(node.config, 'scene'));
     setSpeaker(getConfigString(node.config, 'speaker'));
+    setSpeakerEntityId(getConfigString(node.config, 'speaker_entity_id'));
     setMapHint(getConfigString(node.config, 'map_hint'));
     setSkill(getConfigString(node.config, 'skill'));
     setDc(getConfigNumberString(node.config, 'dc'));
     setItemHint(getConfigString(node.config, 'item_hint'));
+    setRewardItemIds(getConfigStringArray(node.config, 'reward_item_ids'));
     setEncounter(getConfigString(node.config, 'encounter'));
     setConfigErrors({});
   }, [node]);
 
   const configValues: GraphNodeConfigValues = {
     scene,
-    speaker,
+    speaker: speakerEntityId,
     mapHint,
     skill,
     dc,
@@ -160,10 +175,30 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
     encounter
   };
 
+  const linkedCharacters = useMemo(() => {
+    const linkedIds = new Set(
+      entityLinks
+        .filter((link) => link.targetType === 'character')
+        .map((link) => link.targetId)
+    );
+    const source = scenarioCharacters.length > 0 ? scenarioCharacters : characters;
+    return source.filter((character) => linkedIds.has(character.id));
+  }, [characters, entityLinks, scenarioCharacters]);
+
+  const linkedItems = useMemo(() => {
+    const linkedIds = new Set(
+      entityLinks
+        .filter((link) => link.targetType === 'item')
+        .map((link) => link.targetId)
+    );
+    const source = scenarioItems.length > 0 ? scenarioItems : items;
+    return source.filter((item) => linkedIds.has(item.id));
+  }, [entityLinks, items, scenarioItems]);
+
   const handleConfigFieldChange = (field: GraphNodeConfigField, value: string) => {
     const setters: Record<GraphNodeConfigField, (next: string) => void> = {
       scene: setScene,
-      speaker: setSpeaker,
+      speaker: setSpeakerEntityId,
       mapHint: setMapHint,
       skill: setSkill,
       dc: setDc,
@@ -209,6 +244,7 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
         setConfigErrors(errors);
         return null;
       }
+      if (speakerEntityId) return { speaker_entity_id: speakerEntityId };
       return speaker.trim() ? { speaker: speaker.trim() } : {};
     }
     if (type === 'location') {
@@ -225,6 +261,7 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
         setConfigErrors(errors);
         return null;
       }
+      if (rewardItemIds.length > 0) return { reward_item_ids: rewardItemIds };
       return itemHint.trim() ? { item_hint: itemHint.trim() } : {};
     }
     if (type === 'combat') {
@@ -425,6 +462,10 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
           values={node ? configValues : EMPTY_CONFIG_VALUES}
           errors={configErrors}
           disabled={busy}
+          linkedCharacters={linkedCharacters}
+          linkedItems={linkedItems}
+          rewardItemIds={rewardItemIds}
+          onRewardItemIdsChange={setRewardItemIds}
           onChange={handleConfigFieldChange}
         />
       </div>

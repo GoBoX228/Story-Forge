@@ -39,6 +39,9 @@ interface GraphInspectorProps {
   maps: MapData[];
   characters: Character[];
   items: Item[];
+  scenarioCharacters?: Character[];
+  scenarioMaps?: MapData[];
+  scenarioItems?: Item[];
   assets: Asset[];
   locations: WorldLocation[];
   factions: Faction[];
@@ -175,6 +178,8 @@ export const GraphInspector: React.FC<GraphInspectorProps> = ({
   maps,
   characters,
   items,
+  scenarioCharacters = [],
+  scenarioItems = [],
   assets,
   locations,
   factions,
@@ -242,6 +247,8 @@ export const GraphInspector: React.FC<GraphInspectorProps> = ({
               maps={maps}
               characters={characters}
               items={items}
+              scenarioCharacters={scenarioCharacters}
+              scenarioItems={scenarioItems}
               onUpdateNode={onUpdateNode}
               onDeleteNode={onDeleteNode}
               onCreateEntityLink={onCreateEntityLink}
@@ -256,10 +263,13 @@ export const GraphInspector: React.FC<GraphInspectorProps> = ({
               maps={maps}
               characters={characters}
               items={items}
+              scenarioCharacters={scenarioCharacters}
+              scenarioItems={scenarioItems}
               assets={assets}
               locations={locations}
               factions={factions}
               events={events}
+              selectedNodeType={selectedNode.type}
               busy={busy}
               onCreateEntityLink={onCreateEntityLink}
               onDeleteEntityLink={onDeleteEntityLink}

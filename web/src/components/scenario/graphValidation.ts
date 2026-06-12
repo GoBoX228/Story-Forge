@@ -31,6 +31,8 @@ const addIssue = (
 
 const normalizeLabel = (label?: string | null): string => (label ?? '').trim().toLowerCase();
 const isBlank = (value: unknown): boolean => typeof value !== 'string' || value.trim().length === 0;
+const isBlankIdArray = (value: unknown): boolean =>
+  !Array.isArray(value) || !value.some((item) => typeof item === 'string' && item.trim().length > 0);
 
 const configFieldMessage: Record<ScenarioNode['type'], string> = {
   description: 'Заполните поле сцены в настройках узла',
@@ -48,7 +50,8 @@ const hasIncompleteTypedConfig = (node: ScenarioNode): boolean => {
     case 'description':
       return isBlank('scene' in config ? config.scene : undefined);
     case 'dialog':
-      return isBlank('speaker' in config ? config.speaker : undefined);
+      return isBlank('speaker_entity_id' in config ? config.speaker_entity_id : undefined)
+        && isBlank('speaker' in config ? config.speaker : undefined);
     case 'location':
       return isBlank('map_hint' in config ? config.map_hint : undefined);
     case 'check': {
@@ -56,7 +59,8 @@ const hasIncompleteTypedConfig = (node: ScenarioNode): boolean => {
       return isBlank('skill' in config ? config.skill : undefined) || typeof dc !== 'number' || dc < 1 || dc > 40;
     }
     case 'loot':
-      return isBlank('item_hint' in config ? config.item_hint : undefined);
+      return isBlankIdArray('reward_item_ids' in config ? config.reward_item_ids : undefined)
+        && isBlank('item_hint' in config ? config.item_hint : undefined);
     case 'combat':
       return isBlank('encounter' in config ? config.encounter : undefined);
     default:

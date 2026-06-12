@@ -83,10 +83,28 @@ const findStartNode = (nodes: ScenarioNode[], transitions: ScenarioTransition[])
   return sortedNodes(nodes).find((node) => !incoming.has(node.id)) ?? sortedNodes(nodes)[0] ?? null;
 };
 
-const getConfigEntries = (type: ScenarioNode['type'], config: ScenarioNodeConfig): { label: string; value: string; icon: React.ReactNode }[] => {
+const getConfigEntries = (
+  type: ScenarioNode['type'],
+  config: ScenarioNodeConfig,
+  materials: { characters: Character[]; items: Item[] }
+): { label: string; value: string; icon: React.ReactNode }[] => {
   const source = config as Record<string, unknown>;
   const stringValue = (key: string): string => (typeof source[key] === 'string' ? String(source[key]) : '');
   const numberValue = (key: string): string => (typeof source[key] === 'number' ? String(source[key]) : '');
+  const stringArrayValue = (key: string): string[] =>
+    Array.isArray(source[key]) ? (source[key] as unknown[]).filter((item): item is string => typeof item === 'string') : [];
+
+  if (type === 'dialog' && stringValue('speaker_entity_id')) {
+    const speakerId = stringValue('speaker_entity_id');
+    const speakerName = materials.characters.find((character) => character.id === speakerId)?.name;
+    return [{ label: 'ГОВОРЯЩИЙ', value: speakerName || `Персонаж #${speakerId}`, icon: <MessageSquare size={14} /> }];
+  }
+
+  if (type === 'loot' && stringArrayValue('reward_item_ids').length > 0) {
+    const rewardNames = stringArrayValue('reward_item_ids')
+      .map((id) => materials.items.find((item) => item.id === id)?.name ?? `Предмет #${id}`);
+    return [{ label: 'НАГРАДА', value: rewardNames.join(', '), icon: <Package size={14} /> }];
+  }
 
   if (type === 'description') return [{ label: 'СЦЕНА', value: stringValue('scene'), icon: <ScrollText size={14} /> }];
   if (type === 'dialog') return [{ label: 'ГОВОРЯЩИЙ', value: stringValue('speaker'), icon: <MessageSquare size={14} /> }];
@@ -182,7 +200,7 @@ export const ScenarioPreviewPanel: React.FC<ScenarioPreviewPanelProps> = ({
     );
   }
 
-  const configEntries = getConfigEntries(currentNode.type, currentNode.config)
+  const configEntries = getConfigEntries(currentNode.type, currentNode.config, { characters, items })
     .filter((entry) => entry.value.trim().length > 0);
   const nodeMeta = NODE_TYPE_META[currentNode.type];
   const routeNodes = history

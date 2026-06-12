@@ -9,6 +9,7 @@ import {
   ScenarioNodeEntityLink,
   ScenarioNodeEntityLinkCreatePayload,
   ScenarioNodeEntityTargetType,
+  ScenarioNodeType,
   WorldEvent,
   WorldLocation
 } from '../../types';
@@ -40,10 +41,13 @@ interface GraphNodeEntityLinksProps {
   maps: MapData[];
   characters: Character[];
   items: Item[];
+  scenarioCharacters?: Character[];
+  scenarioItems?: Item[];
   assets: Asset[];
   locations: WorldLocation[];
   factions: Faction[];
   events: WorldEvent[];
+  selectedNodeType?: ScenarioNodeType;
   busy?: boolean;
   onCreateEntityLink: (payload: ScenarioNodeEntityLinkCreatePayload) => void | Promise<void>;
   onDeleteEntityLink: (linkId: string) => void | Promise<void>;
@@ -56,10 +60,13 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
   maps,
   characters,
   items,
+  scenarioCharacters = [],
+  scenarioItems = [],
   assets,
   locations,
   factions,
   events,
+  selectedNodeType,
   busy = false,
   onCreateEntityLink,
   onDeleteEntityLink,
@@ -68,6 +75,23 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
   const [targetType, setTargetType] = useState<ScenarioNodeEntityTargetType>('map');
   const [targetId, setTargetId] = useState('');
   const [linkLabel, setLinkLabel] = useState('');
+
+  const allowedTargetTypes = useMemo<ScenarioNodeEntityTargetType[]>(() => {
+    if (selectedNodeType === 'dialog') return ['character'];
+    if (selectedNodeType === 'loot') return ['item'];
+    return ENTITY_TARGET_TYPE_OPTIONS.map((option) => option.value);
+  }, [selectedNodeType]);
+
+  const targetTypeOptions = useMemo(
+    () => ENTITY_TARGET_TYPE_OPTIONS.filter((option) => allowedTargetTypes.includes(option.value)),
+    [allowedTargetTypes]
+  );
+
+  useEffect(() => {
+    if (!allowedTargetTypes.includes(targetType)) {
+      setTargetType(allowedTargetTypes[0] ?? 'map');
+    }
+  }, [allowedTargetTypes, targetType]);
 
   const targetOptions = useMemo(() => {
     const linkedIds = new Set(
@@ -83,13 +107,15 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
     }
 
     if (targetType === 'character') {
-      return characters
+      const source = selectedNodeType === 'dialog' ? scenarioCharacters : characters;
+      return source
         .filter((character) => !linkedIds.has(character.id))
         .map((character) => ({ value: character.id, label: character.name || `Персонаж ${character.id}` }));
     }
 
     if (targetType === 'item') {
-      return items
+      const source = selectedNodeType === 'loot' ? scenarioItems : items;
+      return source
         .filter((item) => !linkedIds.has(item.id))
         .map((item) => ({ value: item.id, label: item.name || `Предмет ${item.id}` }));
     }
@@ -115,11 +141,16 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
     return events
       .filter((event) => !linkedIds.has(event.id))
       .map((event) => ({ value: event.id, label: event.title || `Событие ${event.id}` }));
-  }, [assets, characters, entityLinks, events, factions, items, locations, maps, targetType]);
+  }, [assets, characters, entityLinks, events, factions, items, locations, maps, scenarioCharacters, scenarioItems, selectedNodeType, targetType]);
 
   useEffect(() => {
     setTargetId(targetOptions[0]?.value ?? '');
   }, [targetOptions]);
+
+  const visibleEntityLinks = useMemo(
+    () => entityLinks.filter((link) => allowedTargetTypes.includes(link.targetType)),
+    [allowedTargetTypes, entityLinks]
+  );
 
   const getEntityTitle = (link: ScenarioNodeEntityLink): string => {
     if (link.targetType === 'map') {
@@ -178,7 +209,7 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
         <Select
           value={targetType}
           onChange={(value) => setTargetType(value as ScenarioNodeEntityTargetType)}
-          options={ENTITY_TARGET_TYPE_OPTIONS}
+          options={targetTypeOptions}
           accentColor="var(--col-red)"
         />
         <Select
@@ -200,13 +231,13 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
         </Button>
       </div>
 
-      {entityLinks.length === 0 ? (
+      {visibleEntityLinks.length === 0 ? (
         <div className="border border-dashed border-[var(--border-color)] p-5 text-center mono text-[9px] uppercase text-[var(--text-muted)]">
           У узла пока нет связанных материалов
         </div>
       ) : (
         <div className="space-y-3">
-          {entityLinks.map((link) => (
+          {visibleEntityLinks.map((link) => (
             <div key={link.id} className="border border-[var(--border-color)] bg-[var(--input-bg)] p-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="mono text-[8px] uppercase text-[var(--text-muted)]">

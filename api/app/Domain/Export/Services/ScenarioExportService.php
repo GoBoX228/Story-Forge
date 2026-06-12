@@ -298,13 +298,15 @@ class ScenarioExportService
 
         return match ($node->type) {
             'description' => trim((string) ($config['scene'] ?? '')) === '',
-            'dialog' => trim((string) ($config['speaker'] ?? '')) === '',
+            'dialog' => trim((string) ($config['speaker_entity_id'] ?? '')) === ''
+                && trim((string) ($config['speaker'] ?? '')) === '',
             'location' => trim((string) ($config['map_hint'] ?? '')) === '',
             'check' => trim((string) ($config['skill'] ?? '')) === ''
                 || !is_numeric($config['dc'] ?? null)
                 || (int) $config['dc'] < 1
                 || (int) $config['dc'] > 40,
-            'loot' => trim((string) ($config['item_hint'] ?? '')) === '',
+            'loot' => (empty($config['reward_item_ids']) || !is_array($config['reward_item_ids']))
+                && trim((string) ($config['item_hint'] ?? '')) === '',
             'combat' => trim((string) ($config['encounter'] ?? '')) === '',
             default => false,
         };

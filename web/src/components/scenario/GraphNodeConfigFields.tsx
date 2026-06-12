@@ -1,5 +1,7 @@
 import React from 'react';
-import { ScenarioNodeType } from '../../types';
+import { X } from 'lucide-react';
+import { Character, Item, ScenarioNodeType } from '../../types';
+import { Select } from '../UI';
 
 export interface GraphNodeConfigValues {
   scene: string;
@@ -20,6 +22,10 @@ interface GraphNodeConfigFieldsProps {
   values: GraphNodeConfigValues;
   errors: GraphNodeConfigErrors;
   disabled?: boolean;
+  linkedCharacters?: Character[];
+  linkedItems?: Item[];
+  rewardItemIds?: string[];
+  onRewardItemIdsChange?: (ids: string[]) => void;
   onChange: (field: GraphNodeConfigField, value: string) => void;
 }
 
@@ -75,6 +81,10 @@ export const GraphNodeConfigFields: React.FC<GraphNodeConfigFieldsProps> = ({
   values,
   errors,
   disabled = false,
+  linkedCharacters = [],
+  linkedItems = [],
+  rewardItemIds = [],
+  onRewardItemIdsChange,
   onChange
 }) => {
   if (type === 'description') {
@@ -88,12 +98,25 @@ export const GraphNodeConfigFields: React.FC<GraphNodeConfigFieldsProps> = ({
   }
 
   if (type === 'dialog') {
-    return renderField(
-      { field: 'speaker', label: 'Говорящий', placeholder: 'Имя NPC или ключ персонажа' },
-      values,
-      errors,
-      disabled,
-      onChange
+    const options = linkedCharacters.map((character) => ({
+      value: character.id,
+      label: character.name || `Персонаж ${character.id}`
+    }));
+
+    return (
+      <div className="space-y-2">
+        <label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black">
+          Говорящий
+        </label>
+        <Select
+          value={values.speaker}
+          onChange={(value) => onChange('speaker', value)}
+          options={options}
+          placeholder="Сначала добавьте материал во вкладке Связи"
+          disabled={disabled || options.length === 0}
+          accentColor="var(--col-red)"
+        />
+      </div>
     );
   }
 
@@ -108,12 +131,47 @@ export const GraphNodeConfigFields: React.FC<GraphNodeConfigFieldsProps> = ({
   }
 
   if (type === 'loot') {
-    return renderField(
-      { field: 'itemHint', label: 'Награда', placeholder: 'Предмет, ресурс или подсказка награды' },
-      values,
-      errors,
-      disabled,
-      onChange
+    const selectedIds = new Set(rewardItemIds);
+    const options = linkedItems
+      .filter((item) => !selectedIds.has(item.id))
+      .map((item) => ({ value: item.id, label: item.name || `Предмет ${item.id}` }));
+    const selectedItems = rewardItemIds
+      .map((id) => linkedItems.find((item) => item.id === id))
+      .filter((item): item is Item => Boolean(item));
+
+    return (
+      <div className="space-y-3">
+        <label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black">
+          Награда
+        </label>
+        {selectedItems.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {selectedItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => onRewardItemIdsChange?.(rewardItemIds.filter((id) => id !== item.id))}
+                className="inline-flex items-center gap-2 border border-[var(--col-red)] px-3 py-2 mono text-[9px] uppercase font-black text-[var(--text-main)] disabled:opacity-40"
+              >
+                {item.name || `Предмет ${item.id}`}
+                <X size={12} className="text-[var(--col-red)]" />
+              </button>
+            ))}
+          </div>
+        )}
+        <Select
+          value=""
+          onChange={(value) => {
+            if (!value || selectedIds.has(value)) return;
+            onRewardItemIdsChange?.([...rewardItemIds, value]);
+          }}
+          options={options}
+          placeholder="Сначала добавьте материал во вкладке Связи"
+          disabled={disabled || options.length === 0}
+          accentColor="var(--col-red)"
+        />
+      </div>
     );
   }
 

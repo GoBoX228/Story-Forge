@@ -18,10 +18,10 @@ export type ScenarioNodeEntityTargetType = 'map' | 'character' | 'item' | 'asset
 
 export type ScenarioNodeConfig =
   | { scene?: string }
-  | { speaker?: string }
+  | { speaker?: string; speaker_entity_id?: string }
   | { map_hint?: string }
   | { skill?: string; dc?: number }
-  | { item_hint?: string }
+  | { item_hint?: string; reward_item_ids?: string[] }
   | { encounter?: string };
 
 export type ScenarioTransitionCondition =
