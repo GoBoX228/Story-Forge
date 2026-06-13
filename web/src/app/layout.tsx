@@ -3,24 +3,24 @@ import Image from 'next/image';
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://storyforge.example';
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://kuznica-istoriy.example';
 const gaId = process.env.NEXT_PUBLIC_GA_ID;
 const yandexMetrikaId = process.env.NEXT_PUBLIC_YANDEX_METRIKA_ID;
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'Story Forge — онлайн-конструктор сценариев для RPG',
-    template: '%s | Story Forge'
+    default: 'Кузница историй — онлайн-конструктор сценариев для RPG',
+    template: '%s | Кузница историй'
   },
   description:
-    'Story Forge: онлайн-конструктор сценариев для настольных RPG с редактором карт, базой персонажей и инструментами ведения кампаний.',
+    'Кузница историй: онлайн-конструктор сценариев для настольных RPG с редактором карт, базой персонажей и инструментами ведения кампаний.',
   keywords: [
     'онлайн конструктор сценариев',
     'настольные RPG',
     'редактор карт',
     'генератор персонажей',
-    'story forge'
+    'кузница историй'
   ],
   alternates: {
     canonical: '/'
@@ -29,14 +29,14 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'ru_RU',
     url: '/',
-    siteName: 'Story Forge',
-    title: 'Story Forge — онлайн-конструктор сценариев для RPG',
+    siteName: 'Кузница историй',
+    title: 'Кузница историй — онлайн-конструктор сценариев для RPG',
     description:
       'Создавайте сюжеты, карты и персонажей для настольных RPG в одном рабочем пространстве.'
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Story Forge — онлайн-конструктор сценариев для RPG',
+    title: 'Кузница историй — онлайн-конструктор сценариев для RPG',
     description:
       'Сервис для мастеров настольных RPG: сценарии, карты, персонажи и кампании в одном месте.'
   },

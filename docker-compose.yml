@@ -42,7 +42,7 @@
       - MAIL_SCHEME=${MAIL_SCHEME:-null}
       - MAIL_USERNAME=${MAIL_USERNAME:-null}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-null}
-      - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-no-reply@storyforge.local}
+      - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-no-reply@kuznica-istoriy.local}
       - MAIL_FROM_NAME=${MAIL_FROM_NAME:-StoryForge}
     depends_on:
       postgres:

@@ -455,14 +455,33 @@ export interface Faction {
   updatedAt?: string;
 }
 
-export interface WorldEvent {
+export interface Chronicle {
   id: string;
   userId: string;
   campaignId?: string | null;
   title: string;
   description?: string | null;
+  startLabel?: string | null;
+  endLabel?: string | null;
+  stepSize: number;
+  metadata: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorldEvent {
+  id: string;
+  userId: string;
+  campaignId?: string | null;
+  chronicleId?: string | null;
+  title: string;
+  description?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
+  position: number;
+  endPosition?: number | null;
+  startLabel?: string | null;
+  endLabel?: string | null;
   metadata: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
@@ -477,11 +496,28 @@ export interface WorldEntityPayload {
 
 export type WorldEntityUpdatePayload = Partial<WorldEntityPayload>;
 
+export interface ChroniclePayload {
+  title: string;
+  description?: string | null;
+  startLabel?: string | null;
+  endLabel?: string | null;
+  stepSize?: number | null;
+  campaignId?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export type ChronicleUpdatePayload = Partial<ChroniclePayload>;
+
 export interface WorldEventPayload {
   title: string;
   description?: string | null;
+  chronicleId?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
+  position?: number | null;
+  endPosition?: number | null;
+  startLabel?: string | null;
+  endLabel?: string | null;
   campaignId?: string | null;
   metadata?: Record<string, unknown>;
 }

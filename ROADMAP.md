@@ -1,219 +1,244 @@
-# Story Forge Roadmap
+# Кузница историй Roadmap
 
-## Latest Update
+## Назначение документа
 
-- [x] Dependency Security Patch v1: frontend dependencies were updated to Next.js 16.2.7 with a PostCSS override, backend dependencies were updated to Laravel 12.61.1 / Symfony 7.4.13, and both `npm audit` and `composer audit` now report no advisories.
-- [x] Security Headers + CSP v2: production Caddy now sends a fuller app CSP for scripts/styles/images/fonts/connect/media/workers/forms/frames while keeping a separate strict `/storage/*` CSP; nonce-based CSP remains future hardening.
-- [x] File Storage Security v1: public uploads now require MIME and extension allowlists, unsafe double extensions are rejected, storage paths stay server-generated, and `/storage/*` receives stricter response headers.
-- [x] Rate Limits + Abuse Guardrails v1: auth endpoints now use endpoint-specific throttles, and asset upload, PDF export and report creation are rate-limited with regression coverage.
-- [x] Admin Surface Hardening v1: admin routes now have a dedicated throttle, moderation actions keep audit coverage, and admin audit log responses redact sensitive context keys before returning them to the UI.
-- [x] Cookie-First Auth v1: frontend bearer access tokens were removed; protected API calls now authenticate through the HttpOnly refresh cookie, and legacy `localStorage` tokens are still cleared on bootstrap/logout.
-- [x] Server/Deploy Hardening v1: Timeweb production runbook now covers SSH key-only login, UFW firewall, orphan dev container cleanup, backup/restore commands and production health checks.
-- [x] Character/Item Groups v1 + Inherited Asset Sets: characters and items now support one group per card; groups can own asset-set assignments, cards inherit those pools in portrait/token/item image pickers, and direct asset overrides remain intact.
-- [x] Documented asset assignment decision: cards may keep direct single-asset overrides, while asset sets act as reusable pools/filters; group-level asset inheritance is now implemented for character/item groups.
-- [x] Asset Sets Integration into Map Layers v1: map layer palettes now expose connected set context per active layer and show asset source set labels while keeping fallback to all matching asset kinds when no sets are connected.
-- [x] Documented Tags privacy boundary: current `tags/taggables` are private library tags and must not automatically leak into publications, community payloads or PDF export.
-- [x] World UI temporarily hidden: sidebar entry and quick navigation into the standalone World editor are disabled until a full Atlas/World UX is designed; backend/API/data remain available for existing links.
-- [x] Asset Sets Explorer UX Alignment v1: asset sets now use explorer-style interaction with double click, inline rename, context menus and drag/drop membership instead of persistent action buttons.
-- [x] Asset Sets UX v2: the Assets section now has separate Files and Sets modes; sets can be created with a default name, renamed inline, opened to manage description/composition, populated from selected files or drag/drop, and edited without changing asset folder location.
-- [x] Asset Folders vs Asset Sets Domain Split v1: asset folders are now separate single-location library containers, while asset collections remain reusable multi-asset sets for maps, characters and items.
-- [x] Map Layers UX Stabilization v2: map resources panel now uses a simplified Photoshop-like layer list, active-layer properties live below the list, and resource palettes are conditional by layer type with asset collection filtering.
-- [x] Asset Collection Integration v1: asset collections can now be attached to maps, characters and items; map palettes and asset pickers filter by connected collections with fallback to all matching asset kinds.
-- [x] Asset Taxonomy + Collections v1: assets now have domain `kind`, reusable asset-set membership through collections, no campaign binding in asset UI/API, and pickers filter by semantic usage.
-- [x] Map Asset Layers v1: maps store `data.layers`, keep flattened `data.objects` for compatibility, support layer visibility/lock/opacity/reorder, background opacity, token size/rotation/opacity and lazy runtime conversion for old maps.
+`ROADMAP.md` фиксирует текущее состояние проекта, ближайший технический фокус и отложенные задачи. README и `docs/project-baseline.md` остаются справочными документами, а roadmap используется как рабочий трекер по статусам.
 
-Рабочая дорожная карта проекта. Этот файл фиксирует фактически выполненные шаги и ближайшие задачи разработки. README и `docs/project-baseline.md` остаются справочными документами, а этот файл используется как оперативный трекер.
+Технические названия файлов, классов, маршрутов, библиотек и команд не переводятся. UI-термины проекта используются на русском: `Атлас`, `Места`, `Организации`, `Хроника`, `События хроники`.
+
+## Легенда статусов
+
+- `Реализовано` - функциональность есть в коде и покрыта тестами, сборкой или ручной проверкой.
+- `Реализовано частично` - есть схема, API, UI-заготовка или часть workflow, но пользовательский сценарий еще не полный.
+- `В работе` - актуальный ближайший фокус.
+- `Запланировано` - принято к реализации позже.
+- `Отложено` - намеренно не входит в ближайший MVP.
+- `Устарело` - запись больше не соответствует архитектуре проекта.
+- `Отменено` - направление удалено из продукта или заменено другим подходом.
 
 ## Текущий baseline
 
-- Frontend: Next.js 16.2.7, React 19.2, TypeScript, Tailwind CSS.
-- Backend: Laravel 12.61.1, PHP 8.2+, PostgreSQL, Laravel Sanctum.
-- Инфраструктура: Docker Compose, PostgreSQL 16, Mailpit.
-- База данных пересобирается через чистый baseline миграций и `migrate:fresh`.
-- Backend legacy-сценарии `scenarios -> chapters -> blocks` удалены; сценарный модуль работает graph-first.
-- Frontend сценарного редактора переведен в graph-first режим без legacy-вкладки глав/блоков.
+- Frontend: Next.js 16.2.7, React 19.2, TypeScript, Tailwind CSS, ESLint Flat Config.
+- Backend: Laravel 12, PHP 8.2+, PostgreSQL 16, Laravel Sanctum.
+- Docker/dev: `docker-compose.yml`, PostgreSQL 16, Mailpit, frontend на `node:22-alpine`.
+- Docker/prod: `docker-compose.prod.yml`, Caddy reverse proxy, Next production build, Laravel production env, внутренние сервисы без публичных портов.
+- Auth: cookie-first API auth через HttpOnly refresh cookie, CSRF handshake `GET /api/auth/csrf` и `X-CSRF-TOKEN`.
+- Сценарии: legacy-модель `scenarios -> chapters -> blocks` удалена из активного UX; сценарный модуль работает graph-first через `scenario_nodes` и `scenario_transitions`.
+- Атлас: `Chronicle`, `WorldEvent`, `Location`, `Faction` остаются backend-терминами; в UI используются `Хроники`, `События хроники`, `Места`, `Организации`.
 
-## Выполнено
+Основание: `web/package.json`, `web/Dockerfile`, `web/Dockerfile.prod`, `docker-compose.yml`, `docker-compose.prod.yml`, `api/routes/api.php`, `api/database/migrations`, `web/src/components/Sidebar.tsx`, `web/src/components/WorldEditor.tsx`.
 
-- [x] Проведен технический аудит проекта и дополнительных материалов.
-- [x] Обновлен frontend stack до Next.js 16 / React 19.
-- [x] Добавлен ESLint Flat Config и заменен `next lint` на прямой ESLint CLI.
-- [x] Обновлены Docker-настройки frontend под Node 24 и `.next`.
-- [x] Добавлена production Docker-сборка v1 для Timeweb Cloud: Caddy, Next production build, Laravel production env, закрытые внутренние сервисы.
-- [x] Пересобрана схема БД в чистый baseline миграций.
-- [x] Удалены исторические `add_*`, `fix_*`, `migrate_*` и data-fix миграции.
-- [x] Добавлены baseline-таблицы для graph, world, assets, publications, exports, notifications и idempotency.
-- [x] Добавлен backend Graph Scenario API v1 для `scenario_nodes` и `scenario_transitions`.
-- [x] Добавлены backend-тесты для graph API и baseline-схемы.
-- [x] Выполнен `migrate:fresh --seed` в Docker PostgreSQL dev-базе.
-- [x] Frontend `ScenarioEditor` разделен на локальные компоненты сценарного модуля.
-- [x] Добавлен graph-first сценарный editor с CRUD UI для узлов и переходов.
-- [x] Добавлен `web/src/lib/scenarioApi.ts` для graph API и PDF export.
-- [x] Добавлены frontend-типы и мапперы для graph API.
-- [x] Добавлены demo graph seed-данные для существующих сценариев.
-- [x] README и `docs/project-baseline.md` синхронизированы после Graph API/UI v1.
-- [x] Зафиксирован typed graph contract v2 для типов узлов, переходов, `config` и `condition`.
-- [x] Добавлен Typed Node Editors v1: config graph-узлов редактируется через доменные поля по типам узлов.
-- [x] Добавлен Graph Entity Links v1 для связей graph-узлов с картами, персонажами и предметами.
-- [x] Добавлен Graph Canvas v1: визуальные узлы, SVG-переходы и drag-position через `position`.
-- [x] Добавлен Graph Canvas Navigation v2: pan, wheel zoom, кнопки масштаба и fit-to-view без изменений backend/API.
-- [x] Добавлен Graph Edge Editing v1: создание `linear` transition drag-to-connect от handle узла к другому узлу.
-- [x] Добавлен Graph Edge Editing v2: выбор transition на canvas, quick edit `type`/`label` и удаление перехода.
-- [x] Добавлен Graph Canvas Readability v1: edge anchors по границам узлов, side handles, label background и semantic node type styling.
-- [x] Добавлен Graph Canvas Node Presentation v2: resizable nodes через `position.width/height`, content preview, selected-only compact handles и уменьшенные arrowheads.
-- [x] Добавлен Graph Canvas Auto Layout v1: ручная команда упорядочивания узлов по уровням переходов с сохранением `position`.
-- [x] Добавлен Graph Auto Layout v2: layout учитывает размеры карточек, ветвления, типы переходов и best-effort уменьшение пересечений.
-- [x] Добавлен Scenario Play/Preview Mode v1: read-only прохождение graph-сценария по узлам и переходам.
-- [x] Добавлен Scenario Preview UX v2 / Play Mode v2: preview стал полноценным read-only play mode с typed-блоками, outcomes, маршрутом и связанными материалами.
-- [x] Добавлен Graph Canvas Minimap v1: обзор узлов, viewport frame и click/drag навигация по canvas.
-- [x] Добавлен Graph Canvas Navigation Panel v2: minimap и controls вынесены в единый UI overlay, auto-layout получил направления слева направо и сверху вниз.
-- [x] Переработан Graph Workspace Layout v2: canvas стал основной областью, список узлов и inspector вынесены в overlay, параметры сценария открываются в modal.
-- [x] Добавлены Quick Links From Graph Nodes v1/v2: переходы из связанного узла к связанным материалам с возвратом к сценарию.
-- [x] Добавлен Graph Canvas Edge Labels v1: inline-редактирование label перехода прямо на canvas.
-- [x] Добавлен Graph Edge Routing v1: вычисляемые direct routes для переходов без изменений backend/API.
-- [x] Добавлен Graph Edge Ports v1: separated input/output ports для входящих и исходящих переходов.
-- [x] Добавлен Graph Canvas Selection UX v1: clear selection, Escape/Delete/Backspace shortcuts и удаление выбранных node/transition с canvas.
-- [x] Добавлен Graph Canvas Undo/Redo v1: frontend-only history для move/resize/layout и transition create/update/delete.
-- [x] Добавлен Graph Rules / Validation v1: frontend-only предупреждения по структуре graph-сценария без блокировки сохранения.
-- [x] Добавлен Graph Validation v2: frontend-only preflight с errors/warnings, typed-field warnings и проверками check-outcomes.
-- [x] Добавлен Export Graph Scenario v1: PDF export использует graph-узлы/переходы как runbook.
-- [x] Graph Scenario MVP smoke пройден: graph editor, preview/play mode, validation и PDF export проверены вручную.
-- [x] Добавлен Assets module v1: загрузка, хранение, фильтрация, редактирование и удаление ассетов через public disk.
-- [x] Добавлен Asset Integration v1: ассеты назначаются как портреты/токены персонажей, изображения предметов, фон карты и token palette карты через `entity_links.metadata.role`.
-- [x] Добавлен Asset Taxonomy + Collections v1: ассеты разделены на media `type` и доменный `kind`, поддерживают наборы без привязки к кампаниям, а pickers фильтруют подходящие назначения.
-- [x] Добавлен Asset Collection Integration v1: наборы ассетов подключаются к картам, персонажам и предметам, а палитры/пикеры фильтруют ассеты по выбранным наборам и `kind`.
-- [x] Добавлен World module v1 backend/API для локаций, фракций и событий; standalone UI временно скрыт до полноценной переработки Atlas/World UX.
-- [x] Добавлен Tags module v1: пользовательские теги, polymorphic assignment и фильтры в основных редакторах.
-- [x] Добавлен Universal Entity Links v2: `entity_links` стали общим слоем связей между сценариями, картами, персонажами, предметами, ассетами и world-сущностями.
-- [x] Добавлен Graph Node Links Upgrade v2: graph-узлы теперь связываются с картами, персонажами, предметами, ассетами, локациями, фракциями и событиями.
-- [x] Выполнен Scenario Frontend Legacy Deprecation + Refactor v1: frontend legacy-редактор глав/блоков удален, сценарный UX стал graph-first.
-- [x] Выполнен Project Cleanup Audit + Safe Cleanup v1: актуальные документы синхронизированы с graph-only baseline, сгенерированный tsbuildinfo удален, frontend lint warnings закрыты.
+## Реализованные возможности
 
-## Ближайший фокус
+### Инфраструктура и безопасность
 
-Следующий крупный фокус: публикационный workflow, comments/collaboration либо более глубокая работа с asset layers/tokens.
+- `Реализовано` Production Docker Deployment v1 для Timeweb Cloud: Caddy, HTTPS, production-сборки web/api, закрытые внутренние сервисы.
+  Основание: `docker-compose.prod.yml`, `deploy/Caddyfile`, `api/Dockerfile.prod`, `web/Dockerfile.prod`, `api/docker-entrypoint.prod.sh`, `docs/deployment-timeweb.md`.
+- `Реализовано` Server/Deploy Hardening v1: SSH key-only, UFW, cleanup dev-контейнеров, backup/restore и production health checks.
+  Основание: `docs/server-hardening-timeweb.md`.
+- `Реализовано` Dependency Security Patch v1: обновлены frontend/backend зависимости, проверки `npm audit` и `composer audit` используются как security baseline.
+  Основание: `web/package.json`, `api/composer.lock`, `docs/project-baseline.md`.
+- `Реализовано` Security Headers + CSP v2 и File Storage Security v1: Caddy отдает security headers, `/storage/*` получает строгую CSP, загрузки проходят MIME/extension allowlist.
+  Основание: `deploy/Caddyfile`, upload requests/services, `SecurityAuthorizationTest`.
+- `Реализовано` Rate Limits + Abuse Guardrails v1: endpoint-specific throttles для auth, asset upload, PDF export, reports и admin.
+  Основание: `AppServiceProvider::RateLimiter`, `api/routes/api.php`, `AuthTest`, `SecurityAuthorizationTest`.
+- `Реализовано` CSRF Token Handshake v1: cookie-authenticated write requests требуют CSRF header.
+  Основание: `IssueCsrfTokenAction`, `ValidateCsrfHeader`, `GET /api/auth/csrf`, `AuthTest`, `SecurityAuthorizationTest`.
 
-## Фокус до MVP сценарного редактора
+### Auth, Admin и профиль
 
-Эти пять задач считаются основным треком. Мелкая полировка canvas вынесена ниже в отдельный backlog и не должна перебивать этот список без явного решения.
+- `Реализовано` Cookie-First Auth v1: frontend bearer access tokens убраны, protected API работает через HttpOnly refresh cookie.
+  Основание: `api/routes/api.php`, `web/src/lib/api.ts`, `AuthTest`.
+- `Реализовано` 2FA, password reset и профиль пользователя.
+  Основание: `TwoFactorChallenge`, `TwoFactorRecoveryCode`, auth controllers/services, `AuthTest`.
+- `Реализовано` Admin Surface Hardening v1: admin throttle, audit coverage, redaction sensitive context keys.
+  Основание: `/api/admin/*`, `AdminAccessTest`, `AdminModuleTest`.
 
-1. [x] Graph Auto Layout v2: улучшить ручное упорядочивание графа с учетом размеров узлов, ветвлений, типов переходов и уменьшения пересечений.
-2. [x] Typed Node Editors v1: заменить технические/JSON-поля основными typed forms для `description`, `dialog`, `location`, `check`, `loot`, `combat`.
-3. [x] Scenario Play/Preview Mode v1: добавить режим прохождения graph-сценария по узлам и переходам без изменения редакторского canvas.
-3.1. [x] Scenario Preview UX v2 / Play Mode v2: усилить preview до полноценного read-only play mode.
-4. [x] Graph Validation v2: усилить проверки сценария до publish/export-ready уровня, не ломая текущую frontend-only validation v1.
-5. [x] Export Graph Scenario v1: научить экспорт учитывать graph-структуру узлов/переходов.
-6. [x] Graph Scenario MVP smoke: вручную проверить полный путь graph editor -> preview -> validation -> PDF export.
+### Базовые Материалы
 
-### 1. Стабилизировать Graph UI
+- `Реализовано` CRUD кампаний, сценариев, карт, персонажей, предметов, тегов и универсальных связей.
+  Основание: `api/routes/api.php`, `CoreCrudTest`, `CampaignTest`, `TagModuleTest`, `UniversalEntityLinkTest`.
+- `Реализовано` Tags module v1: приватные пользовательские теги через polymorphic assignment и фильтры в редакторах.
+  Основание: `TagController`, `TagPicker.tsx`, `TagModuleTest`.
+- `Реализовано` Universal Entity Links v2: общий слой связей `entity_links` между материалами.
+  Основание: `EntityLinkController`, `EntityLinksPanel.tsx`, `UniversalEntityLinkTest`.
 
-- [x] Вручную пройти сценарий создания/редактирования/удаления узлов и переходов в браузере.
-- [x] Проверить, что graph state корректно перезагружается после повторного входа в сценарий.
-- [x] Вручную проверить Graph Canvas v1: выбор узла, drag-position, сохранение позиции после reload.
-- [x] Проверить Graph Canvas Navigation v2: pan, wheel zoom, zoom controls, fit-to-view и drag узлов при масштабе.
-- [x] Проверить Graph Edge Editing v1: drag от handle, drop на пустое место, drop на узел, создание перехода при zoom/pan.
-- [x] Проверить Graph Edge Editing v2: выбор линии, quick edit, удаление transition и отсутствие конфликтов с pan/drag.
-- [x] Проверить Graph Canvas Readability v1: направление стрелок, handles со всех сторон, labels и различимость типов узлов.
-- [x] Проверить Graph Canvas Node Presentation v2: resize узлов, content preview, selected-only handles и уменьшенные arrowheads.
-- [x] Проверить Graph Canvas Auto Layout v1: упорядочивание, сохранение позиций после reload и совместимость с resize/content preview.
-- [x] Проверить Graph Canvas Minimap v1: отображение узлов, viewport frame, click/drag навигацию и обновление после pan/zoom/auto-layout.
-- [x] Проверить Graph Canvas Navigation Panel v2: minimap справа сверху, controls под ним и оба направления auto-layout.
-- [x] Проверить Graph Canvas Edge Labels v1: inline-редактирование label, сохранение по Enter/blur и отмена по Escape.
-- [x] Проверить Graph Edge Routing v1: direct routes, labels/quick panel на routed path, parallel/reverse transitions и совместимость с pan/zoom/resize/drag-to-connect.
-- [x] Проверить Graph Edge Ports v1: входящие переходы приходят в left/top, исходящие выходят из right/bottom, plus-handles доступны только справа и снизу.
-- [x] Проверить Graph Canvas Selection UX v1: Escape/empty click clear selection, Delete/Backspace удаляют выбранный transition или node без конфликтов с input/textarea.
-- [x] Проверить Graph Canvas Undo/Redo v1: Ctrl/Cmd+Z, Ctrl+Y/Cmd+Shift+Z и toolbar UNDO/REDO для позиций, layout и transitions.
-- [x] Проверить Graph Rules / Validation v1: счетчик warnings, вкладку проверки, выбор issue и подсветку проблемных узлов/переходов.
-- [x] Проверить Graph Validation v2: счетчики errors/warnings, группировку issues, canvas-подсветку и выбор проблемного узла/перехода.
-- [x] Проверить Graph Scenario MVP end-to-end: demo seed, graph editor, preview/play mode, validation и graph-aware PDF export.
-- [x] Удалить legacy-вкладку глав и блоков из frontend после перехода на graph-first UX.
-- [x] Убрать постоянные боковые панели graph-вкладки, чтобы не сжимать canvas.
-- [x] Добавить более явные UI-состояния ошибок для graph операций.
-- [x] Уточнить UX для JSON-полей `config` и `condition`.
-- [x] Проверить typed graph API smoke после `migrate:fresh --seed`: demo login, graph reload, typed node config, typed transitions, invalid `dc = 422`.
+### Сценарный Graph-Редактор
 
-### 2. Привести demo seed к текущей модели
+- `Реализовано` Graph Scenario API v1: CRUD `scenario_nodes` и `scenario_transitions`.
+  Основание: `ScenarioNodeController`, `ScenarioTransitionController`, `ScenarioGraphTest`.
+- `Реализовано` graph-first frontend editor: canvas, drag/resize узлов, edge editing, quick edit, inline labels, minimap, pan/zoom/fit, undo/redo, validation и preview/play mode.
+  Основание: `ScenarioEditor.tsx`, `GraphCanvas.tsx`, `graphValidation.ts`, `ScenarioPreviewPanel.tsx`.
+- `Реализовано` Graph Canvas Free-Side Ports v1: стороны входа/выхода переходов выбираются геометрически, а не фиксируются как `input = left/top` и `output = right/bottom`.
+  Основание: `GraphCanvas.tsx::choosePortSides`.
+- `Реализовано` Graph Visual Metadata Contract v1 и manual waypoints: visual routes хранятся в `scenario_transitions.metadata.visual`, а gameplay `condition` не смешивается с visual data.
+  Основание: `ScenarioTransitionStoreRequest`, `ScenarioTransitionUpdateRequest`, `GraphCanvas.tsx`, `ScenarioGraphTest`.
+- `Реализовано` Scenario Composition Links v1: состав сценария управляется через поля `Персонажи`, `Карты`, `Предметы` поверх `entity_links` с `relationType='uses'`.
+  Основание: `ScenarioSettingsPanel.tsx`, `ScenarioEditor.tsx`.
+- `Реализовано` Graph Node Typed Material Links v1: `dialog` выбирает говорящего из привязанных персонажей, `loot` выбирает награды из привязанных предметов.
+  Основание: `GraphNodeEntityLinks.tsx`, `GraphNodeDetails.tsx`, `ScenarioGraphContract.php`, `ScenarioExportService.php`.
+- `Реализовано` Export Graph Scenario v1: PDF export строится по graph-узлам и переходам.
+  Основание: `ExportController`, `ScenarioExportService`, `ReportBroadcastExportTest`.
 
-- [x] Добавить seed-данные для `scenario_nodes` и `scenario_transitions`.
-- [x] Связать demo graph nodes с существующими demo-сценариями.
-- [x] Удалить legacy chapters/blocks из seed после перехода на graph-first baseline.
-- [x] Проверить сидирование после `migrate:fresh --seed`.
+### Карты
 
-### 3. Доработать graph domain model
+- `Реализовано` Map editor с canvas-инструментами, слоями, undo/redo, zoom, ресурсной панелью и asset-set фильтрацией.
+  Основание: `MapEditor.tsx`, `MapStoreRequest`, `MapUpdateRequest`, `CoreCrudTest`.
+- `Реализовано` Map Asset Layers v1 и Map Layers UX Stabilization v2: `data.layers`, совместимый `data.objects`, visibility/lock/opacity/reorder, ресурсы по типу слоя.
+  Основание: `MapEditor.tsx`, `web/src/lib/mappers.ts`.
+- `Реализовано` Asset Sets Integration into Map Layers v1: слои карт учитывают подключенные наборы ассетов и fallback на все подходящие ассеты.
+  Основание: `MapEditor.tsx`, `AssetCollectionTargetPicker.tsx`.
 
-- [x] Зафиксировать список типов узлов и их обязательные/опциональные поля.
-- [x] Зафиксировать структуру `config` по типам узлов.
-- [x] Зафиксировать структуру `condition` для переходов.
-- [x] Добавить валидацию graph payload глубже, чем текущая проверка JSON object.
-- [x] Добавить frontend-only проверки graph-структуры и предупреждения по потенциально проблемным переходам.
-- [ ] Добавить backend/publish/export-blocking проверки невозможных переходов, если они нужны по продуктовой логике.
+### Ассеты и наборы
 
-### 4. Интегрировать graph с остальными сущностями
+- `Реализовано` Assets module v1: загрузка, хранение, фильтрация, редактирование и удаление ассетов.
+  Основание: `AssetController`, `AssetService`, `AssetModuleTest`, `AssetsEditor.tsx`.
+- `Реализовано` Asset Folders vs Asset Sets Domain Split v1: папки отвечают за расположение файла, наборы остаются переиспользуемыми пакетами.
+  Основание: `AssetFolderController`, `AssetCollectionController`, `AssetService`, `AssetsEditor.tsx`.
+- `Реализовано` Asset Sets UX v2 и Asset Sets Explorer UX Alignment v1: режимы `Файлы`/`Наборы`, double click, inline rename, context menu и drag/drop membership.
+  Основание: `AssetsEditor.tsx`, `AssetModuleTest`.
+- `Реализовано` Asset Taxonomy + Collections v1 и Asset Collection Integration v1: `type`, `kind`, `asset_collections`, `asset_collection_items`, `asset_collection_targets`.
+  Основание: `AssetCollectionService`, `AssetCollectionTargetService`, `AssetModuleTest`, `SchemaBaselineTest`.
 
-- [x] Связать узлы сценария с картами, персонажами, предметами, ассетами и world-сущностями.
-- [x] Использовать `entity_links` для связей graph-узлов с материалами.
-- [x] Добавить UI просмотра связанных сущностей внутри узла.
-- [x] Добавить быстрые переходы из узла к связанным материалам.
+### Персонажи, предметы и группы
 
-## Следующие крупные задачи
+- `Реализовано` Character/Item Groups v1: карточка принадлежит максимум одной группе, удаление группы не удаляет карточки.
+  Основание: `CharacterGroupController`, `ItemGroupController`, `CharacterItemGroupTest`.
+- `Реализовано` Inherited Asset Sets: группы персонажей/предметов подключают наборы ассетов, карточки наследуют пул, direct asset override остается приоритетным.
+  Основание: `AssetCollectionTargetService`, `CharactersEditor.tsx`, `ItemsEditor.tsx`, `CharacterItemGroupTest`.
+- `Реализовано` Asset Usage Picker: portrait/token/item image выбираются из подходящих ассетов и наследованных наборов.
+  Основание: `AssetUsagePicker.tsx`, `CharactersEditor.tsx`, `ItemsEditor.tsx`.
 
-- [x] Assets module v1: загрузка и реестр файлов/изображений/токенов.
-- [x] Asset Integration v1: подключить ассеты к персонажам, предметам и картам.
-- [x] Asset Taxonomy + Collections v1: наборы ассетов, доменные типы и removal campaign binding из asset UX/API.
-- [x] Asset Collection Integration v1: подключение наборов ассетов к картам, персонажам и предметам.
-- [x] Asset Sets Integration into Map Layers v1: layer-aware отображение подключенных наборов в карте и source labels у ассетов в background/tile/token палитрах.
-- [x] World module v1: locations, factions, events backend/API; standalone UI временно скрыт.
-- [x] Tags module v1: общие теги и polymorphic assignment.
-- [x] Universal Entity Links v2: общий API/UI связей между материалами.
-- [x] Publications module v1: backend/API публикаций и visibility/status workflow; frontend publication/community UI временно скрыт до переработки social layer.
-- [ ] Public Tags / Publication Metadata v1: отдельные публичные хэштеги/теги публикаций, whitelist публикуемых metadata и запрет автоматической утечки приватных `taggables`.
-- [x] Character/Item Groups v1 + Inherited Asset Sets: character/item cards can belong to one group, groups can inherit asset-set pools through `asset_collection_targets`, and card-level portrait/token/item image overrides remain supported.
-- [ ] Comments/collaboration: комментарии и участники кампаний.
-- [ ] Notifications API и frontend-индикаторы.
-- [ ] Idempotency middleware для критичных POST/PATCH операций.
-- [ ] Export jobs: очередь экспортов и история результатов.
-- [ ] Экспорт карт и карточек персонажей/предметов.
-- [ ] Tile Metadata / Autotile Rules v1: отдельные технические метки для tile-ассетов (`wall_top_left`, `wall_top_right`, `wall_vertical`, `floor`, `door`, `water_edge` и т.п.) и правила автоподбора тайлов при рисовании карт; не смешивать с пользовательскими тегами Tags module v1.
-- [ ] World / Atlas Module v2: заново определить UX локаций, фракций, событий и их связь с картами, персонажами, сценариями и таймлайном перед возвратом раздела в sidebar.
+### Атлас и хроники
 
-## Отложенная мелкая полировка graph canvas
+- `Реализовано` Atlas Revival + Domain Rename v1: раздел `Мир` возвращен как `Атлас`; `locations`, `factions`, `events` отображаются как `Места`, `Организации`, `Хроника`.
+  Основание: `Sidebar.tsx`, `WorldEditor.tsx`.
+- `Реализовано` Atlas Typed Links UX v1: связи Атласа редактируются typed-полями, generic `EntityLinksPanel` остается для других материалов.
+  Основание: `WorldEditor.tsx`, `EntityLinksPanel.tsx`.
+- `Реализовано` Atlas Chronicle-Centered Model v1: `Хроника` - событийный слой, `Места` - контейнер карт, `Организации` - контейнер участников.
+  Основание: `WorldEditor.tsx`.
+- `Реализовано` Atlas Chronicles Timeline v1: `chronicles` стали отдельными временными линиями, `events` стали событиями точки/диапазона через `position/end_position`.
+  Основание: `2026_06_12_000001_add_chronicles_timeline.php`, `ChronicleController`, `WorldEventController`, `WorldModuleTest`.
+- `Реализовано` Chronicle Editor UX v1 + Event Campaign Cleanup: открытая хроника вынесена в отдельный экран, кампания редактируется на уровне хроники, `events.campaign_id` оставлен legacy-only.
+  Основание: `WorldEditor.tsx`, `ChronicleEditor.tsx`, `WorldModuleTest`.
+- `Реализовано` Chronicle Timeline Editor Stabilization v1: timeline canvas, ticks, lanes, drag/drop событий, minimap, zoom/fit.
+  Основание: `ChronicleEditor.tsx`, `EditorViewportControls.tsx`.
 
-Эти задачи полезны, но не входят в основной фокус до MVP сценарного редактора.
+### Публикация, жалобы, объявления и PDF
 
-- [ ] Full obstacle router/grid routing вместо текущего best-effort candidate routing.
-- [ ] Persisted auto-route points для вычисленных маршрутов, если понадобится стабильная ручная правка после auto-layout.
-- [ ] Manual edge anchors / сохранение выбранных port sides.
-- [ ] Edge waypoints UX v2: отдельный режим редактирования маршрута, удаление/добавление точек через context actions.
-- [ ] Inline edge type editing на canvas без quick panel.
-- [ ] Minimap v2: transitions/viewport polish, если графы станут крупнее.
-- [ ] Canvas hotkeys v2: copy/paste, duplicate, box-select, multi-select.
-- [ ] Undo/Redo v2: покрыть создание/удаление узлов, entity links и scenario settings.
-- [ ] Advanced visual polish: edge label collision handling, better arrow placement, hover hints.
+- `Реализовано` Publications module v1: backend/API публикаций и visibility/status workflow.
+  Основание: `PublicationController`, `PublicationService`, `PublicationModuleTest`.
+- `Реализовано` Reports и admin broadcasts.
+  Основание: `ReportController`, `BroadcastController`, `AdminBroadcastsController`, `ReportBroadcastExportTest`.
+- `Реализовано` Scenario PDF export.
+  Основание: `ExportController`, `ScenarioExportService`, `GenerateScenarioPdfAction`, `ReportBroadcastExportTest`.
 
-## Технический долг
+### Общие Editor-Компоненты
 
-- [x] Обновить `docs/project-baseline.md` после Graph API и Graph UI v1, чтобы он не описывал graph как полностью отсутствующий.
-- [x] Синхронизировать README с фактическим состоянием после последних задач.
-- [ ] Уменьшить роль `App.tsx` как глобального переключателя `activeView`.
-- [ ] Постепенно разделить крупные frontend-редакторы на feature-модули.
-- [ ] Разделить крупный `GraphCanvas.tsx` на canvas layers/hooks и вынести graph orchestration из `ScenarioEditor.tsx` в более мелкие модули.
-- [ ] Разгрузить `App.tsx`: вынести navigation wiring/return context в отдельный shell/router слой.
-- [x] Remove frontend bearer access tokens and route protected API auth through the HttpOnly refresh cookie.
-- [x] Add a dedicated CSRF token handshake for cookie-authenticated write requests.
-- [x] Убрать старые lint warnings в `App.tsx`, `MapEditor.tsx`, `ProfileEditor.tsx`, `layout.tsx`.
-- [ ] Добавить e2e smoke-тесты для ключевых пользовательских сценариев.
+- `Реализовано` Shared Editor Viewport Controls v1: общий `EditorViewportControls` для minimap, viewport rectangle, zoom in/out, fit view и minimap navigation.
+  Основание: `EditorViewportControls.tsx`, `GraphCanvas.tsx`, `ChronicleEditor.tsx`.
+- `Реализовано` Map Viewport Controls v1: редактор карт использует общий `EditorViewportControls` для minimap, zoom in/out, fit view и навигации по minimap.
+  Основание: `EditorViewportControls.tsx`, `MapEditor.tsx`.
+- `Реализовано` Shared Editor Toolbar v1: общий `EditorToolbar` извлечен из карты и подключен обратно к карте.
+  Основание: `EditorToolbar.tsx`, `MapEditor.tsx`.
+- `Реализовано` Chronicle Toolbar Alignment v1 и Chronicle Toolbar Utility Delete v1.
+  Основание: `ChronicleEditor.tsx`, `createEditorToolbarUtilityGroup`.
+- `Реализовано` Scenario Toolbar Alignment v1.
+  Основание: `GraphCanvas.tsx`, `EditorToolbar.tsx`.
+- `Реализовано` Editor Toolbar Utility Group v1: общий helper для delete/position utility actions.
+  Основание: `EditorToolbar.tsx`, `MapEditor.tsx`, `ChronicleEditor.tsx`.
 
-## Отложено намеренно
+## Реализовано частично
 
-- [ ] Social backend: communities, friends, dialogs, messages.
-- [ ] Community redesign: кружки интересов, роли, участники и связь публикаций с community-контекстом.
-- [ ] Realtime collaboration.
-- [ ] Полноценный VTT/боевой режим.
-- [ ] Мобильные приложения.
-- [ ] Платные подписки и монетизация.
-- [ ] Генерация сценариев через AI.
+- `Реализовано частично` Collaboration/comments: таблицы `campaign_members` и `comments` есть, но полноценные модели, controllers, routes и UI еще не реализованы.
+  Основание: `0002_01_01_000003_create_collaboration_publication_export_tables.php`; отсутствие `Comment` и `CampaignMember` в `api/app/Models`.
+- `Реализовано частично` Export jobs, notifications и idempotency: таблицы есть, но feature-flow, queue UI и middleware не завершены.
+  Основание: `export_jobs`, `notifications`, `idempotency_keys` в migration и `SchemaBaselineTest`.
+- `Реализовано частично` Social/community: UI-заготовки существуют, но sidebar/routes их не подключают, backend social schema намеренно отсутствует.
+  Основание: `CommunityView.tsx`, `FriendsView.tsx`, `MessagesView.tsx`, `Sidebar.tsx`, `App.tsx`, `SchemaBaselineTest::test_social_layer_tables_are_deferred`.
+- `Реализовано частично` Общий editor shell: есть `EditorToolbar` и `EditorViewportControls`, но общего shell для header/sidebar/canvas/inspector еще нет.
+  Основание: отдельные реализации `MapEditor.tsx`, `GraphCanvas.tsx`, `ChronicleEditor.tsx`.
 
-## Проверки перед закрытием крупных задач
+## Активный фокус
+
+- `В работе` Editor Shell v1: выделить общий каркас редакторов - верхняя шапка, toolbar-зона, центральный canvas, overlay viewport controls и optional right panel.
+- `В работе` Scenario Toolbar Follow-up v1: решить, какие scenario actions остаются в header (`Preview`, `Validation`, `Reload`, `Settings`), а какие можно перенести в toolbar/utility groups.
+- `В работе` Shared Viewport Hook v1: вынести pan/zoom/fit math в `useEditorViewport`, если дублирование между картами, сценариями и хрониками стабилизируется.
+- `В работе` Постепенно разделять крупные редакторы на feature-модули без изменения backend/API.
+
+## Запланировано
+
+### Editor Platform
+
+- `Запланировано` Editor Toolbar Positioning v1: единая модель смены положения toolbar для map/chronicle/scenario editors.
+- `Запланировано` Разделить `GraphCanvas.tsx` на canvas layers/hooks и вынести graph orchestration из `ScenarioEditor.tsx`.
+- `Запланировано` Разгрузить `App.tsx`: вынести navigation wiring/return context в отдельный shell/router слой.
+- `Запланировано` Добавить e2e smoke-тесты для ключевых пользовательских сценариев.
+
+### Graph vNext
+
+- `Запланировано` Backend/publish/export-blocking проверки невозможных переходов, если они нужны по продуктовой логике.
+- `Запланировано` Full obstacle router/grid routing вместо best-effort candidate routing.
+- `Запланировано` Persisted auto-route points, если понадобится стабильная ручная правка после auto-layout.
+- `Запланировано` Manual edge anchors и сохранение выбранных port sides.
+- `Запланировано` Edge waypoints UX v2: отдельный режим редактирования маршрута, context actions для точек.
+- `Запланировано` Canvas hotkeys v2: copy/paste, duplicate, box-select, multi-select.
+- `Запланировано` Undo/Redo v2: создание/удаление узлов, entity links и scenario settings.
+- `Запланировано` Advanced visual polish: label collision handling, arrow placement, hover hints.
+
+### Map vNext
+
+- `Запланировано` Экспорт карт.
+- `Запланировано` Tile Metadata / Autotile Rules v1: технические метки tile-ассетов и правила автоподбора, не смешанные с пользовательскими тегами.
+- `Запланировано` Более глубокая работа с asset layers/tokens после стабилизации общего editor shell.
+
+### Atlas vNext
+
+- `Запланировано` Atlas Nested Arcs / Calendar Systems v2: вложенные арки хроники и календарные системы.
+- `Запланировано` Drag-to-position / resize ranges на timeline как отдельный UX-слой.
+- `Запланировано` Более точные relation-типы Атласа вместо общего `relationType='related'`.
+- `Запланировано` Основные/приоритетные связи: основное место, основная организация, главный сценарий события.
+- `Запланировано` Более глубокая интеграция хроник с кампаниями.
+
+### Publication и Collaboration vNext
+
+- `Запланировано` Public Tags / Publication Metadata v1: отдельные публичные хэштеги, whitelist metadata и запрет утечки приватных `taggables`.
+- `Запланировано` Comments API/UI.
+- `Запланировано` Campaign members и права совместной работы.
+- `Запланировано` Notifications API и frontend-индикаторы.
+- `Запланировано` Idempotency middleware для критичных POST/PATCH операций.
+- `Запланировано` Export jobs: очередь экспортов и история результатов.
+- `Запланировано` Экспорт карточек персонажей/предметов.
+
+## Отложено
+
+- `Отложено` Полноценное social/community ядро: communities, friends, dialogs, messages.
+- `Отложено` Community redesign: кружки интересов, роли, участники и связь публикаций с community-контекстом.
+- `Отложено` Realtime collaboration.
+- `Отложено` Полноценный VTT/боевой runtime.
+- `Отложено` Мобильные приложения.
+- `Отложено` Платные подписки и монетизация.
+- `Отложено` Генерация сценариев через AI.
+- `Отложено` Object storage/S3 для ассетов.
+- `Отложено` Импорт чужих asset sets/community sets.
+- `Отложено` Mobile-first редакторы.
+
+## Устарело и удаляется из roadmap
+
+- `Устарело` `Graph Edge Ports v1` с правилом `input = left/top`, `output = right/bottom`.
+  Заменено free-side выбором сторон в `GraphCanvas.tsx::choosePortSides`.
+- `Устарело` Утверждение, что раздел `Мир` скрыт.
+  Раздел возвращен в sidebar как `Атлас`.
+- `Устарело` Формулировка про Docker frontend на `Node 24`.
+  Фактически используются `web/Dockerfile` и `web/Dockerfile.prod` на `node:22-alpine`.
+- `Устарело` Формулировка про полностью чистый baseline без `add_*`/compatibility migrations.
+  В проекте есть compatibility migrations `2026_05_07_*`, `2026_05_08_*`, `2026_06_12_*`.
+- `Устарело` Старый фокус “publication/comments/asset layers” как ближайший общий фокус.
+  Текущий фокус: editor componentization, Chronicle/Atlas polish и стабилизация общих editor-компонентов.
+- `Отменено` Legacy frontend-редактор глав/блоков сценария.
+  Сценарный UX стал graph-first.
+
+## Проверки перед закрытием задач
 
 Backend:
 
@@ -226,9 +251,9 @@ Frontend:
 
 ```bash
 cd web
-npm run typecheck
-npm run lint
-npm run build
+npm.cmd run typecheck
+npm.cmd run lint
+npm.cmd run build
 ```
 
 Docker/dev DB reset:
@@ -236,25 +261,10 @@ Docker/dev DB reset:
 ```bash
 docker compose exec -T api php artisan migrate:fresh --seed
 ```
-## Graph Visual Metadata Contract v1
 
-- [x] `scenario_transitions.metadata` добавлен в baseline-схему и API как отдельное место для visual data.
-- [x] `condition` остается gameplay-контрактом перехода; `_visual` и другие чужие ключи в `condition` отклоняются.
-- [x] Поддержана форма `metadata.visual.waypoints[]` для manual edge waypoints.
+Production sanity:
 
-## Graph Canvas Manual Waypoints v1
-
-- [x] Добавлено построение перехода через `metadata.visual.waypoints`.
-- [x] Добавлено создание waypoint по double click на edge, drag waypoint, удаление waypoint и сброс маршрута.
-- [x] Quick edit и inline label edit сохраняют visual metadata перехода.
-
-## Graph Canvas Waypoint Smoothing v1
-
-- [x] Manual waypoint routes рендерятся сглаженными cubic Bezier-кривыми вместо ломаных polyline.
-- [x] Сохраненные `metadata.visual.waypoints` не меняют форму; сглаживание влияет только на SVG path.
-
-## Graph Canvas Obstacle-Aware Routing v1
-
-- [x] Auto-routes без manual waypoints строятся через best-effort candidate routing вокруг карточек промежуточных узлов.
-- [x] Manual `metadata.visual.waypoints` остаются приоритетным маршрутом и не перезаписываются computed route.
-- [x] Computed route не сохраняется в backend и не смешивается с gameplay `condition`.
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+curl -I https://mystoryforge.ru
+```

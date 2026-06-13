@@ -1,4 +1,7 @@
 import {
+  Chronicle,
+  ChroniclePayload,
+  ChronicleUpdatePayload,
   Faction,
   WorldEntityPayload,
   WorldEntityUpdatePayload,
@@ -9,6 +12,8 @@ import {
 } from '../types';
 import { apiRequest } from './api';
 import {
+  mapChronicleFromApi,
+  mapChronicleToApiPayload,
   mapFactionFromApi,
   mapWorldEntityToApiPayload,
   mapWorldEventFromApi,
@@ -18,15 +23,44 @@ import {
 
 interface WorldListFilters {
   campaignId?: string | null;
+  chronicleId?: string | null;
   search?: string;
 }
 
 const buildQuery = (filters: WorldListFilters = {}): string => {
   const params = new URLSearchParams();
   if (filters.campaignId) params.set('campaignId', filters.campaignId);
+  if (filters.chronicleId) params.set('chronicleId', filters.chronicleId);
   if (filters.search?.trim()) params.set('search', filters.search.trim());
   const query = params.toString();
   return query ? `?${query}` : '';
+};
+
+export const listChronicles = async (filters: WorldListFilters = {}): Promise<Chronicle[]> => {
+  const response = await apiRequest<unknown[]>(`/chronicles${buildQuery(filters)}`);
+  return response.map(mapChronicleFromApi);
+};
+
+export const createChronicle = async (payload: ChroniclePayload): Promise<Chronicle> => {
+  const response = await apiRequest('/chronicles', {
+    method: 'POST',
+    body: JSON.stringify(mapChronicleToApiPayload(payload))
+  });
+
+  return mapChronicleFromApi(response);
+};
+
+export const updateChronicle = async (id: string, payload: ChronicleUpdatePayload): Promise<Chronicle> => {
+  const response = await apiRequest(`/chronicles/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(mapChronicleToApiPayload(payload))
+  });
+
+  return mapChronicleFromApi(response);
+};
+
+export const deleteChronicle = async (id: string): Promise<void> => {
+  await apiRequest(`/chronicles/${id}`, { method: 'DELETE' });
 };
 
 export const listLocations = async (filters: WorldListFilters = {}): Promise<WorldLocation[]> => {

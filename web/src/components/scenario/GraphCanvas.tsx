@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GitBranch, Maximize2, Minus, Move, Plus, Save, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, GitBranch, Move, Plus, Redo2, Save, Trash2, Undo2, X } from 'lucide-react';
 import {
   ScenarioNode,
   ScenarioNodeType,
@@ -8,6 +8,8 @@ import {
   ScenarioTransitionMetadata,
   ScenarioTransitionType
 } from '../../types';
+import { EditorViewportControls, type EditorMinimapItem, type EditorViewportState } from '../EditorViewportControls';
+import { EditorToolbar, createEditorToolbarUtilityGroup } from '../EditorToolbar';
 import { getNodeTypeLabel } from './GraphNodeList';
 import { GraphValidationResult } from './graphValidation';
 
@@ -29,10 +31,6 @@ const LAYOUT_START_Y = 96;
 const LAYOUT_LEVEL_GAP = 340;
 const LAYOUT_NODE_GAP = 72;
 const BOARD_PADDING = 240;
-const MINIMAP_WIDTH = 220;
-const MINIMAP_HEIGHT = 140;
-const MINIMAP_COMPACT_WIDTH = 160;
-const MINIMAP_COMPACT_HEIGHT = 104;
 const EDGE_PARALLEL_GAP = 18;
 const EDGE_BIDIRECTIONAL_OFFSET = 14;
 const EDGE_LABEL_OFFSET = 18;
@@ -124,11 +122,7 @@ type LayoutDirection = 'horizontal' | 'vertical';
 
 type HandleSide = 'top' | 'right' | 'bottom' | 'left';
 
-interface ViewportState {
-  offsetX: number;
-  offsetY: number;
-  scale: number;
-}
+type ViewportState = EditorViewportState;
 
 interface DragState {
   nodeId: string;
@@ -175,10 +169,6 @@ interface WaypointDragState {
   startWaypoints: NodePosition[];
   currentWaypoints: NodePosition[];
   moved: boolean;
-}
-
-interface MinimapDragState {
-  pointerId: number;
 }
 
 interface VisualEdge {
@@ -982,157 +972,6 @@ interface EdgeQuickPanelProps {
   onClose: () => void;
 }
 
-interface GraphMinimapProps {
-  nodes: ScenarioNode[];
-  boundsById: Map<string, NodeBounds>;
-  boardSize: BoardSize;
-  viewport: ViewportState;
-  containerSize: ContainerSize;
-  activeNodeId: string | null;
-  disabled: boolean;
-  onCenterViewport: (point: NodePosition) => void;
-}
-
-const GraphMinimap: React.FC<GraphMinimapProps> = ({
-  nodes,
-  boundsById,
-  boardSize,
-  viewport,
-  containerSize,
-  activeNodeId,
-  disabled,
-  onCenterViewport
-}) => {
-  const minimapRef = useRef<HTMLDivElement | null>(null);
-  const [dragState, setDragState] = useState<MinimapDragState | null>(null);
-  const isCompact = boardSize.width < 1400;
-  const width = isCompact ? MINIMAP_COMPACT_WIDTH : MINIMAP_WIDTH;
-  const height = isCompact ? MINIMAP_COMPACT_HEIGHT : MINIMAP_HEIGHT;
-  const scale = Math.min(width / boardSize.width, height / boardSize.height);
-  const mapWidth = boardSize.width * scale;
-  const mapHeight = boardSize.height * scale;
-  const mapOffsetX = (width - mapWidth) / 2;
-  const mapOffsetY = (height - mapHeight) / 2;
-  const viewportWidth = containerSize.width / viewport.scale;
-  const viewportHeight = containerSize.height / viewport.scale;
-  const viewportX = -viewport.offsetX / viewport.scale;
-  const viewportY = -viewport.offsetY / viewport.scale;
-
-  const pointFromEvent = (event: React.PointerEvent<HTMLDivElement>): NodePosition | null => {
-    const minimap = minimapRef.current;
-    if (!minimap) return null;
-
-    const rect = minimap.getBoundingClientRect();
-    const x = (event.clientX - rect.left - mapOffsetX) / scale;
-    const y = (event.clientY - rect.top - mapOffsetY) / scale;
-
-    return {
-      x: Math.max(0, Math.min(boardSize.width, x)),
-      y: Math.max(0, Math.min(boardSize.height, y))
-    };
-  };
-
-  const centerFromEvent = (event: React.PointerEvent<HTMLDivElement>) => {
-    const point = pointFromEvent(event);
-    if (!point) return;
-    onCenterViewport(point);
-  };
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (disabled || event.button !== 0) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDragState({ pointerId: event.pointerId });
-    centerFromEvent(event);
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    centerFromEvent(event);
-  };
-
-  const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    setDragState(null);
-  };
-
-  const handlePointerCancel = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragState || dragState.pointerId !== event.pointerId) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.releasePointerCapture(event.pointerId);
-    setDragState(null);
-  };
-
-  return (
-    <div
-      ref={minimapRef}
-      className="relative border border-[var(--border-color)] bg-[var(--bg-main)] cursor-crosshair"
-      style={{ width, height, touchAction: 'none' }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerCancel}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="absolute left-2 top-2 mono text-[7px] uppercase font-black text-[var(--text-muted)]">
-        Карта
-      </div>
-      <svg className="absolute inset-0" width={width} height={height}>
-        <rect
-          x={mapOffsetX}
-          y={mapOffsetY}
-          width={mapWidth}
-          height={mapHeight}
-          fill="var(--bg-main)"
-          stroke="var(--border-color)"
-        />
-        {nodes.map((node) => {
-          const bounds = boundsById.get(node.id);
-          if (!bounds) return null;
-
-          const isActive = activeNodeId === node.id;
-          const color = NODE_TYPE_STYLES[node.type].accent;
-
-          return (
-            <rect
-              key={node.id}
-              x={mapOffsetX + bounds.x * scale}
-              y={mapOffsetY + bounds.y * scale}
-              width={Math.max(3, bounds.width * scale)}
-              height={Math.max(3, bounds.height * scale)}
-              fill={isActive ? 'var(--col-red)' : color}
-              stroke={isActive ? 'white' : 'transparent'}
-              strokeWidth={isActive ? 1 : 0}
-              opacity={isActive ? 1 : 0.75}
-            />
-          );
-        })}
-        {containerSize.width > 0 && containerSize.height > 0 && (
-          <rect
-            x={mapOffsetX + viewportX * scale}
-            y={mapOffsetY + viewportY * scale}
-            width={Math.max(8, viewportWidth * scale)}
-            height={Math.max(8, viewportHeight * scale)}
-            fill="rgba(239, 53, 69, 0.08)"
-            stroke="var(--col-red)"
-            strokeWidth={1.25}
-          />
-        )}
-      </svg>
-    </div>
-  );
-};
 
 const EdgeQuickPanel: React.FC<EdgeQuickPanelProps> = ({
   transition,
@@ -1244,7 +1083,7 @@ const EdgeQuickPanel: React.FC<EdgeQuickPanelProps> = ({
           disabled={disabled}
           className="h-8 w-full inline-flex items-center justify-center gap-2 border border-[var(--border-color)] text-[var(--text-muted)] mono text-[8px] uppercase font-black hover:border-[var(--col-red)] hover:text-[var(--col-red)] disabled:opacity-40"
         >
-          РЎР±СЂРѕСЃРёС‚СЊ РјР°СЂС€СЂСѓС‚
+          Сбросить маршрут
         </button>
       )}
     </div>
@@ -1406,6 +1245,21 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     width: Math.max(BOARD_WIDTH, Math.ceil((graphBounds?.maxX ?? BOARD_WIDTH) + BOARD_PADDING)),
     height: Math.max(BOARD_HEIGHT, Math.ceil((graphBounds?.maxY ?? BOARD_HEIGHT) + BOARD_PADDING))
   }), [graphBounds]);
+
+  const minimapItems = useMemo<EditorMinimapItem[]>(() => nodes.flatMap((node) => {
+    const bounds = boundsById.get(node.id);
+    if (!bounds) return [];
+
+    return [{
+      id: node.id,
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      color: NODE_TYPE_STYLES[node.type].accent,
+      active: activeNodeId === node.id
+    }];
+  }), [activeNodeId, boundsById, nodes]);
 
   const selectedTransitionPanelPosition = useMemo((): NodePosition | null => {
     if (!selectedTransition) return null;
@@ -2206,6 +2060,49 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
     setEdgeDragState(null);
   };
 
+  const handleToolbarAction = (action: string) => {
+    if (action === 'layout-horizontal') {
+      setLayoutDirection('horizontal');
+      return;
+    }
+
+    if (action === 'layout-vertical') {
+      setLayoutDirection('vertical');
+      return;
+    }
+
+    if (action === 'auto-layout') {
+      void handleAutoLayout();
+      return;
+    }
+
+    if (action === 'undo') {
+      void onUndo?.();
+      return;
+    }
+
+    if (action === 'redo') {
+      void onRedo?.();
+      return;
+    }
+
+    if (action === 'delete-selected') {
+      if (activeWaypoint) {
+        void deleteActiveWaypoint();
+        return;
+      }
+
+      if (activeTransitionId) {
+        void onDeleteTransition(activeTransitionId);
+        return;
+      }
+
+      if (activeNodeId) {
+        void onDeleteNode(activeNodeId);
+      }
+    }
+  };
+
   if (nodes.length === 0) {
     return (
       <div className="flex-1 min-w-[360px] bg-[var(--bg-main)] flex items-center justify-center text-center p-8">
@@ -2219,107 +2116,67 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
   }
 
   return (
-    <div
-      ref={containerRef}
-      tabIndex={disabled ? -1 : 0}
-      className={`flex-1 min-w-[360px] bg-[var(--bg-main)] overflow-hidden relative ${panState ? 'cursor-grabbing' : 'cursor-grab'}`}
-      onWheel={handleWheel}
-      onPointerDown={handleCanvasPointerDown}
-      onPointerMove={handleCanvasPointerMove}
-      onPointerUp={handleCanvasPointerUp}
-      onPointerCancel={handleCanvasPointerCancel}
-      style={{ touchAction: 'none' }}
-    >
+    <div className="flex flex-1 min-w-[360px] min-h-0 bg-[var(--bg-main)]">
+      <EditorToolbar
+        position="left"
+        onAction={handleToolbarAction}
+        groups={[
+          {
+            id: 'layout-direction',
+            items: [
+              { id: 'layout-horizontal', icon: ArrowRight, title: 'Упорядочить слева направо', active: layoutDirection === 'horizontal', disabled },
+              { id: 'layout-vertical', icon: ArrowDown, title: 'Упорядочить сверху вниз', active: layoutDirection === 'vertical', disabled }
+            ]
+          },
+          {
+            id: 'layout',
+            items: [
+              { id: 'auto-layout', icon: GitBranch, title: 'Упорядочить граф', disabled: disabled || nodes.length === 0 }
+            ]
+          },
+          {
+            id: 'history',
+            items: [
+              { id: 'undo', icon: Undo2, title: 'Отменить', disabled: disabled || !canUndo },
+              { id: 'redo', icon: Redo2, title: 'Повторить', disabled: disabled || !canRedo }
+            ]
+          },
+          ...createEditorToolbarUtilityGroup({
+            delete: {
+              action: 'delete-selected',
+              title: 'Удалить выбранное',
+              disabled: disabled || (!activeWaypoint && !activeTransitionId && !activeNodeId)
+            }
+          })
+        ]}
+      />
+
       <div
-        className="hidden sm:flex absolute top-3 right-3 z-30 flex-col gap-1.5 border border-[var(--border-color)] bg-[var(--bg-surface)]/95 p-2 shadow-xl"
-        onPointerDown={(event) => event.stopPropagation()}
-        onPointerMove={(event) => event.stopPropagation()}
-        onPointerUp={(event) => event.stopPropagation()}
-        onPointerCancel={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
+        ref={containerRef}
+        tabIndex={disabled ? -1 : 0}
+        className={`flex-1 bg-[var(--bg-main)] overflow-hidden relative ${panState ? 'cursor-grabbing' : 'cursor-grab'}`}
+        onWheel={handleWheel}
+        onPointerDown={handleCanvasPointerDown}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerUp={handleCanvasPointerUp}
+        onPointerCancel={handleCanvasPointerCancel}
+        style={{ touchAction: 'none' }}
       >
-        <GraphMinimap
-          nodes={nodes}
-          boundsById={boundsById}
-          boardSize={boardSize}
+        <EditorViewportControls
           viewport={viewport}
+          canvasSize={boardSize}
           containerSize={containerSize}
-          activeNodeId={activeNodeId}
+          items={minimapItems}
           disabled={disabled}
+          minScale={MIN_SCALE}
+          maxScale={MAX_SCALE}
+          minimapLabel={'\u041a\u0430\u0440\u0442\u0430'}
+          fitLabel={'\u0412\u041f\u0418\u0421\u0410\u0422\u042c'}
           onCenterViewport={centerViewportOnBoardPoint}
+          onZoomOut={() => zoomBy(0.85)}
+          onZoomIn={() => zoomBy(1.15)}
+          onFitView={fitToView}
         />
-        <div className="grid grid-cols-[32px_56px_32px_1fr] border border-[var(--border-color)] bg-[var(--bg-main)]">
-          <button
-            type="button"
-            onClick={() => zoomBy(0.85)}
-            disabled={disabled || viewport.scale <= MIN_SCALE}
-            className="h-8 inline-flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)] disabled:opacity-40"
-            title="Уменьшить"
-          >
-            <Minus size={14} />
-          </button>
-          <div className="h-8 inline-flex items-center justify-center mono text-[9px] uppercase font-black text-[var(--text-main)] border-x border-[var(--border-color)]">
-            {Math.round(viewport.scale * 100)}%
-          </div>
-          <button
-            type="button"
-            onClick={() => zoomBy(1.15)}
-            disabled={disabled || viewport.scale >= MAX_SCALE}
-            className="h-8 inline-flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)] disabled:opacity-40"
-            title="Увеличить"
-          >
-            <Plus size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={fitToView}
-            disabled={disabled}
-            className="h-8 inline-flex items-center justify-center gap-2 border-l border-[var(--border-color)] px-3 text-[var(--col-red)] hover:bg-[var(--col-red)] hover:text-white disabled:opacity-40 mono text-[8px] uppercase font-black transition-colors"
-            title="Вписать граф"
-          >
-            <Maximize2 size={13} />
-            ВПИСАТЬ
-          </button>
-        </div>
-        <div className="grid grid-cols-[36px_36px_1fr] border border-[var(--border-color)] bg-[var(--bg-main)]">
-          <button
-            type="button"
-            onClick={() => setLayoutDirection('horizontal')}
-            disabled={disabled}
-            className={`h-8 inline-flex items-center justify-center border-r border-[var(--border-color)] mono text-[14px] font-black transition-colors disabled:opacity-40 ${
-              layoutDirection === 'horizontal'
-                ? 'bg-[var(--col-red)] text-white'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]'
-            }`}
-            title="Упорядочить слева направо"
-          >
-            →
-          </button>
-          <button
-            type="button"
-            onClick={() => setLayoutDirection('vertical')}
-            disabled={disabled}
-            className={`h-8 inline-flex items-center justify-center border-r border-[var(--border-color)] mono text-[14px] font-black transition-colors disabled:opacity-40 ${
-              layoutDirection === 'vertical'
-                ? 'bg-[var(--col-red)] text-white'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]'
-            }`}
-            title="Упорядочить сверху вниз"
-          >
-            ↓
-          </button>
-          <button
-            type="button"
-            onClick={handleAutoLayout}
-            disabled={disabled || nodes.length === 0}
-            className="h-8 inline-flex items-center justify-center gap-2 px-3 text-[var(--col-red)] hover:bg-[var(--col-red)] hover:text-white disabled:opacity-40 mono text-[8px] uppercase font-black transition-colors"
-            title="Упорядочить граф"
-          >
-            <GitBranch size={13} />
-            УПОРЯД.
-          </button>
-        </div>
-      </div>
 
       <div
         className="absolute top-0 left-0"
@@ -2705,6 +2562,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

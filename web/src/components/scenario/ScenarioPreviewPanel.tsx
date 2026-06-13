@@ -29,6 +29,9 @@ interface ScenarioPreviewPanelProps {
   maps: MapData[];
   characters: Character[];
   items: Item[];
+  scenarioCharacters?: Character[];
+  scenarioMaps?: MapData[];
+  scenarioItems?: Item[];
   assets: Asset[];
   locations: WorldLocation[];
   factions: Faction[];
@@ -51,9 +54,9 @@ const ENTITY_TARGET_LABELS: Record<ScenarioNodeEntityTargetType, string> = {
   character: 'ПЕРСОНАЖ',
   item: 'ПРЕДМЕТ',
   asset: 'АССЕТ',
-  location: 'ЛОКАЦИЯ',
-  faction: 'ФРАКЦИЯ',
-  event: 'СОБЫТИЕ'
+  location: 'МЕСТО',
+  faction: 'ОРГАНИЗАЦИЯ',
+  event: 'ХРОНИКА'
 };
 
 const NODE_TYPE_META: Record<ScenarioNode['type'], { label: string; accent: string; icon: React.ReactNode }> = {
@@ -129,6 +132,9 @@ export const ScenarioPreviewPanel: React.FC<ScenarioPreviewPanelProps> = ({
   maps,
   characters,
   items,
+  scenarioCharacters = [],
+  scenarioMaps = [],
+  scenarioItems = [],
   assets,
   locations,
   factions,
@@ -149,27 +155,31 @@ export const ScenarioPreviewPanel: React.FC<ScenarioPreviewPanelProps> = ({
   );
 
   const getEntityTitle = (link: ScenarioNodeEntityLink): string => {
+    const effectiveMaps = scenarioMaps.length > 0 ? scenarioMaps : maps;
+    const effectiveCharacters = scenarioCharacters.length > 0 ? scenarioCharacters : characters;
+    const effectiveItems = scenarioItems.length > 0 ? scenarioItems : items;
+
     if (link.targetType === 'map') {
-      return maps.find((map) => map.id === link.targetId)?.name ?? `Карта #${link.targetId}`;
+      return effectiveMaps.find((map) => map.id === link.targetId)?.name ?? `Карта #${link.targetId}`;
     }
     if (link.targetType === 'character') {
-      return characters.find((character) => character.id === link.targetId)?.name ?? `Персонаж #${link.targetId}`;
+      return effectiveCharacters.find((character) => character.id === link.targetId)?.name ?? `Персонаж #${link.targetId}`;
     }
 
     if (link.targetType === 'item') {
-      return items.find((item) => item.id === link.targetId)?.name ?? `Предмет #${link.targetId}`;
+      return effectiveItems.find((item) => item.id === link.targetId)?.name ?? `Предмет #${link.targetId}`;
     }
     if (link.targetType === 'asset') {
       return assets.find((asset) => asset.id === link.targetId)?.name ?? `Ассет #${link.targetId}`;
     }
     if (link.targetType === 'location') {
-      return locations.find((location) => location.id === link.targetId)?.name ?? `Локация #${link.targetId}`;
+      return locations.find((location) => location.id === link.targetId)?.name ?? `Место #${link.targetId}`;
     }
     if (link.targetType === 'faction') {
-      return factions.find((faction) => faction.id === link.targetId)?.name ?? `Фракция #${link.targetId}`;
+      return factions.find((faction) => faction.id === link.targetId)?.name ?? `Организация #${link.targetId}`;
     }
 
-    return events.find((event) => event.id === link.targetId)?.title ?? `Событие #${link.targetId}`;
+    return events.find((event) => event.id === link.targetId)?.title ?? `Запись хроники #${link.targetId}`;
   };
 
   if (graphLoading && nodes.length === 0) {
@@ -200,7 +210,12 @@ export const ScenarioPreviewPanel: React.FC<ScenarioPreviewPanelProps> = ({
     );
   }
 
-  const configEntries = getConfigEntries(currentNode.type, currentNode.config, { characters, items })
+  const effectiveCharacters = scenarioCharacters.length > 0 ? scenarioCharacters : characters;
+  const effectiveItems = scenarioItems.length > 0 ? scenarioItems : items;
+  const configEntries = getConfigEntries(currentNode.type, currentNode.config, {
+    characters: effectiveCharacters,
+    items: effectiveItems
+  })
     .filter((entry) => entry.value.trim().length > 0);
   const nodeMeta = NODE_TYPE_META[currentNode.type];
   const routeNodes = history

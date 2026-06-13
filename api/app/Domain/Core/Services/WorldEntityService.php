@@ -13,6 +13,7 @@ use App\Domain\Core\DTO\WorldEntityStoreData;
 use App\Domain\Core\DTO\WorldEntityUpdateData;
 use App\Models\Campaign;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
@@ -46,8 +47,14 @@ abstract class WorldEntityService
                 if ($search !== '') {
                     $query->where($this->searchColumn(), 'like', '%' . $search . '%');
                 }
+
+                $this->applyAdditionalFilters($query, $data);
             }
         );
+    }
+
+    protected function applyAdditionalFilters(Builder $query, WorldEntityIndexData $data): void
+    {
     }
 
     public function create(User $user, WorldEntityStoreData $data): Model
@@ -57,6 +64,8 @@ abstract class WorldEntityService
         if (!empty($payload['campaign_id'])) {
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $payload['campaign_id']);
         }
+
+        $this->validateAdditionalPayload($user, $payload);
 
         /** @var Model $model */
         $model = $this->createModelAction->execute($this->modelClass(), [
@@ -85,6 +94,8 @@ abstract class WorldEntityService
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $data->data['campaign_id']);
         }
 
+        $this->validateAdditionalPayload($user, $data->data);
+
         $this->updateModelAction->execute($model, $data->data);
 
         return $model->fresh();
@@ -94,5 +105,14 @@ abstract class WorldEntityService
     {
         $model = $this->findOwnedModelAction->execute($this->modelClass(), $user->id, $id);
         $this->deleteModelAction->execute($model);
+    }
+
+    protected function validateAdditionalPayload(User $user, array $payload): void
+    {
+    }
+
+    protected function ensureOwned(string $modelClass, string|int $userId, mixed $id): void
+    {
+        $this->ensureOwnedModelExistsAction->execute($modelClass, $userId, $id);
     }
 }

@@ -39,15 +39,26 @@ import { EntityLinksPanel } from './EntityLinksPanel';
 import { AssetUsagePicker } from './AssetUsagePicker';
 import { AssetCollectionTargetPicker } from './AssetCollectionTargetPicker';
 import { PublicationPanel } from './PublicationPanel';
+import { EditorToolbar, EditorToolbarPosition, createEditorToolbarUtilityGroup } from './EditorToolbar';
+import {
+  EditorCanvasPoint,
+  EditorCanvasSize,
+  EditorMinimapItem,
+  EditorViewportControls,
+  EditorViewportState
+} from './EditorViewportControls';
 import { 
   Plus, Trash2, ArrowLeft, RefreshCw, Grid, Eraser, 
-  MousePointer2, Maximize, Edit3, Layers, Layout, 
-  Hand, PaintBucket, Square, Pipette, Undo2, Redo2, ZoomIn, ZoomOut,
+  MousePointer2, Maximize, Edit3, Layers, 
+  Hand, PaintBucket, Square, Pipette, Undo2, Redo2,
   Eye, EyeOff, Lock, Unlock, ArrowUp, ArrowDown
 } from 'lucide-react';
 
 const ACCENT_WHITE = 'var(--col-white)';
-type ToolbarPosition = 'left' | 'top' | 'right' | 'bottom';
+const MIN_MAP_ZOOM = 0.2;
+const MAX_MAP_ZOOM = 3;
+const MAP_FIT_PADDING = 0.9;
+type ToolbarPosition = EditorToolbarPosition;
 type ToolType = 'brush' | 'eraser' | 'select' | 'pan' | 'fill' | 'rect' | 'picker';
 type GridPoint = { x: number; y: number };
 interface PaletteAsset {
@@ -77,6 +88,8 @@ const LAYER_TYPE_COLORS: Record<MapLayerType, string> = {
   tiles: '#9aa0a6',
   tokens: '#2a9d8f'
 };
+
+const clampMapZoom = (value: number): number => Math.max(MIN_MAP_ZOOM, Math.min(MAX_MAP_ZOOM, value));
 
 const createId = (prefix: string): string => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -275,6 +288,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
   const [toolbarPosition, setToolbarPosition] = useState<ToolbarPosition>('left');
   const [viewOffset, setViewOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
+  const [containerSize, setContainerSize] = useState<EditorCanvasSize>({ width: 0, height: 0 });
   const [imageRevision, setImageRevision] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
@@ -283,6 +297,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
   const [rectStart, setRectStart] = useState<GridPoint | null>(null);
   const [rectEnd, setRectEnd] = useState<GridPoint | null>(null);
   const initialMapAppliedRef = useRef<string | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -309,6 +324,36 @@ const MapEditor: React.FC<MapEditorProps> = ({
     const matchesTag = !selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter);
     return matchesSearch && matchesTag;
   });
+  const mapCanvasSize = useMemo<EditorCanvasSize>(
+    () => activeMap
+      ? { width: activeMap.width * activeMap.cellSize, height: activeMap.height * activeMap.cellSize }
+      : { width: 0, height: 0 },
+    [activeMap]
+  );
+  const mapViewport = useMemo<EditorViewportState>(() => {
+    const centerX = containerSize.width / 2;
+    const centerY = containerSize.height / 2;
+
+    return {
+      offsetX: zoom * viewOffset.x + centerX * (1 - zoom),
+      offsetY: zoom * viewOffset.y + centerY * (1 - zoom),
+      scale: zoom
+    };
+  }, [containerSize.height, containerSize.width, viewOffset.x, viewOffset.y, zoom]);
+  const mapMinimapItems = useMemo<EditorMinimapItem[]>(() => {
+    if (!activeMap) return [];
+
+    return sortedLayers
+      .filter((layer) => layer.visible && layer.type !== 'background')
+      .flatMap((layer) => sanitizeMapObjects(layer.objects, activeMap).map((object) => ({
+        id: `${layer.id}-${object.id}`,
+        x: object.x * activeMap.cellSize,
+        y: object.y * activeMap.cellSize,
+        width: Math.max(1, object.width ?? 1) * activeMap.cellSize,
+        height: Math.max(1, object.height ?? 1) * activeMap.cellSize,
+        color: object.color || LAYER_TYPE_COLORS[layer.type]
+      })));
+  }, [activeMap, sortedLayers]);
 
   const assets = useMemo<PaletteAsset[]>(() => [
     { type: 'wall', label: 'WALL', color: '#888888' },
@@ -528,7 +573,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
     }
   };
   const cycleToolbarPosition = () => { const p: ToolbarPosition[] = ['left', 'top', 'right', 'bottom']; setToolbarPosition(p[(p.indexOf(toolbarPosition) + 1) % 4]); };
-  const handleZoom = (delta: number) => { setZoom(prev => Math.max(0.2, Math.min(3, prev + delta))); };
+  const handleZoom = (delta: number) => { setZoom(prev => clampMapZoom(prev + delta)); };
   const clampGridToMapBounds = (x: number, y: number, map: MapData): GridPoint => ({
     x: Math.min(map.width - 1, Math.max(0, x)),
     y: Math.min(map.height - 1, Math.max(0, y)),
@@ -539,8 +584,18 @@ const MapEditor: React.FC<MapEditorProps> = ({
     if (!canvas || !activeMap) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const parent = canvas.parentElement;
-    if (parent) { canvas.width = parent.clientWidth; canvas.height = parent.clientHeight; }
+    const parent = canvasContainerRef.current ?? canvas.parentElement;
+    if (parent) {
+      const nextWidth = parent.clientWidth;
+      const nextHeight = parent.clientHeight;
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+      setContainerSize((current) => (
+        current.width === nextWidth && current.height === nextHeight
+          ? current
+          : { width: nextWidth, height: nextHeight }
+      ));
+    }
     ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     const cx = canvas.width / 2; const cy = canvas.height / 2;
@@ -675,6 +730,30 @@ const MapEditor: React.FC<MapEditorProps> = ({
     setActiveId(initialMapId);
     setViewOffset({ x: 0, y: 0 });
   }, [initialMapId, data]);
+
+  const centerViewportOnMapPoint = useCallback((point: EditorCanvasPoint) => {
+    if (!containerSize.width || !containerSize.height) return;
+
+    setViewOffset({
+      x: containerSize.width / 2 - point.x,
+      y: containerSize.height / 2 - point.y
+    });
+  }, [containerSize.height, containerSize.width]);
+
+  const fitMapToView = useCallback(() => {
+    if (!activeMap || mapCanvasSize.width <= 0 || mapCanvasSize.height <= 0 || !containerSize.width || !containerSize.height) return;
+
+    const nextZoom = clampMapZoom(Math.min(
+      containerSize.width / mapCanvasSize.width,
+      containerSize.height / mapCanvasSize.height
+    ) * MAP_FIT_PADDING);
+
+    setZoom(nextZoom);
+    setViewOffset({
+      x: containerSize.width / 2 - mapCanvasSize.width / 2,
+      y: containerSize.height / 2 - mapCanvasSize.height / 2
+    });
+  }, [activeMap, containerSize.height, containerSize.width, mapCanvasSize.height, mapCanvasSize.width]);
 
   const getMapCoordinates = (e: React.MouseEvent) => {
     if (!canvasRef.current || !activeMap) return null;
@@ -842,7 +921,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
 
     setZoom((prevZoom) => {
       const step = 0.1;
-      const nextZoom = Math.max(0.2, Math.min(3, prevZoom + (e.deltaY < 0 ? step : -step)));
+      const nextZoom = clampMapZoom(prevZoom + (e.deltaY < 0 ? step : -step));
       if (nextZoom === prevZoom) return prevZoom;
 
       // Keep world position under the cursor stable while zooming.
@@ -893,6 +972,32 @@ const MapEditor: React.FC<MapEditorProps> = ({
     commitLayerObjects(activeLayer.id, [], true);
   };
 
+  const handleToolbarAction = (action: string) => {
+    if (action === 'pan' || action === 'select' || action === 'brush' || action === 'rect' || action === 'fill' || action === 'eraser' || action === 'picker') {
+      setSelectedTool(action);
+      return;
+    }
+
+    if (action === 'undo') {
+      handleUndo();
+      return;
+    }
+
+    if (action === 'redo') {
+      handleRedo();
+      return;
+    }
+
+    if (action === 'clear-layer') {
+      clearActiveLayer();
+      return;
+    }
+
+    if (action === 'toolbar-position') {
+      cycleToolbarPosition();
+    }
+  };
+
   const selectPaletteAsset = (asset: PaletteAsset) => {
     setActiveAsset(asset);
     setSelectedTool('brush');
@@ -912,23 +1017,42 @@ const MapEditor: React.FC<MapEditorProps> = ({
     return layer.objects.length;
   };
 
-  const ToolButton = ({ tool, icon: Icon }: any) => (<button onClick={() => setSelectedTool(tool)} className={`w-9 h-9 flex items-center justify-center border transition-all ${selectedTool === tool ? 'bg-[var(--text-main)] text-[var(--bg-main)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}><Icon size={18} /></button>);
-  const ActionButton = ({ onClick, icon: Icon }: any) => (<button onClick={onClick} className={`w-9 h-9 flex items-center justify-center border border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--text-main)]/10`}><Icon size={18} /></button>);
-
   const renderToolbar = () => {
-    const vert = toolbarPosition === 'left' || toolbarPosition === 'right';
     return (
-      <div className={`bg-[var(--bg-surface)] z-30 flex items-center gap-1 p-2 shrink-0 border-[var(--border-color)] overflow-x-auto scrollbar-hide ${vert ? 'flex-col w-14 border-y-0 py-4' : 'flex-row h-14 w-full border-x-0 px-4'} ${toolbarPosition === 'left' ? 'border-r' : toolbarPosition === 'right' ? 'border-l' : toolbarPosition === 'top' ? 'border-b' : 'border-t'}`}>
-        <ToolButton tool="pan" icon={Hand} /> <ToolButton tool="select" icon={MousePointer2} />
-        <div className={vert ? 'w-full h-[1px] bg-[var(--border-color)] my-1' : 'h-full w-[1px] bg-[var(--border-color)] mx-1'} />
-        <ToolButton tool="brush" icon={Edit3} /> <ToolButton tool="rect" icon={Square} /> <ToolButton tool="fill" icon={PaintBucket} /> <ToolButton tool="eraser" icon={Eraser} /> <ToolButton tool="picker" icon={Pipette} />
-        <div className={vert ? 'w-full h-[1px] bg-[var(--border-color)] my-1' : 'h-full w-[1px] bg-[var(--border-color)] mx-1'} />
-        <ActionButton onClick={handleUndo} icon={Undo2} /> <ActionButton onClick={handleRedo} icon={Redo2} />
-        <div className={vert ? 'w-full h-[1px] bg-[var(--border-color)] my-1' : 'h-full w-[1px] bg-[var(--border-color)] mx-1'} />
-        <ActionButton onClick={() => handleZoom(-0.1)} icon={ZoomOut} /> <ActionButton onClick={() => handleZoom(0.1)} icon={ZoomIn} />
-        <div className={`flex-1 ${vert ? '' : 'flex'}`} />
-        <ActionButton onClick={clearActiveLayer} icon={Trash2} /> <ActionButton onClick={cycleToolbarPosition} icon={Layout} />
-      </div>
+      <EditorToolbar
+        position={toolbarPosition}
+        onAction={handleToolbarAction}
+        groups={[
+          {
+            id: 'navigation',
+            items: [
+              { id: 'pan', icon: Hand, title: 'Перемещение', active: selectedTool === 'pan' },
+              { id: 'select', icon: MousePointer2, title: 'Выбор', active: selectedTool === 'select' }
+            ]
+          },
+          {
+            id: 'paint',
+            items: [
+              { id: 'brush', icon: Edit3, title: 'Кисть', active: selectedTool === 'brush' },
+              { id: 'rect', icon: Square, title: 'Прямоугольник', active: selectedTool === 'rect' },
+              { id: 'fill', icon: PaintBucket, title: 'Заливка', active: selectedTool === 'fill' },
+              { id: 'eraser', icon: Eraser, title: 'Ластик', active: selectedTool === 'eraser' },
+              { id: 'picker', icon: Pipette, title: 'Пипетка', active: selectedTool === 'picker' }
+            ]
+          },
+          {
+            id: 'history',
+            items: [
+              { id: 'undo', icon: Undo2, title: 'Отменить' },
+              { id: 'redo', icon: Redo2, title: 'Повторить' }
+            ]
+          },
+          ...createEditorToolbarUtilityGroup({
+            delete: { action: 'clear-layer', title: 'Очистить активный слой' },
+            position: { action: 'toolbar-position', title: 'Положение панели' }
+          })
+        ]}
+      />
     );
   };
 
@@ -967,7 +1091,26 @@ const MapEditor: React.FC<MapEditorProps> = ({
          </div>
          <div className={`flex flex-1 w-full h-full overflow-hidden ${isToolbarTop || isToolbarBottom ? 'flex-col' : 'flex-row'}`}>
              {isToolbarTop && renderToolbar()} {isToolbarLeft && renderToolbar()}
-             <div className="flex-1 bg-[#050505] relative overflow-hidden pattern-grid flex items-center justify-center"><canvas ref={canvasRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave} onWheel={handleWheel} className="w-full h-full cursor-crosshair block" /></div>
+             <div ref={canvasContainerRef} className="flex-1 bg-[#050505] relative overflow-hidden pattern-grid flex items-center justify-center">
+               <canvas ref={canvasRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave} onWheel={handleWheel} className="w-full h-full cursor-crosshair block" />
+               {activeMap && mapCanvasSize.width > 0 && mapCanvasSize.height > 0 && (
+                 <EditorViewportControls
+                   viewport={mapViewport}
+                   canvasSize={mapCanvasSize}
+                   containerSize={containerSize}
+                   items={mapMinimapItems}
+                   minScale={MIN_MAP_ZOOM}
+                   maxScale={MAX_MAP_ZOOM}
+                   minimapLabel="Карта"
+                   fitLabel="ВПИСАТЬ"
+                   fitTitle="Вписать карту"
+                   onCenterViewport={centerViewportOnMapPoint}
+                   onZoomOut={() => handleZoom(-0.1)}
+                   onZoomIn={() => handleZoom(0.1)}
+                   onFitView={fitMapToView}
+                 />
+               )}
+             </div>
              {isToolbarRight && renderToolbar()} {isToolbarBottom && renderToolbar()}
          </div>
       </div>

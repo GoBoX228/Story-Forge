@@ -5,7 +5,7 @@ namespace App\Domain\Core\Requests;
 use App\Domain\Core\DTO\WorldEntityStoreData;
 use Illuminate\Foundation\Http\FormRequest;
 
-class WorldEventStoreRequest extends FormRequest
+class ChronicleStoreRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -17,13 +17,9 @@ class WorldEventStoreRequest extends FormRequest
         return [
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'chronicle_id' => ['nullable', 'integer'],
-            'starts_at' => ['nullable', 'date'],
-            'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
-            'position' => ['nullable', 'integer'],
-            'end_position' => ['nullable', 'integer'],
             'start_label' => ['nullable', 'string', 'max:255'],
             'end_label' => ['nullable', 'string', 'max:255'],
+            'step_size' => ['nullable', 'integer', 'min:1', 'max:10000'],
             'campaign_id' => ['nullable', 'integer'],
             'metadata' => ['nullable', 'array'],
         ];

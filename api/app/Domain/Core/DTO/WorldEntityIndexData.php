@@ -7,6 +7,7 @@ final readonly class WorldEntityIndexData
     public function __construct(
         public mixed $campaignId,
         public ?string $search,
+        public mixed $chronicleId = null,
     ) {
     }
 }

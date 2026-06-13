@@ -18,6 +18,7 @@ use App\Http\Controllers\BroadcastController;
 use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\CharacterController;
 use App\Http\Controllers\CharacterGroupController;
+use App\Http\Controllers\ChronicleController;
 use App\Http\Controllers\EntityLinkController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\FactionController;
@@ -139,6 +140,12 @@ Route::middleware(['cookie_auth', 'active_user', 'csrf_cookie'])->group(function
     Route::get('/factions/{id}', [FactionController::class, 'show']);
     Route::patch('/factions/{id}', [FactionController::class, 'update']);
     Route::delete('/factions/{id}', [FactionController::class, 'destroy']);
+
+    Route::get('/chronicles', [ChronicleController::class, 'index']);
+    Route::post('/chronicles', [ChronicleController::class, 'store']);
+    Route::get('/chronicles/{id}', [ChronicleController::class, 'show']);
+    Route::patch('/chronicles/{id}', [ChronicleController::class, 'update']);
+    Route::delete('/chronicles/{id}', [ChronicleController::class, 'destroy']);
 
     Route::get('/events', [WorldEventController::class, 'index']);
     Route::post('/events', [WorldEventController::class, 'store']);

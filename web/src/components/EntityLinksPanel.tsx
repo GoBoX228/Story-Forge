@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Link2, Plus, Save, Trash2 } from 'lucide-react';
 import {
   Asset,
@@ -23,9 +23,9 @@ const TARGET_LABELS: Record<EntityLinkTargetType, string> = {
   character: 'ПЕРСОНАЖ',
   item: 'ПРЕДМЕТ',
   asset: 'АССЕТ',
-  location: 'ЛОКАЦИЯ',
-  faction: 'ФРАКЦИЯ',
-  event: 'СОБЫТИЕ'
+  location: 'МЕСТО',
+  faction: 'ОРГАНИЗАЦИЯ',
+  event: 'ХРОНИКА'
 };
 
 const RELATION_LABELS: Record<EntityLinkRelationType, string> = {
@@ -63,6 +63,7 @@ interface EntityLinksPanelProps {
   onUpdateLink: (id: string, payload: EntityLinkUpdatePayload) => Promise<EntityLink>;
   onDeleteLink: (id: string) => Promise<void>;
   onOpenLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
+  allowedTargetTypes?: EntityLinkTargetType[];
 }
 
 const entityTitle = (link: EntityLink, options: EntityLinkTargetOption[]): string =>
@@ -84,9 +85,14 @@ export const EntityLinksPanel: React.FC<EntityLinksPanelProps> = ({
   onCreateLink,
   onUpdateLink,
   onDeleteLink,
-  onOpenLink
+  onOpenLink,
+  allowedTargetTypes
 }) => {
-  const [targetType, setTargetType] = useState<EntityLinkTargetType>('scenario');
+  const targetTypes = useMemo(
+    () => (allowedTargetTypes?.length ? allowedTargetTypes : TARGET_TYPES),
+    [allowedTargetTypes]
+  );
+  const [targetType, setTargetType] = useState<EntityLinkTargetType>(targetTypes[0] ?? 'scenario');
   const [targetId, setTargetId] = useState('');
   const [relationType, setRelationType] = useState<EntityLinkRelationType>('related');
   const [label, setLabel] = useState('');
@@ -114,6 +120,13 @@ export const EntityLinksPanel: React.FC<EntityLinksPanelProps> = ({
     () => allOptions.filter((option) => option.type === targetType && !(option.type === sourceType && option.id === sourceId)),
     [allOptions, sourceId, sourceType, targetType]
   );
+
+  useEffect(() => {
+    if (!targetTypes.includes(targetType)) {
+      setTargetType(targetTypes[0] ?? 'scenario');
+      setTargetId('');
+    }
+  }, [targetType, targetTypes]);
 
   const addLink = async () => {
     if (!targetId || busy) return;
@@ -187,7 +200,7 @@ export const EntityLinksPanel: React.FC<EntityLinksPanelProps> = ({
             setTargetType(value as EntityLinkTargetType);
             setTargetId('');
           }}
-          options={TARGET_TYPES.map((type) => ({ value: type, label: TARGET_LABELS[type] }))}
+          options={targetTypes.map((type) => ({ value: type, label: TARGET_LABELS[type] }))}
           accentColor={accentColor}
         />
         <Select

@@ -29,6 +29,9 @@ interface ScenarioPreviewWorkspaceProps {
   maps: MapData[];
   characters: Character[];
   items: Item[];
+  scenarioCharacters: Character[];
+  scenarioMaps: MapData[];
+  scenarioItems: Item[];
   assets: Asset[];
   locations: WorldLocation[];
   factions: Faction[];
@@ -53,6 +56,9 @@ export const ScenarioPreviewWorkspace: React.FC<ScenarioPreviewWorkspaceProps> =
   maps,
   characters,
   items,
+  scenarioCharacters,
+  scenarioMaps,
+  scenarioItems,
   assets,
   locations,
   factions,
@@ -97,6 +103,9 @@ export const ScenarioPreviewWorkspace: React.FC<ScenarioPreviewWorkspaceProps> =
       maps={maps}
       characters={characters}
       items={items}
+      scenarioCharacters={scenarioCharacters}
+      scenarioMaps={scenarioMaps}
+      scenarioItems={scenarioItems}
       assets={assets}
       locations={locations}
       factions={factions}

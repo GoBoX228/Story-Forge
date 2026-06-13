@@ -26,6 +26,9 @@ import {
   Campaign,
   Character,
   CharacterGroup,
+  Chronicle,
+  ChroniclePayload,
+  ChronicleUpdatePayload,
   EntityLink,
   EntityLinkAssignmentMap,
   EntityLinkCreatePayload,
@@ -84,15 +87,19 @@ import {
   uploadAsset
 } from './lib/assetApi';
 import {
+  createChronicle,
   createFaction,
   createLocation,
   createWorldEvent,
+  deleteChronicle,
   deleteFaction,
   deleteLocation,
   deleteWorldEvent,
+  listChronicles,
   listFactions,
   listLocations,
   listWorldEvents,
+  updateChronicle,
   updateFaction,
   updateLocation,
   updateWorldEvent
@@ -267,6 +274,7 @@ const App: React.FC = () => {
   const [assetCollectionAssignments, setAssetCollectionAssignments] = useState<AssetCollectionAssignmentMap>({});
   const [locations, setLocations] = useState<WorldLocation[]>([]);
   const [factions, setFactions] = useState<Faction[]>([]);
+  const [chronicles, setChronicles] = useState<Chronicle[]>([]);
   const [worldEvents, setWorldEvents] = useState<WorldEvent[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [tagAssignments, setTagAssignments] = useState<TagAssignmentMap>({});
@@ -370,6 +378,7 @@ const App: React.FC = () => {
       assetCollectionsResponse,
       locationsResponse,
       factionsResponse,
+      chroniclesResponse,
       worldEventsResponse,
       tagsResponse
     ] = await Promise.all([
@@ -385,6 +394,7 @@ const App: React.FC = () => {
       listAssetCollections(),
       listLocations(),
       listFactions(),
+      listChronicles(),
       listWorldEvents(),
       listTags()
     ]);
@@ -401,6 +411,7 @@ const App: React.FC = () => {
     setAssetCollections(assetCollectionsResponse);
     setLocations(locationsResponse);
     setFactions(factionsResponse);
+    setChronicles(chroniclesResponse);
     setWorldEvents(worldEventsResponse);
     setTags(tagsResponse);
     const materialTargets = [
@@ -478,9 +489,6 @@ const App: React.FC = () => {
     if (activeView === 'admin' && currentUser?.role !== 'admin') {
       setActiveView('dashboard');
     }
-    if (activeView === 'world') {
-      setActiveView('dashboard');
-    }
   }, [activeView, currentUser?.role]);
 
   useEffect(() => {
@@ -502,7 +510,7 @@ const App: React.FC = () => {
     if (activeView !== 'world') {
       setWorldEditorTarget(null);
     }
-    if (!['maps', 'characters', 'items', 'assets'].includes(activeView)) {
+    if (!['maps', 'characters', 'items', 'assets', 'world'].includes(activeView)) {
       setGraphReturnScenarioId(null);
     }
   }, [activeView]);
@@ -910,6 +918,26 @@ const App: React.FC = () => {
   const handleDeleteFaction = useCallback(async (id: string) => {
     await deleteFaction(id);
     setFactions((prev) => prev.filter((faction) => faction.id !== id));
+  }, []);
+
+  const handleCreateChronicle = useCallback(async (payload: ChroniclePayload) => {
+    const created = await createChronicle(payload);
+    setChronicles((prev) => [created, ...prev]);
+    return created;
+  }, []);
+
+  const handleUpdateChronicle = useCallback(async (id: string, payload: ChronicleUpdatePayload) => {
+    const updated = await updateChronicle(id, payload);
+    setChronicles((prev) => prev.map((chronicle) => (chronicle.id === id ? updated : chronicle)));
+    return updated;
+  }, []);
+
+  const handleDeleteChronicle = useCallback(async (id: string) => {
+    await deleteChronicle(id);
+    setChronicles((prev) => prev.filter((chronicle) => chronicle.id !== id));
+    setWorldEvents((prev) => prev.map((event) => (
+      event.chronicleId === id ? { ...event, chronicleId: null } : event
+    )));
   }, []);
 
   const handleCreateWorldEvent = useCallback(async (payload: WorldEventPayload) => {
@@ -1357,6 +1385,9 @@ const App: React.FC = () => {
     }
 
     if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
+      setGraphReturnScenarioId(sourceScenarioId);
+      setWorldEditorTarget({ type: targetType, id: targetId });
+      setActiveView('world');
       return;
     }
   }, []);
@@ -1393,6 +1424,8 @@ const App: React.FC = () => {
     }
 
     if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
+      setWorldEditorTarget({ type: targetType, id: targetId });
+      setActiveView('world');
       return;
     }
   }, []);
@@ -1716,6 +1749,7 @@ const App: React.FC = () => {
                     <WorldEditor
                       locations={locations}
                       factions={factions}
+                      chronicles={chronicles}
                       events={worldEvents}
                       campaigns={campaigns}
                       scenarios={scenarios}
@@ -1729,6 +1763,9 @@ const App: React.FC = () => {
                       onCreateFaction={handleCreateFaction}
                       onUpdateFaction={handleUpdateFaction}
                       onDeleteFaction={handleDeleteFaction}
+                      onCreateChronicle={handleCreateChronicle}
+                      onUpdateChronicle={handleUpdateChronicle}
+                      onDeleteChronicle={handleDeleteChronicle}
                       onCreateEvent={handleCreateWorldEvent}
                       onUpdateEvent={handleUpdateWorldEvent}
                       onDeleteEvent={handleDeleteWorldEvent}

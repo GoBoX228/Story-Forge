@@ -13,6 +13,9 @@ import {
   Character,
   CharacterGroup,
   CharacterGroupPayload,
+  Chronicle,
+  ChroniclePayload,
+  ChronicleUpdatePayload,
   EntityLink,
   EntityLinkCreatePayload,
   EntityLinkRelationType,
@@ -668,14 +671,33 @@ export const mapFactionFromApi = (api: any): Faction => ({
   updatedAt: api.updated_at ?? undefined
 });
 
-export const mapWorldEventFromApi = (api: any): WorldEvent => ({
+export const mapChronicleFromApi = (api: any): Chronicle => ({
   id: String(api.id),
   userId: String(api.user_id),
   campaignId: api.campaign_id ? String(api.campaign_id) : null,
   title: api.title ?? '',
   description: api.description ?? '',
+  startLabel: api.start_label ?? null,
+  endLabel: api.end_label ?? null,
+  stepSize: Number(api.step_size ?? 10),
+  metadata: toRecord(api.metadata),
+  createdAt: api.created_at ?? undefined,
+  updatedAt: api.updated_at ?? undefined
+});
+
+export const mapWorldEventFromApi = (api: any): WorldEvent => ({
+  id: String(api.id),
+  userId: String(api.user_id),
+  campaignId: api.campaign_id ? String(api.campaign_id) : null,
+  chronicleId: api.chronicle_id ? String(api.chronicle_id) : null,
+  title: api.title ?? '',
+  description: api.description ?? '',
   startsAt: api.starts_at ?? null,
   endsAt: api.ends_at ?? null,
+  position: Number(api.position ?? 0),
+  endPosition: api.end_position === null || api.end_position === undefined ? null : Number(api.end_position),
+  startLabel: api.start_label ?? null,
+  endLabel: api.end_label ?? null,
   metadata: toRecord(api.metadata),
   createdAt: api.created_at ?? undefined,
   updatedAt: api.updated_at ?? undefined
@@ -688,11 +710,26 @@ export const mapWorldEntityToApiPayload = (payload: WorldEntityPayload | WorldEn
   ...(payload.metadata !== undefined ? { metadata: payload.metadata } : {})
 });
 
+export const mapChronicleToApiPayload = (payload: ChroniclePayload | ChronicleUpdatePayload) => ({
+  ...(payload.title !== undefined ? { title: payload.title } : {}),
+  ...(payload.description !== undefined ? { description: payload.description } : {}),
+  ...(payload.startLabel !== undefined ? { start_label: payload.startLabel } : {}),
+  ...(payload.endLabel !== undefined ? { end_label: payload.endLabel } : {}),
+  ...(payload.stepSize !== undefined ? { step_size: payload.stepSize } : {}),
+  ...(payload.campaignId !== undefined ? { campaign_id: payload.campaignId } : {}),
+  ...(payload.metadata !== undefined ? { metadata: payload.metadata } : {})
+});
+
 export const mapWorldEventToApiPayload = (payload: WorldEventPayload | WorldEventUpdatePayload) => ({
   ...(payload.title !== undefined ? { title: payload.title } : {}),
   ...(payload.description !== undefined ? { description: payload.description } : {}),
+  ...(payload.chronicleId !== undefined ? { chronicle_id: payload.chronicleId } : {}),
   ...(payload.startsAt !== undefined ? { starts_at: payload.startsAt } : {}),
   ...(payload.endsAt !== undefined ? { ends_at: payload.endsAt } : {}),
+  ...(payload.position !== undefined ? { position: payload.position } : {}),
+  ...(payload.endPosition !== undefined ? { end_position: payload.endPosition } : {}),
+  ...(payload.startLabel !== undefined ? { start_label: payload.startLabel } : {}),
+  ...(payload.endLabel !== undefined ? { end_label: payload.endLabel } : {}),
   ...(payload.campaignId !== undefined ? { campaign_id: payload.campaignId } : {}),
   ...(payload.metadata !== undefined ? { metadata: payload.metadata } : {})
 });

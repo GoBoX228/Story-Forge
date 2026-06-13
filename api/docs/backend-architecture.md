@@ -1,4 +1,4 @@
-# Backend Architecture — Story Forge API
+# Backend Architecture — Кузница историй API
 
 ## 1) Целевая архитектурная схема
 
@@ -107,4 +107,3 @@
   - добавлена data-fix миграция для backfill и обновления DB defaults.
 
 **Текущий статус:** `legacy cleanup completed`.
-

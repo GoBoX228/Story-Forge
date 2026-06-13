@@ -73,7 +73,7 @@ class PasswordResetTokenAction
 
         try {
             Mail::raw($text, function ($message) use ($user) {
-                $message->to($user->email)->subject('Story Forge: password reset');
+                $message->to($user->email)->subject('Кузница историй: password reset');
             });
         } catch (\Throwable $error) {
             Log::warning('Password reset email delivery failed', [

@@ -157,9 +157,9 @@ class TwoFactorChallengeAction
     private function sendCode(User $user, string $code, string $purpose): void
     {
         $subject = match ($purpose) {
-            TwoFactorChallenge::PURPOSE_ENABLE => 'Story Forge: enable 2FA',
-            TwoFactorChallenge::PURPOSE_DISABLE => 'Story Forge: disable 2FA',
-            default => 'Story Forge: login code',
+            TwoFactorChallenge::PURPOSE_ENABLE => 'Кузница историй: enable 2FA',
+            TwoFactorChallenge::PURPOSE_DISABLE => 'Кузница историй: disable 2FA',
+            default => 'Кузница историй: login code',
         };
 
         $text = match ($purpose) {

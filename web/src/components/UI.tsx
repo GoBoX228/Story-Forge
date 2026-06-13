@@ -77,6 +77,7 @@ interface SelectProps extends BaseInputProps {
   options: SelectOption[];
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export const Select: React.FC<SelectProps> = ({ 
@@ -85,7 +86,8 @@ export const Select: React.FC<SelectProps> = ({
   onChange, 
   options, 
   placeholder = "ВЫБЕРИТЕ...",
-  className = ''
+  className = '',
+  disabled = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,11 +108,14 @@ export const Select: React.FC<SelectProps> = ({
     <div className={`relative w-full ${className} ${isOpen ? 'z-[100]' : 'z-10'}`} ref={containerRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setIsOpen(!isOpen);
+        }}
         style={{ 
           borderColor: isOpen ? accentColor : 'var(--border-color)',
         }}
-        className={`w-full bg-[var(--input-bg)] border-2 h-10 px-4 flex items-center justify-between text-[10px] mono text-[var(--text-main)] focus:outline-none transition-all uppercase font-black hover:bg-[var(--bg-surface)] active:scale-[0.99]`}
+        className={`w-full bg-[var(--input-bg)] border-2 h-10 px-4 flex items-center justify-between text-[10px] mono text-[var(--text-main)] focus:outline-none transition-all uppercase font-black hover:bg-[var(--bg-surface)] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--input-bg)] disabled:active:scale-100`}
       >
         <span className={selectedOption ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}>
           {selectedOption ? selectedOption.label : placeholder}

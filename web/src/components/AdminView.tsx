@@ -417,7 +417,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onContentDele
       logs,
       broadcasts,
     };
-    downloadData(`storyforge-admin-dump-${Date.now()}.json`, 'application/json', JSON.stringify(payload, null, 2));
+    downloadData(`kuznica-admin-dump-${Date.now()}.json`, 'application/json', JSON.stringify(payload, null, 2));
     showNotice('Снимок экспортирован');
   };
 

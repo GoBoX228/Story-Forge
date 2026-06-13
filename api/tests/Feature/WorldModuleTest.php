@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Campaign;
+use App\Models\Chronicle;
 use App\Models\Faction;
 use App\Models\Location;
 use App\Models\User;
@@ -97,6 +98,74 @@ class WorldModuleTest extends TestCase
         $this->assertDatabaseMissing('events', ['id' => $event['id']]);
     }
 
+    public function test_user_can_manage_chronicles_and_timeline_events(): void
+    {
+        $user = User::factory()->create();
+        $campaign = $this->createCampaign($user, 'Timeline Campaign');
+
+        Sanctum::actingAs($user);
+
+        $chronicle = $this->postJson('/api/chronicles', [
+            'title' => 'Icefall Chronicle',
+            'description' => 'Season arc.',
+            'start_label' => 'Day 1',
+            'end_label' => 'Day 30',
+            'step_size' => 5,
+            'campaign_id' => $campaign->id,
+        ])->assertStatus(201)
+            ->assertJsonPath('title', 'Icefall Chronicle')
+            ->assertJsonPath('start_label', 'Day 1')
+            ->assertJsonPath('step_size', 5)
+            ->json();
+
+        $event = $this->postJson('/api/events', [
+            'title' => 'Gate Opens',
+            'chronicle_id' => $chronicle['id'],
+            'position' => 10,
+            'end_position' => 15,
+            'start_label' => 'Dawn',
+            'end_label' => 'Noon',
+            'campaign_id' => $campaign->id,
+        ])->assertStatus(201)
+            ->assertJsonPath('chronicle_id', $chronicle['id'])
+            ->assertJsonPath('position', 10)
+            ->assertJsonPath('end_position', 15)
+            ->assertJsonPath('start_label', 'Dawn')
+            ->json();
+
+        $this->getJson('/api/chronicles?search=Icefall')
+            ->assertStatus(200)
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $chronicle['id']);
+
+        $this->getJson('/api/events?chronicleId=' . $chronicle['id'])
+            ->assertStatus(200)
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $event['id']);
+
+        $this->patchJson('/api/chronicles/' . $chronicle['id'], [
+            'title' => 'Updated Chronicle',
+            'end_label' => 'Day 40',
+        ])->assertStatus(200)
+            ->assertJsonPath('title', 'Updated Chronicle')
+            ->assertJsonPath('end_label', 'Day 40');
+
+        $this->patchJson('/api/events/' . $event['id'], [
+            'position' => 20,
+            'end_position' => null,
+        ])->assertStatus(200)
+            ->assertJsonPath('position', 20)
+            ->assertJsonPath('end_position', null);
+
+        $this->deleteJson('/api/chronicles/' . $chronicle['id'])->assertStatus(200);
+
+        $this->assertDatabaseMissing('chronicles', ['id' => $chronicle['id']]);
+        $this->assertDatabaseHas('events', [
+            'id' => $event['id'],
+            'chronicle_id' => null,
+        ]);
+    }
+
     public function test_world_records_are_scoped_to_owner(): void
     {
         $owner = User::factory()->create();
@@ -117,15 +186,22 @@ class WorldModuleTest extends TestCase
             'title' => 'Owner Event',
             'metadata' => [],
         ]);
+        $chronicle = Chronicle::create([
+            'user_id' => $owner->id,
+            'title' => 'Owner Chronicle',
+            'metadata' => [],
+        ]);
 
         Sanctum::actingAs($foreign);
 
         $this->getJson('/api/locations/' . $location->id)->assertStatus(404);
         $this->patchJson('/api/factions/' . $faction->id, ['name' => 'Stolen'])->assertStatus(404);
+        $this->getJson('/api/chronicles/' . $chronicle->id)->assertStatus(404);
         $this->deleteJson('/api/events/' . $event->id)->assertStatus(404);
 
         $this->getJson('/api/locations')->assertStatus(200)->assertJsonCount(0);
         $this->getJson('/api/factions')->assertStatus(200)->assertJsonCount(0);
+        $this->getJson('/api/chronicles')->assertStatus(200)->assertJsonCount(0);
         $this->getJson('/api/events')->assertStatus(200)->assertJsonCount(0);
     }
 
@@ -150,6 +226,17 @@ class WorldModuleTest extends TestCase
         $this->postJson('/api/events', [
             'title' => 'Invalid Event',
             'campaign_id' => $foreignCampaign->id,
+        ])->assertStatus(404);
+
+        $foreignChronicle = Chronicle::create([
+            'user_id' => $foreign->id,
+            'title' => 'Foreign Chronicle',
+            'metadata' => [],
+        ]);
+
+        $this->postJson('/api/events', [
+            'title' => 'Invalid Chronicle Event',
+            'chronicle_id' => $foreignChronicle->id,
         ])->assertStatus(404);
     }
 

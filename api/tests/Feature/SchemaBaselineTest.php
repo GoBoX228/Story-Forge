@@ -36,6 +36,7 @@ class SchemaBaselineTest extends TestCase
             'scenario_transitions',
             'locations',
             'factions',
+            'chronicles',
             'events',
             'entity_links',
             'tags',
@@ -91,6 +92,27 @@ class SchemaBaselineTest extends TestCase
             'target_id',
             'relation_type',
             'metadata',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('chronicles', [
+            'user_id',
+            'campaign_id',
+            'title',
+            'start_label',
+            'end_label',
+            'step_size',
+            'metadata',
+        ]));
+
+        $this->assertTrue(Schema::hasColumns('events', [
+            'user_id',
+            'campaign_id',
+            'chronicle_id',
+            'title',
+            'position',
+            'end_position',
+            'start_label',
+            'end_label',
         ]));
 
         $this->assertTrue(Schema::hasColumns('asset_collection_targets', [

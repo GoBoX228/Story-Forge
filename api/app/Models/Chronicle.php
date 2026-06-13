@@ -4,31 +4,23 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class WorldEvent extends Model
+class Chronicle extends Model
 {
-    protected $table = 'events';
-
     protected $fillable = [
         'user_id',
         'campaign_id',
-        'chronicle_id',
         'title',
         'description',
-        'starts_at',
-        'ends_at',
-        'position',
-        'end_position',
         'start_label',
         'end_label',
+        'step_size',
         'metadata',
     ];
 
     protected $casts = [
-        'starts_at' => 'datetime',
-        'ends_at' => 'datetime',
-        'position' => 'integer',
-        'end_position' => 'integer',
+        'step_size' => 'integer',
         'metadata' => 'array',
     ];
 
@@ -42,8 +34,8 @@ class WorldEvent extends Model
         return $this->belongsTo(Campaign::class);
     }
 
-    public function chronicle(): BelongsTo
+    public function events(): HasMany
     {
-        return $this->belongsTo(Chronicle::class);
+        return $this->hasMany(WorldEvent::class);
     }
 }

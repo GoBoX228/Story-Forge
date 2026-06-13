@@ -20,9 +20,9 @@ const ENTITY_TARGET_TYPE_OPTIONS: { value: ScenarioNodeEntityTargetType; label: 
   { value: 'character', label: 'ПЕРСОНАЖ' },
   { value: 'item', label: 'ПРЕДМЕТ' },
   { value: 'asset', label: 'АССЕТ' },
-  { value: 'location', label: 'ЛОКАЦИЯ' },
-  { value: 'faction', label: 'ФРАКЦИЯ' },
-  { value: 'event', label: 'СОБЫТИЕ' },
+  { value: 'location', label: 'МЕСТО' },
+  { value: 'faction', label: 'ОРГАНИЗАЦИЯ' },
+  { value: 'event', label: 'ХРОНИКА' },
 ];
 
 const ENTITY_TARGET_LABELS: Record<ScenarioNodeEntityTargetType, string> = {
@@ -30,9 +30,9 @@ const ENTITY_TARGET_LABELS: Record<ScenarioNodeEntityTargetType, string> = {
   character: 'ПЕРСОНАЖ',
   item: 'ПРЕДМЕТ',
   asset: 'АССЕТ',
-  location: 'ЛОКАЦИЯ',
-  faction: 'ФРАКЦИЯ',
-  event: 'СОБЫТИЕ',
+  location: 'МЕСТО',
+  faction: 'ОРГАНИЗАЦИЯ',
+  event: 'ХРОНИКА',
 };
 
 interface GraphNodeEntityLinksProps {
@@ -129,18 +129,18 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
     if (targetType === 'location') {
       return locations
         .filter((location) => !linkedIds.has(location.id))
-        .map((location) => ({ value: location.id, label: location.name || `Локация ${location.id}` }));
+        .map((location) => ({ value: location.id, label: location.name || `Место ${location.id}` }));
     }
 
     if (targetType === 'faction') {
       return factions
         .filter((faction) => !linkedIds.has(faction.id))
-        .map((faction) => ({ value: faction.id, label: faction.name || `Фракция ${faction.id}` }));
+        .map((faction) => ({ value: faction.id, label: faction.name || `Организация ${faction.id}` }));
     }
 
     return events
       .filter((event) => !linkedIds.has(event.id))
-      .map((event) => ({ value: event.id, label: event.title || `Событие ${event.id}` }));
+      .map((event) => ({ value: event.id, label: event.title || `Запись хроники ${event.id}` }));
   }, [assets, characters, entityLinks, events, factions, items, locations, maps, scenarioCharacters, scenarioItems, selectedNodeType, targetType]);
 
   useEffect(() => {
@@ -170,14 +170,14 @@ export const GraphNodeEntityLinks: React.FC<GraphNodeEntityLinksProps> = ({
     }
 
     if (link.targetType === 'location') {
-      return locations.find((location) => location.id === link.targetId)?.name ?? `Локация #${link.targetId}`;
+      return locations.find((location) => location.id === link.targetId)?.name ?? `Место #${link.targetId}`;
     }
 
     if (link.targetType === 'faction') {
-      return factions.find((faction) => faction.id === link.targetId)?.name ?? `Фракция #${link.targetId}`;
+      return factions.find((faction) => faction.id === link.targetId)?.name ?? `Организация #${link.targetId}`;
     }
 
-    return events.find((event) => event.id === link.targetId)?.title ?? `Событие #${link.targetId}`;
+    return events.find((event) => event.id === link.targetId)?.title ?? `Запись хроники #${link.targetId}`;
   };
 
   const handleCreateEntityLink = async () => {

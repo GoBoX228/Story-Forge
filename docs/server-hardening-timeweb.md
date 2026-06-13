@@ -145,9 +145,9 @@ docker run --rm \
 ## 7. Health Checks
 
 ```bash
-curl -I https://mystoryforge.ru
-curl -i -X OPTIONS https://mystoryforge.ru/api/auth/login \
-  -H "Origin: https://mystoryforge.ru" \
+curl -I https://your-domain.ru
+curl -i -X OPTIONS https://your-domain.ru/api/auth/login \
+  -H "Origin: https://your-domain.ru" \
   -H "Access-Control-Request-Method: POST"
 docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=100 api
 docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=100 web
@@ -161,4 +161,3 @@ Expected:
 - security headers are present;
 - API container is healthy;
 - only Caddy is publicly reachable for HTTP/HTTPS.
-

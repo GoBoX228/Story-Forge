@@ -1,6 +1,6 @@
-# Story Forge API (Backend)
+# Кузница историй API (Backend)
 
-Backend сервиса `Story Forge` на Laravel 12 + PostgreSQL.
+Backend сервиса `Кузница историй` на Laravel 12 + PostgreSQL.
 
 ## Назначение
 
@@ -94,4 +94,3 @@ php artisan test --filter=AdminModule
 - Используется Browsershot + Chromium.
 - Для контейнера используется `CHROME_PATH` (см. env-конфигурацию).
 - Тесты export мокируют генерацию PDF и не требуют реального Chromium.
-
