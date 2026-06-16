@@ -47,6 +47,17 @@ interface EditorToolbarProps {
 const isSpacer = (entry: EditorToolbarEntry): entry is EditorToolbarSpacer => 'spacer' in entry;
 
 const isVerticalPosition = (position: EditorToolbarPosition): boolean => position === 'left' || position === 'right';
+const TOOLBAR_POSITION_ORDER: EditorToolbarPosition[] = ['left', 'top', 'right', 'bottom'];
+
+export const getNextEditorToolbarPosition = (current: EditorToolbarPosition): EditorToolbarPosition => {
+  const currentIndex = TOOLBAR_POSITION_ORDER.indexOf(current);
+
+  if (currentIndex === -1) {
+    return TOOLBAR_POSITION_ORDER[0];
+  }
+
+  return TOOLBAR_POSITION_ORDER[(currentIndex + 1) % TOOLBAR_POSITION_ORDER.length];
+};
 
 export const createEditorToolbarUtilityGroup = (options: EditorToolbarUtilityGroupOptions): EditorToolbarEntry[] => {
   const items: EditorToolbarButtonItem[] = [];

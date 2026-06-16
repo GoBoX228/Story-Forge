@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Layers, Map as MapIcon, Package, Settings, Users, X } from 'lucide-react';
 import {
   Campaign,
@@ -40,6 +40,8 @@ interface ScenarioSettingsPanelProps {
   onUpdateField: (field: keyof Scenario, value: string) => void;
   onToggleComposition: (targetType: EntityLinkTargetType, targetId: string) => void;
   onExportPdf: () => void;
+  onExportCharacterCardsPdf: (duplexEdge: 'long' | 'short') => void;
+  onExportItemCardsPdf: (duplexEdge: 'long' | 'short') => void;
   embedded?: boolean;
 }
 
@@ -90,8 +92,12 @@ export const ScenarioSettingsPanel: React.FC<ScenarioSettingsPanelProps> = ({
   onUpdateField,
   onToggleComposition,
   onExportPdf,
+  onExportCharacterCardsPdf,
+  onExportItemCardsPdf,
   embedded = false
 }) => {
+  const [characterCardsDuplexEdge, setCharacterCardsDuplexEdge] = useState<'long' | 'short'>('long');
+  const [itemCardsDuplexEdge, setItemCardsDuplexEdge] = useState<'long' | 'short'>('long');
   const relatedCharacterIds = new Set(relatedCharacters.map((character) => character.id));
   const relatedMapIds = new Set(relatedMaps.map((map) => map.id));
   const relatedItemIds = new Set(relatedItems.map((item) => item.id));
@@ -220,6 +226,56 @@ export const ScenarioSettingsPanel: React.FC<ScenarioSettingsPanelProps> = ({
           <Button variant="accent-red" className="w-full h-12" onClick={onExportPdf}>
             Экспорт PDF
           </Button>
+        </div>
+        <div className="space-y-3 pt-4 border-t border-[var(--border-color)]">
+          <label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black flex items-center gap-2">
+            <Users size={10} /> Карточки персонажей
+          </label>
+          <Select
+            value={characterCardsDuplexEdge}
+            onChange={(value) => setCharacterCardsDuplexEdge(value === 'short' ? 'short' : 'long')}
+            options={[
+              { value: 'long', label: 'Длинный край' },
+              { value: 'short', label: 'Короткий край' }
+            ]}
+            placeholder="Режим двусторонней печати"
+            accentColor={COLORS.accentYellow}
+          />
+          <Button
+            variant="accent-red"
+            className="w-full h-12"
+            onClick={() => onExportCharacterCardsPdf(characterCardsDuplexEdge)}
+          >
+            Экспорт карточек персонажей
+          </Button>
+          <p className="mono text-[8px] leading-relaxed text-[var(--text-muted)] uppercase">
+            A4, 3×3, лица и обороты для двусторонней печати.
+          </p>
+        </div>
+        <div className="space-y-3 pt-4 border-t border-[var(--border-color)]">
+          <label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black flex items-center gap-2">
+            <Package size={10} /> Карточки предметов
+          </label>
+          <Select
+            value={itemCardsDuplexEdge}
+            onChange={(value) => setItemCardsDuplexEdge(value === 'short' ? 'short' : 'long')}
+            options={[
+              { value: 'long', label: 'Длинный край' },
+              { value: 'short', label: 'Короткий край' }
+            ]}
+            placeholder="Режим двусторонней печати"
+            accentColor={COLORS.accentBlue}
+          />
+          <Button
+            variant="accent-red"
+            className="w-full h-12"
+            onClick={() => onExportItemCardsPdf(itemCardsDuplexEdge)}
+          >
+            Экспорт карточек предметов
+          </Button>
+          <p className="mono text-[8px] leading-relaxed text-[var(--text-muted)] uppercase">
+            A4, 3×3, лица и обороты для двусторонней печати.
+          </p>
         </div>
       </div>
     </div>

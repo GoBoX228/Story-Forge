@@ -206,7 +206,7 @@ const buildDefaultMapLayers = (
     {
       id: 'background',
       type: 'background',
-      name: 'Background',
+      name: 'Фон',
       visible: true,
       locked: false,
       opacity: 1,
@@ -216,7 +216,7 @@ const buildDefaultMapLayers = (
     {
       id: 'tiles',
       type: 'tiles',
-      name: 'Tiles',
+      name: 'Тайлы',
       visible: true,
       locked: false,
       opacity: 1,
@@ -228,7 +228,7 @@ const buildDefaultMapLayers = (
     {
       id: 'tokens',
       type: 'tokens',
-      name: 'Tokens',
+      name: 'Токены',
       visible: true,
       locked: false,
       opacity: 1,
@@ -256,7 +256,7 @@ const normalizeMapLayers = (data: any, legacyObjects: MapObject[], backgroundAss
     return {
       id,
       type,
-      name: String(layer?.name ?? (type === 'background' ? 'Background' : type === 'tokens' ? 'Tokens' : 'Tiles')),
+      name: String(layer?.name ?? (type === 'background' ? 'Фон' : type === 'tokens' ? 'Токены' : 'Тайлы')),
       visible: layer?.visible !== false,
       locked: Boolean(layer?.locked),
       opacity: clampUnit(layer?.opacity, 1),
@@ -274,9 +274,9 @@ const normalizeMapLayers = (data: any, legacyObjects: MapObject[], backgroundAss
     }
   };
 
-  ensureLayer('background', 'background', 'Background', 0);
-  ensureLayer('tiles', 'tiles', 'Tiles', 1);
-  ensureLayer('tokens', 'tokens', 'Tokens', 2);
+  ensureLayer('background', 'background', 'Фон', 0);
+  ensureLayer('tiles', 'tiles', 'Тайлы', 1);
+  ensureLayer('tokens', 'tokens', 'Токены', 2);
 
   return withRequiredLayers.sort((a, b) => a.order - b.order);
 };

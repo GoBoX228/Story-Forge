@@ -124,7 +124,7 @@ const fetchCsrfToken = async (): Promise<string> => {
   const data = await response.json().catch(() => null);
   const token = typeof data?.csrf_token === 'string' ? data.csrf_token : '';
   if (!token) {
-    throw new Error('CSRF token missing');
+    throw new Error('CSRF-токен отсутствует');
   }
 
   csrfToken = token;
@@ -233,4 +233,51 @@ export const apiRequest = async <T>(
   }
 
   return response.json() as Promise<T>;
+};
+
+export type MapPdfPageSize = 'a4' | 'a3' | 'a2' | 'a1' | 'a0';
+export type MapPdfOrientation = 'landscape' | 'portrait';
+
+export const exportMapPdf = async (
+  mapId: string,
+  options: {
+    pageSize: MapPdfPageSize;
+    orientation: MapPdfOrientation;
+  },
+  retryOnAuth = true,
+  retryOnCsrf = true
+): Promise<Blob | null> => {
+  const headers = buildHeaders({
+    Accept: 'application/pdf',
+    'Content-Type': 'application/json'
+  }, null);
+  headers.set(CSRF_HEADER_NAME, await ensureCsrfToken());
+
+  const response = await fetch(`${API_BASE_URL}/api/maps/${mapId}/export/pdf`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({
+      page_size: options.pageSize,
+      orientation: options.orientation
+    })
+  });
+
+  if (response.status === 419 && retryOnCsrf) {
+    clearCsrfToken();
+    return exportMapPdf(mapId, options, retryOnAuth, false);
+  }
+
+  if (response.status === 401 && retryOnAuth) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return exportMapPdf(mapId, options, false, retryOnCsrf);
+    }
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.blob();
 };

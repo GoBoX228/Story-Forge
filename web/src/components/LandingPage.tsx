@@ -1,11 +1,12 @@
 ﻿import React, { useState } from 'react';
 import { Button, SectionHeader } from './UI';
 import { AuthModal } from './AuthModal';
+import { BaseCard } from './BaseCard';
 import {
   ArrowRight,
+  FileDown,
   Map as MapIcon,
   Users,
-  Zap,
   Globe,
   PenTool,
   Box
@@ -28,37 +29,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
     {
       icon: <PenTool size={24} />,
       title: "КОНСТРУКТОР СЦЕНАРИЕВ",
-      desc: "Пишите нелинейные сюжеты с ветвящимися диалогами и проверками характеристик. Модульная система блоков.",
+      desc: "Собирайте нелинейные сценарии в graph-редакторе: узлы, переходы, проверки, диалоги, добыча и предпросмотр.",
       color: "var(--col-red)"
     },
     {
       icon: <MapIcon size={24} />,
       title: "РЕДАКТОР КАРТ",
-      desc: "Проектируйте тактические карты подземелий и глобальные карты мира. Поддержка слоев и тумана войны.",
-      color: "var(--col-white)" // Will adapt to theme
+      desc: "Проектируйте тактические карты на сетке, работайте со слоями, тайлами, токенами и наборами ассетов.",
+      color: "var(--col-white)"
     },
     {
       icon: <Users size={24} />,
-      title: "БАЗА ПЕРСОНАЖЕЙ",
-      desc: "Создавайте глубоких NPC и монстров. Автоматический расчет статов, инвентарь и генератор предысторий.",
+      title: "ПЕРСОНАЖИ И ГРУППЫ",
+      desc: "Ведите персонажей, NPC и группы, связывайте их со сценариями, картами, хрониками и ассетами.",
       color: "var(--col-yellow)"
     },
     {
       icon: <Box size={24} />,
-      title: "РЕЕСТР ПРЕДМЕТОВ",
-      desc: "Каталогизируйте легендарные артефакты. Система крафта, редкости и магических свойств.",
+      title: "ПРЕДМЕТЫ И АССЕТЫ",
+      desc: "Храните предметы, изображения, документы, папки и наборы ассетов для быстрого повторного использования.",
       color: "var(--col-blue)"
     },
     {
       icon: <Globe size={24} />,
-      title: "ГЛОБАЛЬНАЯ СЕТЬ",
-      desc: "Делитесь своими мирами с сообществом. Импортируйте готовые модули других мастеров.",
+      title: "АТЛАС И ХРОНИКИ",
+      desc: "Структурируйте мир через хроники, события, места и организации, не ломая самостоятельность материалов.",
       color: "var(--col-teal)"
     },
     {
-      icon: <Zap size={24} />,
-      title: "ОНЛАЙН СЕССИИ",
-      desc: "Проводите игры прямо в браузере. Броски кубиков, чат и управление состоянием группы.",
+      icon: <FileDown size={24} />,
+      title: "ПУБЛИКАЦИЯ И ЭКСПОРТ",
+      desc: "Готовьте материалы к публикации, проверяйте сценарий и экспортируйте его в PDF для подготовки игры.",
       color: "var(--col-purple)"
     }
   ];
@@ -108,13 +109,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               </div>
               
               <p className="text-lg md:text-xl text-[var(--text-muted)] max-w-xl leading-relaxed mono">
-                Профессиональный инструмент для Мастеров Подземелий. 
-                Пишите сценарии, рисуйте карты и управляйте кампаниями в едином кибер-пространстве.
+                Рабочее пространство мастера для подготовки настольных RPG:
+                сценарии, карты, хроники, материалы и кампании в одном интерфейсе.
               </p>
               
               <div className="flex flex-wrap gap-4 pt-4">
                 <Button size="lg" color="red" className="h-16 px-10 text-lg" onClick={() => openAuth('register')}>
-                  НАЧАТЬ ИГРУ <ArrowRight className="ml-2" />
+                  НАЧАТЬ РАБОТУ <ArrowRight className="ml-2" />
                 </Button>
                 <Button size="lg" color="white" inverted className="h-16 px-10" onClick={() => {
                     document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' });
@@ -138,8 +139,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                       </div>
                   </div>
                   <div className="absolute -bottom-6 -right-6 bg-[var(--bg-main)] border border-[var(--border-color)] p-4 shadow-xl hover:translate-x-1 hover:translate-y-1 transition-transform">
-                      <div className="mono text-xs font-black text-[var(--text-muted)] uppercase mb-1">Активных миров</div>
-                      <div className="text-3xl font-black text-[var(--text-main)] glitch-text">12,408</div>
+                      <div className="mono text-xs font-black text-[var(--text-muted)] uppercase mb-2">Рабочие модули</div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 mono text-[10px] font-black uppercase text-[var(--text-main)]">
+                        <span>Сценарии</span>
+                        <span>Карты</span>
+                        <span>Атлас</span>
+                        <span>Ассеты</span>
+                      </div>
                   </div>
                </div>
             </div>
@@ -158,22 +164,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, i) => (
-              <div 
-                key={i} 
-                className="group p-8 border border-[var(--border-color)] bg-[var(--bg-main)] hover:border-[var(--text-main)] transition-all hover:-translate-y-2 duration-300 relative overflow-hidden"
+              <BaseCard
+                key={i}
+                accentColor={feature.color}
+                className="min-h-[236px] bg-[var(--bg-main)]"
               >
-                <div 
-                    className="absolute top-0 left-0 w-full h-1 transition-transform duration-300 transform scale-x-0 group-hover:scale-x-100 origin-left" 
-                    style={{ backgroundColor: feature.color }}
-                />
-                <div className="mb-6 w-12 h-12 flex items-center justify-center bg-[var(--bg-surface)] border border-[var(--border-color)] group-hover:bg-[var(--text-main)] group-hover:text-[var(--bg-main)] transition-colors" style={{ color: feature.color }}>
-                  {feature.icon}
+                <div
+                  className="relative mb-8 w-12 h-12 flex items-center justify-center overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-color)] transition-colors group-hover/card:text-black"
+                  style={{
+                    ['--feature-accent' as any]: feature.color
+                  }}
+                >
+                  <span className="absolute inset-0 opacity-0 transition-opacity group-hover/card:opacity-100 bg-[var(--feature-accent)]" />
+                  <span className="relative z-10 text-[var(--feature-accent)] transition-colors group-hover/card:text-black">
+                    {feature.icon}
+                  </span>
                 </div>
-                <h3 className="text-xl font-black uppercase mb-3 text-[var(--text-main)]">{feature.title}</h3>
-                <p className="text-[var(--text-muted)] mono text-xs leading-relaxed">
+                <h3 className="text-xl font-black uppercase mb-4 text-[var(--text-main)]">
+                  {feature.title}
+                </h3>
+                <p className="text-[var(--text-muted)] mono text-xs leading-relaxed max-w-sm">
                   {feature.desc}
                 </p>
-              </div>
+              </BaseCard>
             ))}
           </div>
         </div>
@@ -190,7 +203,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               ТВОЙ МИР <br/> ЖДЕТ СОЗДАТЕЛЯ
             </h2>
             <p className="text-xl mono text-[var(--text-muted)]">
-              Присоединяйтесь к тысячам мастеров. <br/> Бесплатный доступ к базовому функционалу навсегда.
+              Соберите кампанию, подготовьте сценарии, разложите события по хронике
+              и держите все материалы под рукой.
             </p>
             <Button size="lg" color="red" className="h-20 px-12 text-xl" onClick={() => openAuth('register')}>
                СОЗДАТЬ АККАУНТ
@@ -205,30 +219,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               <div className="w-6 h-6 bg-[var(--text-muted)] text-[var(--bg-main)] flex items-center justify-center font-bold text-xs mono">К</div>
               <span className="mono text-[10px] font-bold uppercase text-[var(--text-muted)]">© 2026 КУЗНИЦА ИСТОРИЙ</span>
            </div>
-           
-           <div className="flex gap-8">
-              <button
-                type="button"
-                onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
-                className="mono text-[10px] font-bold uppercase text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              >
-                Документация
-              </button>
-              <button
-                type="button"
-                onClick={() => openAuth('login')}
-                className="mono text-[10px] font-bold uppercase text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              >
-                API
-              </button>
-              <button
-                type="button"
-                onClick={() => openAuth('register')}
-                className="mono text-[10px] font-bold uppercase text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              >
-                Поддержка
-              </button>
-           </div>
+           <span className="mono text-[10px] font-bold uppercase text-[var(--text-muted)]">
+             Рабочее пространство мастера настольных RPG
+           </span>
         </div>
       </footer>
     </div>

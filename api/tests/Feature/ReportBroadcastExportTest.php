@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Export\Actions\GenerateCharacterCardsPdfAction;
+use App\Domain\Export\Actions\GenerateItemCardsPdfAction;
+use App\Domain\Export\Actions\GenerateMapPdfAction;
 use App\Domain\Export\Actions\GenerateScenarioPdfAction;
 use App\Models\AdminAuditLog;
 use App\Models\Announcement;
@@ -407,5 +410,599 @@ class ReportBroadcastExportTest extends TestCase
             ->assertHeader('Content-Type', 'application/pdf');
         $this->assertSame('%PDF-graph-mock%', $response->getContent());
         $this->assertNotNull($capturedHtml);
+        $this->assertStringContainsString('Карта графа', $capturedHtml);
+        $this->assertStringContainsString('<svg', $capturedHtml);
+        $this->assertStringContainsString('#4361ee', $capturedHtml);
+        $this->assertStringNotContainsString('Карты сценария', $capturedHtml);
+    }
+
+    public function test_export_character_cards_pdf_contract_validation_and_owner_boundary(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $scenario = Scenario::create([
+            'user_id' => $owner->id,
+            'title' => 'Character Cards Scenario',
+        ]);
+        $item = Item::create([
+            'user_id' => $owner->id,
+            'name' => 'Signal Crystal',
+            'type' => 'tool',
+            'rarity' => 'rare',
+            'description' => 'A bright crystal.',
+            'modifiers' => [],
+            'weight' => 0.5,
+            'value' => 20,
+        ]);
+        $character = Character::create([
+            'user_id' => $owner->id,
+            'name' => 'Irma Snow',
+            'role' => 'NPC',
+            'race' => 'Human',
+            'description' => 'A watcher of the frozen lighthouse.',
+            'level' => 3,
+            'stats' => ['STR' => 10, 'WIS' => 14],
+            'inventory' => [$item->id],
+        ]);
+        $portrait = Asset::create([
+            'user_id' => $owner->id,
+            'type' => Asset::TYPE_IMAGE,
+            'kind' => Asset::KIND_PORTRAIT,
+            'name' => 'Irma Portrait',
+            'url' => 'https://example.test/irma.png',
+            'mime_type' => 'image/png',
+            'metadata' => [],
+        ]);
+
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenario->id,
+            'target_type' => EntityLink::TARGET_CHARACTER,
+            'target_id' => $character->id,
+            'relation_type' => EntityLink::RELATION_USES,
+            'metadata' => [],
+        ]);
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_CHARACTER,
+            'source_id' => $character->id,
+            'target_type' => EntityLink::TARGET_ASSET,
+            'target_id' => $portrait->id,
+            'relation_type' => EntityLink::RELATION_USES,
+            'metadata' => ['role' => 'portrait'],
+        ]);
+
+        $capturedHtml = null;
+        $this->mock(GenerateCharacterCardsPdfAction::class, function (MockInterface $mock) use (&$capturedHtml): void {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$capturedHtml): bool {
+                    $capturedHtml = $html;
+
+                    return str_contains($html, 'Character Cards Scenario')
+                        && str_contains($html, 'Irma Snow')
+                        && str_contains($html, 'Signal Crystal')
+                        && str_contains($html, 'https://example.test/irma.png')
+                        && str_contains($html, '--accent: #8338EC;');
+                }))
+                ->andReturn('%PDF-character-cards%');
+        });
+
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/characters/pdf', [
+            'duplex_edge' => 'sideways',
+        ])->assertStatus(422);
+
+        $response = $this->postJson('/api/scenarios/' . $scenario->id . '/export/characters/pdf', [
+            'duplex_edge' => 'short',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame('%PDF-character-cards%', $response->getContent());
+        $this->assertNotNull($capturedHtml);
+        $this->assertStringNotContainsString('Лицевая сторона', $capturedHtml);
+        $this->assertStringNotContainsString('Оборот', $capturedHtml);
+        $this->assertStringNotContainsString('Human', $capturedHtml);
+        $this->assertStringNotContainsString('ур.', $capturedHtml);
+
+        $contentDisposition = (string) $response->headers->get('Content-Disposition');
+        $this->assertStringStartsWith(
+            'attachment; filename="scenario_' . $scenario->id . '_character_cards_',
+            $contentDisposition
+        );
+        $this->assertStringEndsWith('.pdf"', $contentDisposition);
+
+        $foreignUser = User::factory()->create();
+        Sanctum::actingAs($foreignUser);
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/characters/pdf', [
+            'duplex_edge' => 'short',
+        ])->assertStatus(404);
+    }
+
+    public function test_export_character_cards_pdf_duplex_mirroring_and_pagination(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $scenario = Scenario::create([
+            'user_id' => $owner->id,
+            'title' => 'Mirroring Scenario',
+        ]);
+
+        for ($index = 1; $index <= 10; $index++) {
+            $character = Character::create([
+                'user_id' => $owner->id,
+                'name' => 'Character ' . $index,
+                'role' => 'NPC',
+                'race' => 'Human',
+                'description' => 'Character ' . $index . ' description.',
+                'level' => $index,
+                'stats' => ['STR' => 10 + $index],
+                'inventory' => [],
+            ]);
+
+            EntityLink::create([
+                'source_type' => EntityLink::TARGET_SCENARIO,
+                'source_id' => $scenario->id,
+                'target_type' => EntityLink::TARGET_CHARACTER,
+                'target_id' => $character->id,
+                'relation_type' => EntityLink::RELATION_USES,
+                'metadata' => [],
+            ]);
+        }
+
+        $longEdgeHtml = null;
+        $shortEdgeHtml = null;
+        $this->mock(GenerateCharacterCardsPdfAction::class, function (MockInterface $mock) use (&$longEdgeHtml, &$shortEdgeHtml): void {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$longEdgeHtml): bool {
+                    $longEdgeHtml = $html;
+
+                    return str_contains($html, 'data-side="front"')
+                        && str_contains($html, 'data-side="back"');
+                }))
+                ->andReturn('%PDF-long%');
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$shortEdgeHtml): bool {
+                    $shortEdgeHtml = $html;
+
+                    return str_contains($html, 'data-side="front"')
+                        && str_contains($html, 'data-side="back"');
+                }))
+                ->andReturn('%PDF-short%');
+        });
+
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/characters/pdf', [
+            'duplex_edge' => 'long',
+        ])->assertStatus(200);
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/characters/pdf', [
+            'duplex_edge' => 'short',
+        ])->assertStatus(200);
+
+        $this->assertNotNull($longEdgeHtml);
+        $this->assertNotNull($shortEdgeHtml);
+        $this->assertSame(2, substr_count($longEdgeHtml, 'data-side="front"'));
+        $this->assertSame(2, substr_count($longEdgeHtml, 'data-side="back"'));
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="0"[^>]*data-character-name="Character 3"/s',
+            $longEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="2"[^>]*data-character-name="Character 1"/s',
+            $longEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-sheet="2" data-side="back".*data-card-slot="2"[^>]*data-character-name="Character 10"/s',
+            $longEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="6"[^>]*data-character-name="Character 1"/s',
+            $shortEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="0"[^>]*data-character-name="Character 7"/s',
+            $shortEdgeHtml
+        );
+    }
+
+    public function test_export_character_cards_pdf_handles_empty_composition(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $scenario = Scenario::create([
+            'user_id' => $owner->id,
+            'title' => 'Empty Cards Scenario',
+        ]);
+
+        $capturedHtml = null;
+        $this->mock(GenerateCharacterCardsPdfAction::class, function (MockInterface $mock) use (&$capturedHtml): void {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$capturedHtml): bool {
+                    $capturedHtml = $html;
+
+                    return str_contains($html, 'нет персонажей');
+                }))
+                ->andReturn('%PDF-empty-cards%');
+        });
+
+        $response = $this->postJson('/api/scenarios/' . $scenario->id . '/export/characters/pdf');
+
+        $response->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame('%PDF-empty-cards%', $response->getContent());
+        $this->assertNotNull($capturedHtml);
+    }
+
+    public function test_export_item_cards_pdf_contract_validation_owner_boundary_and_composition_only(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $scenario = Scenario::create([
+            'user_id' => $owner->id,
+            'title' => 'Item Cards Scenario',
+        ]);
+        $linkedItem = Item::create([
+            'user_id' => $owner->id,
+            'name' => 'Signal Crystal',
+            'type' => 'Tool',
+            'rarity' => 'rare',
+            'description' => 'A bright crystal for the lens hall.',
+            'modifiers' => [['stat' => 'WIS', 'value' => 2]],
+            'weight' => 0.5,
+            'value' => 20,
+        ]);
+        Item::create([
+            'user_id' => $owner->id,
+            'name' => 'Unlinked Relic',
+            'type' => 'Relic',
+            'rarity' => 'legendary',
+            'description' => 'Must not be exported.',
+            'modifiers' => [],
+            'weight' => 1,
+            'value' => 100,
+        ]);
+
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenario->id,
+            'target_type' => EntityLink::TARGET_ITEM,
+            'target_id' => $linkedItem->id,
+            'relation_type' => EntityLink::RELATION_USES,
+            'metadata' => [],
+        ]);
+
+        $capturedHtml = null;
+        $this->mock(GenerateItemCardsPdfAction::class, function (MockInterface $mock) use (&$capturedHtml): void {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$capturedHtml): bool {
+                    $capturedHtml = $html;
+
+                    return str_contains($html, 'Item Cards Scenario')
+                        && str_contains($html, 'Signal Crystal')
+                        && str_contains($html, 'WIS')
+                        && str_contains($html, '+2')
+                        && str_contains($html, '--accent: #4361EE;')
+                        && !str_contains($html, 'Unlinked Relic');
+                }))
+                ->andReturn('%PDF-item-cards%');
+        });
+
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/items/pdf', [
+            'duplex_edge' => 'sideways',
+        ])->assertStatus(422);
+
+        $response = $this->postJson('/api/scenarios/' . $scenario->id . '/export/items/pdf', [
+            'duplex_edge' => 'short',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame('%PDF-item-cards%', $response->getContent());
+        $this->assertNotNull($capturedHtml);
+
+        $contentDisposition = (string) $response->headers->get('Content-Disposition');
+        $this->assertStringStartsWith(
+            'attachment; filename="scenario_' . $scenario->id . '_item_cards_',
+            $contentDisposition
+        );
+        $this->assertStringEndsWith('.pdf"', $contentDisposition);
+
+        $foreignUser = User::factory()->create();
+        Sanctum::actingAs($foreignUser);
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/items/pdf', [
+            'duplex_edge' => 'short',
+        ])->assertStatus(404);
+    }
+
+    public function test_export_item_cards_pdf_duplex_mirroring_and_pagination(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $scenario = Scenario::create([
+            'user_id' => $owner->id,
+            'title' => 'Item Mirroring Scenario',
+        ]);
+
+        for ($index = 1; $index <= 10; $index++) {
+            $item = Item::create([
+                'user_id' => $owner->id,
+                'name' => 'Item ' . $index,
+                'type' => 'Tool',
+                'rarity' => 'common',
+                'description' => 'Item ' . $index . ' description.',
+                'modifiers' => [['stat' => 'ATK', 'value' => $index]],
+                'weight' => 0.1 * $index,
+                'value' => $index,
+            ]);
+
+            EntityLink::create([
+                'source_type' => EntityLink::TARGET_SCENARIO,
+                'source_id' => $scenario->id,
+                'target_type' => EntityLink::TARGET_ITEM,
+                'target_id' => $item->id,
+                'relation_type' => EntityLink::RELATION_USES,
+                'metadata' => [],
+            ]);
+        }
+
+        $longEdgeHtml = null;
+        $shortEdgeHtml = null;
+        $this->mock(GenerateItemCardsPdfAction::class, function (MockInterface $mock) use (&$longEdgeHtml, &$shortEdgeHtml): void {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$longEdgeHtml): bool {
+                    $longEdgeHtml = $html;
+
+                    return str_contains($html, 'data-side="front"')
+                        && str_contains($html, 'data-side="back"');
+                }))
+                ->andReturn('%PDF-items-long%');
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$shortEdgeHtml): bool {
+                    $shortEdgeHtml = $html;
+
+                    return str_contains($html, 'data-side="front"')
+                        && str_contains($html, 'data-side="back"');
+                }))
+                ->andReturn('%PDF-items-short%');
+        });
+
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/items/pdf', [
+            'duplex_edge' => 'long',
+        ])->assertStatus(200);
+        $this->postJson('/api/scenarios/' . $scenario->id . '/export/items/pdf', [
+            'duplex_edge' => 'short',
+        ])->assertStatus(200);
+
+        $this->assertNotNull($longEdgeHtml);
+        $this->assertNotNull($shortEdgeHtml);
+        $this->assertSame(2, substr_count($longEdgeHtml, 'data-side="front"'));
+        $this->assertSame(2, substr_count($longEdgeHtml, 'data-side="back"'));
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="0"[^>]*data-item-name="Item 3"/s',
+            $longEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="2"[^>]*data-item-name="Item 1"/s',
+            $longEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-sheet="2" data-side="back".*data-card-slot="2"[^>]*data-item-name="Item 10"/s',
+            $longEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="6"[^>]*data-item-name="Item 1"/s',
+            $shortEdgeHtml
+        );
+        $this->assertMatchesRegularExpression(
+            '/data-card-side="back"[^>]*data-card-slot="0"[^>]*data-item-name="Item 7"/s',
+            $shortEdgeHtml
+        );
+    }
+
+    public function test_export_item_cards_pdf_handles_empty_composition(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $scenario = Scenario::create([
+            'user_id' => $owner->id,
+            'title' => 'Empty Item Cards Scenario',
+        ]);
+
+        $capturedHtml = null;
+        $this->mock(GenerateItemCardsPdfAction::class, function (MockInterface $mock) use (&$capturedHtml): void {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$capturedHtml): bool {
+                    $capturedHtml = $html;
+
+                    return str_contains($html, 'нет предметов');
+                }))
+                ->andReturn('%PDF-empty-item-cards%');
+        });
+
+        $response = $this->postJson('/api/scenarios/' . $scenario->id . '/export/items/pdf');
+
+        $response->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame('%PDF-empty-item-cards%', $response->getContent());
+        $this->assertNotNull($capturedHtml);
+    }
+
+    public function test_export_map_pdf_contract_validation_owner_boundary_and_visible_layers(): void
+    {
+        $owner = User::factory()->create();
+        $foreignUser = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $backgroundAsset = Asset::create([
+            'user_id' => $owner->id,
+            'type' => 'image',
+            'kind' => 'background',
+            'name' => 'Background Asset',
+            'path' => 'assets/background.png',
+            'url' => 'https://example.test/storage/background.png',
+            'mime_type' => 'image/png',
+            'size' => 100,
+            'metadata' => [],
+        ]);
+        $tileAsset = Asset::create([
+            'user_id' => $owner->id,
+            'type' => 'image',
+            'kind' => 'tile',
+            'name' => 'Tile Asset',
+            'path' => 'assets/tile.png',
+            'url' => 'https://example.test/storage/tile.png',
+            'mime_type' => 'image/png',
+            'size' => 100,
+            'metadata' => [],
+        ]);
+        $foreignAsset = Asset::create([
+            'user_id' => $foreignUser->id,
+            'type' => 'image',
+            'kind' => 'token',
+            'name' => 'Foreign Token',
+            'path' => 'assets/foreign.png',
+            'url' => 'https://example.test/storage/foreign.png',
+            'mime_type' => 'image/png',
+            'size' => 100,
+            'metadata' => [],
+        ]);
+
+        $map = Map::create([
+            'user_id' => $owner->id,
+            'name' => 'Export Test Map',
+            'width' => 4,
+            'height' => 3,
+            'cell_size' => 32,
+            'data' => [
+                'backgroundAssetId' => (string) $backgroundAsset->id,
+                'layers' => [
+                    [
+                        'id' => 'background',
+                        'type' => 'background',
+                        'visible' => true,
+                        'opacity' => 1,
+                        'order' => 0,
+                        'objects' => [],
+                    ],
+                    [
+                        'id' => 'tiles',
+                        'type' => 'tiles',
+                        'visible' => true,
+                        'opacity' => 1,
+                        'order' => 1,
+                        'objects' => [
+                            [
+                                'id' => 'tile-visible',
+                                'x' => 1,
+                                'y' => 1,
+                                'type' => 'floor',
+                                'label' => 'Visible Tile',
+                                'color' => '#4361EE',
+                                'assetId' => (string) $tileAsset->id,
+                            ],
+                        ],
+                    ],
+                    [
+                        'id' => 'hidden',
+                        'type' => 'tiles',
+                        'visible' => false,
+                        'opacity' => 1,
+                        'order' => 2,
+                        'objects' => [
+                            [
+                                'id' => 'tile-hidden',
+                                'x' => 2,
+                                'y' => 1,
+                                'type' => 'floor',
+                                'label' => 'Hidden Tile',
+                                'color' => '#E63946',
+                            ],
+                        ],
+                    ],
+                    [
+                        'id' => 'tokens',
+                        'type' => 'tokens',
+                        'visible' => true,
+                        'opacity' => 0.8,
+                        'order' => 3,
+                        'objects' => [
+                            [
+                                'id' => 'token-foreign',
+                                'x' => 0,
+                                'y' => 0,
+                                'type' => 'enemy',
+                                'label' => 'Fallback Token',
+                                'color' => '#FFC300',
+                                'assetId' => (string) $foreignAsset->id,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $capturedCalls = [];
+        $this->mock(GenerateMapPdfAction::class, function (MockInterface $mock) use (&$capturedCalls): void {
+            $mock->shouldReceive('execute')
+                ->twice()
+                ->with(\Mockery::on(function (string $html) use (&$capturedCalls): bool {
+                    $capturedCalls[] = $html;
+
+                    return str_contains($html, 'Export Test Map')
+                        && str_contains($html, '4 × 3')
+                        && str_contains($html, 'Visible Tile')
+                        && str_contains($html, 'Fallback Token')
+                        && str_contains($html, 'https://example.test/storage/background.png')
+                        && str_contains($html, 'https://example.test/storage/tile.png')
+                        && !str_contains($html, 'Hidden Tile')
+                        && !str_contains($html, 'https://example.test/storage/foreign.png');
+                }), \Mockery::type('string'), \Mockery::type('string'))
+                ->andReturn('%PDF-map%');
+        });
+
+        $this->postJson('/api/maps/' . $map->id . '/export/pdf', [
+            'page_size' => 'letter',
+            'orientation' => 'landscape',
+        ])->assertStatus(422);
+        $this->postJson('/api/maps/' . $map->id . '/export/pdf', [
+            'page_size' => 'a4',
+            'orientation' => 'sideways',
+        ])->assertStatus(422);
+
+        $defaultResponse = $this->postJson('/api/maps/' . $map->id . '/export/pdf');
+        $defaultResponse->assertStatus(200)
+            ->assertHeader('Content-Type', 'application/pdf');
+        $this->assertSame('%PDF-map%', $defaultResponse->getContent());
+
+        $explicitResponse = $this->postJson('/api/maps/' . $map->id . '/export/pdf', [
+            'page_size' => 'a0',
+            'orientation' => 'portrait',
+        ]);
+        $explicitResponse->assertStatus(200);
+        $this->assertSame('%PDF-map%', $explicitResponse->getContent());
+
+        $this->assertCount(2, $capturedCalls);
+        $this->assertStringContainsString('data-page-size="a4"', $capturedCalls[0]);
+        $this->assertStringContainsString('data-orientation="landscape"', $capturedCalls[0]);
+        $this->assertStringContainsString('data-page-size="a0"', $capturedCalls[1]);
+        $this->assertStringContainsString('data-orientation="portrait"', $capturedCalls[1]);
+
+        $contentDisposition = (string) $defaultResponse->headers->get('Content-Disposition');
+        $this->assertStringStartsWith('attachment; filename="map_' . $map->id . '_', $contentDisposition);
+        $this->assertStringEndsWith('.pdf"', $contentDisposition);
+
+        Sanctum::actingAs($foreignUser);
+        $this->postJson('/api/maps/' . $map->id . '/export/pdf')->assertStatus(404);
     }
 }

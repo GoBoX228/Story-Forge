@@ -12,10 +12,16 @@ import { Chronicle, WorldEvent, WorldEventUpdatePayload } from '../types';
 import {
   EditorCanvasPoint,
   EditorMinimapItem,
-  EditorViewportControls,
-  EditorViewportState
+  EditorViewportControls
 } from './EditorViewportControls';
-import { EditorToolbar, createEditorToolbarUtilityGroup } from './EditorToolbar';
+import { EditorShell } from './EditorShell';
+import {
+  EditorToolbar,
+  createEditorToolbarUtilityGroup,
+  getNextEditorToolbarPosition,
+  type EditorToolbarPosition
+} from './EditorToolbar';
+import { useEditorViewport } from '../hooks/useEditorViewport';
 
 const MIN_SCALE = 0.45;
 const MAX_SCALE = 2.8;
@@ -40,11 +46,6 @@ interface ChronicleEditorProps {
   onEditEvent: (event: WorldEvent) => void;
   onDeleteEvent: (event: WorldEvent) => void;
   onUpdateEvent: (eventId: string, payload: WorldEventUpdatePayload) => Promise<WorldEvent> | void;
-}
-
-interface ContainerSize {
-  width: number;
-  height: number;
 }
 
 interface EventLayout {
@@ -92,10 +93,9 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fittedChronicleRef = useRef<string | null>(null);
-  const [containerSize, setContainerSize] = useState<ContainerSize>({ width: 0, height: 0 });
-  const [viewport, setViewport] = useState<EditorViewportState>({ offsetX: 0, offsetY: 0, scale: 1 });
   const [tool, setTool] = useState<TimelineTool>('select');
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [toolbarPosition, setToolbarPosition] = useState<EditorToolbarPosition>('left');
   const [dragState, setDragState] = useState<DragEventState | null>(null);
   const [panState, setPanState] = useState<PanState | null>(null);
 
@@ -113,6 +113,21 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
     }),
     [axisWidth]
   );
+  const {
+    viewport,
+    setViewport,
+    containerSize,
+    screenToCanvasPoint,
+    centerOnCanvasPoint,
+    zoomBy,
+    fitToView
+  } = useEditorViewport({
+    containerRef,
+    canvasSize,
+    minScale: MIN_SCALE,
+    maxScale: MAX_SCALE,
+    fitPadding: 64
+  });
 
   const positionToX = useCallback(
     (position: number) => TIMELINE_PADDING_X + Math.max(0, position) * PIXELS_PER_TICK,
@@ -131,57 +146,6 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
     (x: number) => snapPosition((x - TIMELINE_PADDING_X) / PIXELS_PER_TICK),
     [snapPosition]
   );
-
-  const screenToCanvasPoint = useCallback(
-    (clientX: number, clientY: number): EditorCanvasPoint => {
-      const rect = containerRef.current?.getBoundingClientRect();
-
-      return {
-        x: ((clientX - (rect?.left ?? 0)) - viewport.offsetX) / viewport.scale,
-        y: ((clientY - (rect?.top ?? 0)) - viewport.offsetY) / viewport.scale
-      };
-    },
-    [viewport.offsetX, viewport.offsetY, viewport.scale]
-  );
-
-  const fitToView = useCallback(() => {
-    if (!containerSize.width || !containerSize.height) return;
-
-    const padding = 64;
-    const nextScale = Math.max(
-      MIN_SCALE,
-      Math.min(
-        MAX_SCALE,
-        Math.min(
-          (containerSize.width - padding) / canvasSize.width,
-          (containerSize.height - padding) / canvasSize.height
-        )
-      )
-    );
-
-    setViewport({
-      scale: nextScale,
-      offsetX: (containerSize.width - canvasSize.width * nextScale) / 2,
-      offsetY: (containerSize.height - canvasSize.height * nextScale) / 2
-    });
-  }, [canvasSize.height, canvasSize.width, containerSize.height, containerSize.width]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setContainerSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height
-      });
-    });
-
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (!containerSize.width || !containerSize.height || fittedChronicleRef.current === chronicle.id) return;
@@ -279,38 +243,6 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
     return ticks;
   }, [stepSize, timelineMax]);
 
-  const centerViewportOnBoardPoint = useCallback((point: EditorCanvasPoint) => {
-    setViewport((current) => ({
-      ...current,
-      offsetX: containerSize.width / 2 - point.x * current.scale,
-      offsetY: containerSize.height / 2 - point.y * current.scale
-    }));
-  }, [containerSize.height, containerSize.width]);
-
-  const zoomAt = useCallback((factor: number, clientPoint?: { x: number; y: number }) => {
-    setViewport((current) => {
-      const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, current.scale * factor));
-      const rect = containerRef.current?.getBoundingClientRect();
-      const point = clientPoint && rect
-        ? {
-            x: clientPoint.x - rect.left,
-            y: clientPoint.y - rect.top
-          }
-        : {
-            x: containerSize.width / 2,
-            y: containerSize.height / 2
-          };
-      const boardX = (point.x - current.offsetX) / current.scale;
-      const boardY = (point.y - current.offsetY) / current.scale;
-
-      return {
-        scale: nextScale,
-        offsetX: point.x - boardX * nextScale,
-        offsetY: point.y - boardY * nextScale
-      };
-    });
-  }, [containerSize.height, containerSize.width]);
-
   const viewportCenterPosition = useCallback(() => {
     const centerX = ((containerSize.width / 2) - viewport.offsetX) / viewport.scale;
     return xToPosition(centerX);
@@ -374,7 +306,7 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    zoomAt(event.deltaY > 0 ? 0.9 : 1.1, { x: event.clientX, y: event.clientY });
+    zoomBy(event.deltaY > 0 ? 0.9 : 1.1, { x: event.clientX, y: event.clientY });
   };
 
   const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -484,12 +416,19 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
 
       onDeleteEvent(selectedEvent);
       setSelectedEventId(null);
+      return;
+    }
+
+    if (action === 'toolbar-position') {
+      setToolbarPosition((current) => getNextEditorToolbarPosition(current));
     }
   };
 
   return (
-    <div className="flex h-full min-h-screen w-full flex-col bg-[var(--bg-main)] text-[var(--text-main)]">
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-6 py-3">
+    <EditorShell
+      className="h-full min-h-0 text-[var(--text-main)]"
+      header={(
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-6 py-3">
         <div className="flex min-w-0 items-center gap-4">
           <button
             type="button"
@@ -524,11 +463,12 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
             <Settings size={15} /> ПАРАМЕТРЫ
           </button>
         </div>
-      </div>
-
-      <div className="flex min-h-0 flex-1">
+        </div>
+      )}
+      toolbarPosition={toolbarPosition}
+      toolbar={(
         <EditorToolbar
-          position="left"
+          position={toolbarPosition}
           onAction={handleToolbarAction}
           groups={[
             {
@@ -558,14 +498,19 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
                 action: 'delete-event',
                 title: 'Удалить выбранное событие',
                 disabled: !selectedEventId
+              },
+              position: {
+                action: 'toolbar-position',
+                title: 'Положение панели'
               }
             })
           ]}
         />
-
+      )}
+      canvas={(
         <div
           ref={containerRef}
-          className={`relative flex-1 overflow-hidden bauhaus-bg ${panState ? 'cursor-grabbing' : 'cursor-grab'}`}
+          className={`relative h-full w-full min-h-0 min-w-0 overflow-hidden bauhaus-bg ${panState ? 'cursor-grabbing' : 'cursor-grab'}`}
           onPointerDown={handleCanvasPointerDown}
           onPointerMove={handleCanvasPointerMove}
           onPointerUp={stopPanning}
@@ -651,14 +596,14 @@ const ChronicleEditor: React.FC<ChronicleEditorProps> = ({
             maxScale={MAX_SCALE}
             minimapLabel="Карта"
             fitLabel="ВПИСАТЬ"
-            onCenterViewport={centerViewportOnBoardPoint}
-            onZoomOut={() => zoomAt(0.9)}
-            onZoomIn={() => zoomAt(1.1)}
+            onCenterViewport={centerOnCanvasPoint}
+            onZoomOut={() => zoomBy(0.9)}
+            onZoomIn={() => zoomBy(1.1)}
             onFitView={fitToView}
           />
         </div>
-      </div>
-    </div>
+      )}
+    />
   );
 };
 

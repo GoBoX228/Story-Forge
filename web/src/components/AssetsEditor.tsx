@@ -1093,7 +1093,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                         ) : (
                           <div className="flex flex-col items-center gap-3 text-[var(--text-muted)]">
                             {getAssetIcon(asset.type)}
-                            <span className="mono text-[9px] uppercase font-black">{asset.mimeType ?? 'FILE'}</span>
+                            <span className="mono text-[9px] uppercase font-black">{asset.mimeType ?? 'ФАЙЛ'}</span>
                           </div>
                         )}
                       </div>
@@ -1214,7 +1214,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                                     ) : (
                                       <div className="flex flex-col items-center gap-3 text-[var(--text-muted)]">
                                         {getAssetIcon(asset.type)}
-                                        <span className="mono text-[9px] uppercase font-black">{asset.mimeType ?? 'FILE'}</span>
+                                        <span className="mono text-[9px] uppercase font-black">{asset.mimeType ?? 'ФАЙЛ'}</span>
                                       </div>
                                     )}
                                   </div>

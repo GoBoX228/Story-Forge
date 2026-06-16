@@ -2,6 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Character;
+use App\Models\EntityLink;
+use App\Models\Item;
+use App\Models\Map;
 use App\Models\Scenario;
 use App\Models\ScenarioNode;
 use App\Models\ScenarioTransition;
@@ -82,6 +86,47 @@ class GoBoxContentSeederTest extends TestCase
 
         $this->assertInstanceOf(ScenarioTransition::class, $reverseTransition);
         $this->assertSame('Отступить к рунам', $reverseTransition->label);
+        $this->assertSame(0, Character::query()->where('user_id', $user->id)->whereNotNull('scenario_id')->count());
+        $this->assertSame(0, Map::query()->where('user_id', $user->id)->whereNotNull('scenario_id')->count());
+
+        $linkedCharacterIds = EntityLink::query()
+            ->where('source_type', EntityLink::TARGET_SCENARIO)
+            ->where('source_id', $scenario->id)
+            ->where('target_type', EntityLink::TARGET_CHARACTER)
+            ->where('relation_type', EntityLink::RELATION_USES)
+            ->pluck('target_id')
+            ->all();
+
+        $this->assertEqualsCanonicalizing(
+            Character::query()->where('user_id', $user->id)->pluck('id')->all(),
+            $linkedCharacterIds
+        );
+
+        $linkedMapIds = EntityLink::query()
+            ->where('source_type', EntityLink::TARGET_SCENARIO)
+            ->where('source_id', $scenario->id)
+            ->where('target_type', EntityLink::TARGET_MAP)
+            ->where('relation_type', EntityLink::RELATION_USES)
+            ->pluck('target_id')
+            ->all();
+
+        $this->assertEqualsCanonicalizing(
+            Map::query()->where('user_id', $user->id)->pluck('id')->all(),
+            $linkedMapIds
+        );
+
+        $linkedItemIds = EntityLink::query()
+            ->where('source_type', EntityLink::TARGET_SCENARIO)
+            ->where('source_id', $scenario->id)
+            ->where('target_type', EntityLink::TARGET_ITEM)
+            ->where('relation_type', EntityLink::RELATION_USES)
+            ->pluck('target_id')
+            ->all();
+
+        $this->assertEqualsCanonicalizing(
+            Item::query()->where('user_id', $user->id)->pluck('id')->all(),
+            $linkedItemIds
+        );
     }
 
     public function test_go_box_content_seeder_is_idempotent_for_graph_data(): void
@@ -93,6 +138,7 @@ class GoBoxContentSeederTest extends TestCase
             'scenarios' => Scenario::query()->count(),
             'nodes' => ScenarioNode::query()->count(),
             'transitions' => ScenarioTransition::query()->count(),
+            'entity_links' => EntityLink::query()->count(),
         ];
 
         $this->seed(GoBoxContentSeeder::class);
@@ -101,5 +147,6 @@ class GoBoxContentSeederTest extends TestCase
         $this->assertSame($firstRunCounts['scenarios'], Scenario::query()->count());
         $this->assertSame($firstRunCounts['nodes'], ScenarioNode::query()->count());
         $this->assertSame($firstRunCounts['transitions'], ScenarioTransition::query()->count());
+        $this->assertSame($firstRunCounts['entity_links'], EntityLink::query()->count());
     }
 }

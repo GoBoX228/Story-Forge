@@ -44,6 +44,8 @@ import {
   deleteScenarioNode,
   deleteScenarioNodeEntityLink,
   deleteScenarioTransition,
+  exportScenarioCharacterCardsPdf,
+  exportScenarioItemCardsPdf,
   exportScenarioPdf,
   listScenarioNodeEntityLinks,
   listScenarioNodes,
@@ -478,6 +480,44 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
       const link = document.createElement('a');
       link.href = url;
       link.download = `${activeScenario.title || 'scenario'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleExportCharacterCardsPdf = async (duplexEdge: 'long' | 'short') => {
+    if (!activeScenario) return;
+
+    try {
+      const blob = await exportScenarioCharacterCardsPdf(activeScenario.id, duplexEdge);
+      if (!blob) return;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeScenario.title || 'scenario'}_characters.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleExportItemCardsPdf = async (duplexEdge: 'long' | 'short') => {
+    if (!activeScenario) return;
+
+    try {
+      const blob = await exportScenarioItemCardsPdf(activeScenario.id, duplexEdge);
+      if (!blob) return;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeScenario.title || 'scenario'}_items.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1259,6 +1299,8 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
           onUpdateField={updateScenarioField}
           onToggleComposition={toggleScenarioComposition}
           onExportPdf={handleExportPdf}
+          onExportCharacterCardsPdf={handleExportCharacterCardsPdf}
+          onExportItemCardsPdf={handleExportItemCardsPdf}
           embedded
         />
       </Modal>

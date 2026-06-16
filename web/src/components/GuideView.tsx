@@ -79,7 +79,7 @@ export const GuideView: React.FC = () => {
                     <p className="text-[10px] text-[var(--text-muted)]">Сцены общения с NPC или другими участниками сюжета.</p>
                  </div>
                  <div className="p-3 border border-[var(--border-color)] bg-[var(--bg-main)]">
-                    <div className="mono text-[10px] font-black text-[var(--col-yellow)] mb-1">ПРОВЕРКА (CHECK)</div>
+                    <div className="mono text-[10px] font-black text-[var(--col-yellow)] mb-1">ПРОВЕРКА</div>
                     <p className="text-[10px] text-[var(--text-muted)]">Событие, требующее проверки. Имеет навык и <span className="text-[var(--text-main)]">DC</span>, а переходы успеха/провала задаются отдельно.</p>
                  </div>
                  <div className="p-3 border border-[var(--border-color)] bg-[var(--bg-main)]">
@@ -94,7 +94,7 @@ export const GuideView: React.FC = () => {
               <ul className="space-y-2">
                  <li className="flex items-start gap-3 text-[10px] mono text-[var(--text-muted)]">
                     <Move size={14} className="text-[var(--text-main)] shrink-0"/>
-                    <span><strong className="text-[var(--text-main)]">CANVAS:</strong> Перетаскивайте узлы, создавайте переходы через handles и используйте preview для проверки flow.</span>
+                    <span><strong className="text-[var(--text-main)]">КАНВАС:</strong> Перетаскивайте узлы, создавайте переходы через точки связи и используйте предпросмотр для проверки потока.</span>
                  </li>
                  <li className="flex items-start gap-3 text-[10px] mono text-[var(--text-muted)]">
                     <CheckCircle2 size={14} className="text-[var(--text-main)] shrink-0"/>
@@ -145,14 +145,14 @@ export const GuideView: React.FC = () => {
                  <div className="flex items-center gap-4 p-2 bg-[var(--bg-main)] border border-[var(--border-color)]">
                     <Grid size={16} className="text-[var(--text-main)]"/>
                     <div className="flex-1">
-                        <div className="mono text-[10px] font-black uppercase">КИСТЬ (BRUSH)</div>
+                        <div className="mono text-[10px] font-black uppercase">КИСТЬ</div>
                         <div className="text-[9px] text-[var(--text-muted)]">Рисование одиночными тайлами. Выберите тип тайла (Стена, Вода, Лава) в правой панели.</div>
                     </div>
                  </div>
                  <div className="flex items-center gap-4 p-2 bg-[var(--bg-main)] border border-[var(--border-color)]">
                     <Move size={16} className="text-[var(--text-main)]"/>
                     <div className="flex-1">
-                        <div className="mono text-[10px] font-black uppercase">ПАНОРАМА (PAN)</div>
+                        <div className="mono text-[10px] font-black uppercase">ПАНОРАМА</div>
                         <div className="text-[9px] text-[var(--text-muted)]">Перемещение холста. Альтернатива: зажать колесико мыши или Пробел.</div>
                     </div>
                  </div>
@@ -162,9 +162,9 @@ export const GuideView: React.FC = () => {
            <div className="p-4 border border-dashed border-[var(--border-color)] bg-[var(--bg-main)]">
                <div className="mono text-[10px] font-black text-[var(--col-white)] mb-2 uppercase">ГОРЯЧИЕ КЛАВИШИ</div>
                <div className="grid grid-cols-2 gap-y-1 text-[9px] mono text-[var(--text-muted)]">
-                   <span>КОЛЕСО МЫШИ</span> <span className="text-right">МАСШТАБ (ZOOM)</span>
+                   <span>КОЛЕСО МЫШИ</span> <span className="text-right">МАСШТАБ</span>
                    <span>СРЕДНЯЯ КНОПКА</span> <span className="text-right">ПЕРЕМЕЩЕНИЕ</span>
-                   <span>CTRL + Z</span> <span className="text-right">ОТМЕНА (UNDO)</span>
+                   <span>CTRL + Z</span> <span className="text-right">ОТМЕНА</span>
                </div>
            </div>
         </div>

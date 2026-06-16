@@ -55,7 +55,7 @@ export const GraphNodeList: React.FC<GraphNodeListProps> = ({
   }, [transitions]);
 
   return (
-    <div className="w-72 bg-[var(--bg-surface)] border-r border-[var(--border-color)] flex flex-col z-20">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="p-4 border-b border-[var(--border-color)] space-y-3">
         <div className="flex justify-between items-center">
           <span className="mono text-[10px] uppercase font-black text-[var(--text-muted)] tracking-widest">УЗЛЫ ГРАФА</span>

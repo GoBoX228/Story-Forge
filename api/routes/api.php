@@ -87,6 +87,7 @@ Route::middleware(['cookie_auth', 'active_user', 'csrf_cookie'])->group(function
     Route::get('/maps/{id}', [MapController::class, 'show']);
     Route::patch('/maps/{id}', [MapController::class, 'update']);
     Route::delete('/maps/{id}', [MapController::class, 'destroy']);
+    Route::post('/maps/{id}/export/pdf', [ExportController::class, 'exportMapPdf'])->middleware('throttle:pdf-export');
 
     Route::post('/characters', [CharacterController::class, 'store']);
     Route::get('/characters', [CharacterController::class, 'index']);
@@ -175,6 +176,8 @@ Route::middleware(['cookie_auth', 'active_user', 'csrf_cookie'])->group(function
     Route::get('/broadcasts', [BroadcastController::class, 'index']);
 
     Route::post('/scenarios/{id}/export/pdf', [ExportController::class, 'exportScenarioPdf'])->middleware('throttle:pdf-export');
+    Route::post('/scenarios/{id}/export/characters/pdf', [ExportController::class, 'exportScenarioCharacterCardsPdf'])->middleware('throttle:pdf-export');
+    Route::post('/scenarios/{id}/export/items/pdf', [ExportController::class, 'exportScenarioItemCardsPdf'])->middleware('throttle:pdf-export');
 
     Route::prefix('admin')->middleware(['admin', 'throttle:admin'])->group(function () {
         Route::get('/overview', [AdminOverviewController::class, 'overview']);

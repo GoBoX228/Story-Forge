@@ -185,7 +185,7 @@ export const ScenarioPreviewPanel: React.FC<ScenarioPreviewPanelProps> = ({
   if (graphLoading && nodes.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center p-10 mono text-[10px] uppercase text-[var(--text-muted)]">
-        Загрузка graph-сценария...
+        Загрузка граф-сценария...
       </div>
     );
   }

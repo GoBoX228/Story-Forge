@@ -3,9 +3,10 @@ import { ICONS, COLORS } from '../constants';
 import { BaseCard } from './BaseCard';
 import { AddTile, Button } from './UI';
 import { Campaign, Character, MapData, Scenario } from '../types';
+import { AppView } from '../appTypes';
 
 interface DashboardProps {
-  onOpenEditor: (view: string) => void;
+  onOpenEditor: (view: AppView) => void;
   onOpenScenarioEditor: (scenarioId?: string) => void;
   onOpenMapEditor: (mapId?: string) => void;
   onOpenCampaignEditor: (campaignId?: string) => void;
@@ -123,7 +124,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     <div>
                       <h4 className="mono text-sm uppercase font-black text-[var(--text-main)]">{scenario.title}</h4>
                       <p className="mono text-[10px] text-[var(--text-muted)] mt-1">Отредактировано: {formatDate(scenario.updatedAt ?? scenario.createdAt)}</p>
-                      <p className="mono text-[9px] text-[var(--text-muted)] mt-2 uppercase">Graph scenario</p>
+                      <p className="mono text-[9px] text-[var(--text-muted)] mt-2 uppercase">Граф сценария</p>
                     </div>
                     <span className="text-[var(--text-main)]">{ICONS.ChevronRight}</span>
                   </div>

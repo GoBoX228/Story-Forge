@@ -2,10 +2,11 @@
 import React, { useState } from 'react';
 import { ICONS } from '../constants';
 import { PanelLeftClose, PanelLeftOpen, LogOut } from 'lucide-react';
+import { AppView } from '../appTypes';
 
 interface SidebarProps {
-  activeView: string;
-  setActiveView: (view: string) => void;
+  activeView: AppView;
+  setActiveView: (view: AppView) => void;
   showNotifications: boolean;
   setShowNotifications: (show: boolean) => void;
   onLogout?: () => void;
@@ -24,7 +25,7 @@ const Sidebar = React.memo<SidebarProps>(({
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Определение цвета для каждого раздела
-  const getSectionColor = (id: string) => {
+  const getSectionColor = (id: AppView) => {
     switch (id) {
       case 'scenarios': return '#E63946'; // Red
       case 'maps': return '#FFFFFF';      // White
@@ -41,7 +42,7 @@ const Sidebar = React.memo<SidebarProps>(({
     }
   };
 
-  const mainItems = [
+  const mainItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Дашборд', icon: ICONS.Dashboard },
     { id: 'scenarios', label: 'Сценарии', icon: ICONS.Scenario },
     { id: 'characters', label: 'Персонажи', icon: ICONS.Characters },
@@ -52,16 +53,16 @@ const Sidebar = React.memo<SidebarProps>(({
     { id: 'campaigns', label: 'Кампании', icon: ICONS.Campaigns },
   ];
 
-  const accountItems = [
+  const accountItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
     { id: 'profile', label: 'Профиль', icon: ICONS.Profile },
   ];
 
-  const systemItems = [
+  const systemItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
     { id: 'settings', label: 'Настройки', icon: ICONS.Settings },
     { id: 'guide', label: 'Руководство', icon: ICONS.Guide },
   ];
 
-  const renderItem = (item: { id: string; label: string; icon: React.ReactNode }) => {
+  const renderItem = (item: { id: AppView; label: string; icon: React.ReactNode }) => {
     const isActive = activeView === item.id;
     const isHovered = hoveredItem === item.id;
     const accentColor = getSectionColor(item.id);

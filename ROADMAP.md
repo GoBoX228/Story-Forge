@@ -132,6 +132,12 @@
   Основание: `ReportController`, `BroadcastController`, `AdminBroadcastsController`, `ReportBroadcastExportTest`.
 - `Реализовано` Scenario PDF export.
   Основание: `ExportController`, `ScenarioExportService`, `GenerateScenarioPdfAction`, `ReportBroadcastExportTest`.
+- `Реализовано` Map PDF Export v1: отдельный PDF-экспорт одной карты из редактора карт, размеры листа A4-A0, альбомная/книжная ориентация, видимые слои и сетка.
+  Основание: `ExportController`, `MapExportService`, `GenerateMapPdfAction`, `map.blade.php`, `MapEditor.tsx`, `ReportBroadcastExportTest`.
+- `Реализовано` Scenario Material Export v1: отдельный PDF-экспорт карточек персонажей сценария для A4 3×3, двусторонней печати по длинному/короткому краю и вырезания.
+  Основание: `ExportController`, `ScenarioExportService`, `GenerateCharacterCardsPdfAction`, `scenario-character-cards.blade.php`, `ScenarioSettingsPanel.tsx`, `ReportBroadcastExportTest`.
+- `Реализовано` Scenario Material Export v1: отдельный PDF-экспорт карточек предметов сценария для A4 3×3, двусторонней печати по длинному/короткому краю и вырезания.
+  Основание: `ExportController`, `ScenarioExportService`, `GenerateItemCardsPdfAction`, `scenario-item-cards.blade.php`, `ScenarioSettingsPanel.tsx`, `ReportBroadcastExportTest`.
 
 ### Общие Editor-Компоненты
 
@@ -145,8 +151,48 @@
   Основание: `ChronicleEditor.tsx`, `createEditorToolbarUtilityGroup`.
 - `Реализовано` Scenario Toolbar Alignment v1.
   Основание: `GraphCanvas.tsx`, `EditorToolbar.tsx`.
+- `Реализовано` Scenario Toolbar Follow-up v1: сценарный graph editor использует одну левую `EditorToolbar`-панель для узлов, инспектора, layout, undo/redo и удаления выбранного.
+  Основание: `GraphCanvas.tsx`, `ScenarioGraphWorkspace.tsx`.
+- `Реализовано` Scenario Toolbar Direction Actions v1: кнопки направления layout сразу упорядочивают граф, отдельная кнопка `Упорядочить граф` удалена.
+  Основание: `GraphCanvas.tsx`.
+- `Реализовано` Scenario Shell Migration v1: сценарный graph editor использует `EditorShell` для toolbar, списка узлов, canvas и инспектора; панели больше не накладываются на toolbar при смене положения.
+  Основание: `ScenarioGraphWorkspace.tsx`, `GraphCanvas.tsx`, `GraphInspector.tsx`, `GraphNodeList.tsx`, `EditorShell.tsx`.
+- `Реализовано` GraphCanvas Layout Cleanup v1: `GraphCanvas` больше не получает toolbar-related props; undo/redo callbacks в нем используются только как keyboard shortcuts, а layout/delete вызываются через canvas ref.
+  Основание: `GraphCanvas.tsx`, `ScenarioGraphWorkspace.tsx`.
+- `Реализовано` GraphCanvas Canvas Utilities Extraction v1: чистая canvas-математика, bounds helpers, routing helpers, waypoint metadata helpers и visual edge builder вынесены из `GraphCanvas.tsx` в отдельный utility-модуль без изменения поведения. Уровень рассуждения: `Высокий`.
+  Основание: `GraphCanvas.tsx`, `graphCanvasUtils.ts`.
+- `Реализовано` GraphCanvas Layers Extraction v1: SVG-переходы, quick panel перехода, карточки узлов, validation badges, handles и resize controls вынесены из `GraphCanvas.tsx` в отдельные scenario-слои без переноса state ownership. Уровень рассуждения: `Очень высокий`.
+  Основание: `GraphCanvas.tsx`, `GraphEdgesLayer.tsx`, `GraphNodesLayer.tsx`, `GraphEdgeQuickPanel.tsx`, `graphCanvasStyles.ts`.
+- `Реализовано` Scenario Graph Orchestration Split v1: canvas-local state wiring, drag/resize/pan, edge creation, waypoint editing, inline labels, auto-layout orchestration и hotkeys вынесены из `GraphCanvas.tsx` в scenario-domain hook без изменения публичного поведения. Уровень рассуждения: `Очень высокий`.
+  Основание: `GraphCanvas.tsx`, `useGraphCanvasController.ts`, `graphCanvasTypes.ts`.
 - `Реализовано` Editor Toolbar Utility Group v1: общий helper для delete/position utility actions.
   Основание: `EditorToolbar.tsx`, `MapEditor.tsx`, `ChronicleEditor.tsx`.
+- `Реализовано` Editor Toolbar Positioning v1: карта, хроника и сценарный graph editor используют общую runtime-смену положения toolbar.
+  Основание: `EditorToolbar.tsx`, `MapEditor.tsx`, `ChronicleEditor.tsx`, `GraphCanvas.tsx`, `ScenarioGraphWorkspace.tsx`.
+- `Реализовано` Editor Shell v1: общий slot-based каркас для header, toolbar, canvas, error banner и optional right panel в canvas-редакторах; это базовый слой, а не финальная система layout-областей.
+  Основание: `EditorShell.tsx`, `MapEditor.tsx`, `ChronicleEditor.tsx`, `ScenarioGraphWorkspace.tsx`.
+- `Реализовано` Editor Shell Layout v2: `EditorShell` поддерживает `subHeader`, `leftPanel`, `rightPanel` body/shell placement и `overlayLayer`, чтобы редакторы могли размещать toolbar и панели без локальных overlay-костылей.
+  Основание: `EditorShell.tsx`.
+- `Реализовано` Map Shell Alignment v1: редактор карт явно использует `EditorShell` slots для header, toolbar, canvas и shell-level resource panel; четыре положения toolbar остаются эталоном поведения.
+  Основание: `MapEditor.tsx`, `EditorShell.tsx`.
+- `Реализовано` Chronicle Shell Alignment v1: редактор хроник использует тот же `EditorShell` sizing contract для header, toolbar и timeline canvas без page-sized layout.
+  Основание: `ChronicleEditor.tsx`, `EditorShell.tsx`.
+- `Реализовано` Shared Viewport Hook v1: сценарии, хроники и карты используют общий `useEditorViewport` для `viewport`, resize, pan/zoom/fit и minimap navigation.
+  Основание: `useEditorViewport.ts`, `GraphCanvas.tsx`, `ChronicleEditor.tsx`, `MapEditor.tsx`.
+- `Реализовано` Editor Panel System v1: `EditorShell` получил `EditorPanel` и `EditorPanelConfig` для единых left/right panel containers, placement, width, borders и scroll; сценарии и карты используют новый panel contract.
+  Основание: `EditorShell.tsx`, `ScenarioGraphWorkspace.tsx`, `GraphNodeList.tsx`, `GraphInspector.tsx`, `MapEditor.tsx`.
+- `Реализовано` App Shell Decomposition v1: `App.tsx` больше не владеет shell layout и route-switch; навигационное состояние вынесено в `useAppNavigation`, frame/sidebar/notifications — в `AppFrame`, view routing — в `AppViewRouter`, campaigns list — в `CampaignsView`.
+  Основание: `App.tsx`, `useAppNavigation.ts`, `AppFrame.tsx`, `AppViewRouter.tsx`, `CampaignsView.tsx`, `appTypes.ts`.
+- `Реализовано` App Data Loading Hook v1: состояние загружаемых материалов, assignment maps, broadcasts и `loadAllData` вынесены из `App.tsx` в `useAppDataLoading`; `App.tsx` временно продолжает получать setters для существующих CRUD/optimistic updates. Уровень рассуждения: `Очень высокий`.
+  Основание: `App.tsx`, `useAppDataLoading.ts`, `useStickyState.ts`.
+- `Реализовано` App Domain Actions Hooks v1: API/CRUD handlers вынесены из `App.tsx` в `useAppDomainActions` и доменные action-блоки без изменения `AppViewActions` contract; `App.tsx` остался владельцем auth/bootstrap, frame и campaign modal state. Уровень рассуждения: `Очень высокий`.
+  Основание: `App.tsx`, `useAppDomainActions.ts`, `useAppDataLoading.ts`.
+- `Реализовано` App Optimistic Updates Cleanup v1: повторяемые optimistic updates и каскадные state-transformers вынесены в чистый `appOptimisticUpdates.ts`; `useAppDomainActions` оставлен владельцем API calls, navigation и modal callbacks. Уровень рассуждения: `Очень высокий`.
+  Основание: `useAppDomainActions.ts`, `appOptimisticUpdates.ts`.
+- `Реализовано` App Data Store Context v1: `AppViewData` и `AppViewActions` вынесены в `AppDataStoreContext`, а `AppViewRouter` получает data/actions через context hooks вместо props от `App.tsx`. Уровень рассуждения: `Очень высокий`.
+  Основание: `App.tsx`, `AppDataStoreContext.tsx`, `AppViewRouter.tsx`, `useAppDomainActions.ts`.
+- `Реализовано` Editor Context Adoption v1: `AppViewRouter` больше не раскладывает `data/actions` по конкретным редакторам; app-bound route adapters читают `AppDataStoreContext`, а core-редакторы остаются prop-driven. Уровень рассуждения: `Очень высокий`.
+  Основание: `AppViewRouter.tsx`, `AppRouteViews.tsx`, `AppDataStoreContext.tsx`.
 
 ## Реализовано частично
 
@@ -156,24 +202,40 @@
   Основание: `export_jobs`, `notifications`, `idempotency_keys` в migration и `SchemaBaselineTest`.
 - `Реализовано частично` Social/community: UI-заготовки существуют, но sidebar/routes их не подключают, backend social schema намеренно отсутствует.
   Основание: `CommunityView.tsx`, `FriendsView.tsx`, `MessagesView.tsx`, `Sidebar.tsx`, `App.tsx`, `SchemaBaselineTest::test_social_layer_tables_are_deferred`.
-- `Реализовано частично` Общий editor shell: есть `EditorToolbar` и `EditorViewportControls`, но общего shell для header/sidebar/canvas/inspector еще нет.
-  Основание: отдельные реализации `MapEditor.tsx`, `GraphCanvas.tsx`, `ChronicleEditor.tsx`.
-
+- `Реализовано частично` Library workspace mechanics: рабочая область с группами, context menu, selection и навигацией уже есть в ассетах, но пока жестко привязана к `AssetsEditor` и asset-specific действиям.
+  Основание: `AssetsEditor.tsx`.
+- `Реализовано частично` Material groups: группы персонажей и предметов реализованы локально, но общей library/group платформы для сценариев, карт, персонажей и предметов еще нет.
+  Основание: `CharacterGroupController`, `ItemGroupController`, `CharactersEditor.tsx`, `ItemsEditor.tsx`.
+- `Реализовано частично` Scenario library: CRUD сценариев и graph editor готовы, но библиотечная рабочая область сценариев, группы сценариев и карточная модель раздела еще не реализованы.
+  Основание: `ScenarioEditor.tsx`, `ScenarioListPanel.tsx`.
 ## Активный фокус
 
-- `В работе` Editor Shell v1: выделить общий каркас редакторов - верхняя шапка, toolbar-зона, центральный canvas, overlay viewport controls и optional right panel.
-- `В работе` Scenario Toolbar Follow-up v1: решить, какие scenario actions остаются в header (`Preview`, `Validation`, `Reload`, `Settings`), а какие можно перенести в toolbar/utility groups.
-- `В работе` Shared Viewport Hook v1: вынести pan/zoom/fit math в `useEditorViewport`, если дублирование между картами, сценариями и хрониками стабилизируется.
 - `В работе` Постепенно разделять крупные редакторы на feature-модули без изменения backend/API.
+- `В работе` Продолжить декомпозицию крупных редакторов после стабилизации общего shell/toolbar/viewport слоя.
+- `В работе` Entity Library Platform v1: подготовить общий foundation для библиотечных рабочих областей материалов - grid, cards, empty state, context menu, selection, group navigation и item actions. Уровень рассуждения: `Очень высокий`.
+
+Заметка: локальные CSS-фиксы сценарного toolbar нежелательны. Сценарии, карты и хроники должны перейти на общий editor layout, иначе `toolbarPosition`, боковые панели и canvas sizing будут снова расходиться.
+
+Заметка: asset-specific upload/filter/file logic не переносится в общий library foundation. Ассеты остаются источником функционального паттерна, а не готовым дизайном или доменной моделью для сценариев.
 
 ## Запланировано
 
 ### Editor Platform
 
-- `Запланировано` Editor Toolbar Positioning v1: единая модель смены положения toolbar для map/chronicle/scenario editors.
-- `Запланировано` Разделить `GraphCanvas.tsx` на canvas layers/hooks и вынести graph orchestration из `ScenarioEditor.tsx`.
-- `Запланировано` Разгрузить `App.tsx`: вынести navigation wiring/return context в отдельный shell/router слой.
-- `Запланировано` Добавить e2e smoke-тесты для ключевых пользовательских сценариев.
+- `Запланировано` E2E Smoke Tests v1: добавить e2e smoke-тесты для ключевых пользовательских сценариев редакторов. Уровень рассуждения: `Высокий`.
+- `Запланировано` Editor Direct Context Migration v2: условно, только если позже потребуется перевести сами редакторы на прямой `AppDataStoreContext` вместо prop-driven public props. Уровень рассуждения: `Очень высокий`.
+
+### Library Platform
+
+- `Запланировано` Scenario Groups Backend v1: добавить `scenario_groups`, `scenarios.group_id`, CRUD API, ownership-проверки и поведение удаления группы без удаления сценариев. Уровень рассуждения: `Высокий`.
+- `Запланировано` Scenario Groups Frontend Data v1: добавить типы, мапперы, API helpers, загрузку данных, domain actions и context wiring для групп сценариев. Уровень рассуждения: `Высокий`.
+- `Запланировано` Scenario Library Workspace v1: перенести сценарии и группы из right-sidebar списка в центральную рабочую область с карточками. Уровень рассуждения: `Очень высокий`.
+- `Запланировано` Scenario Library Context Actions v1: добавить context menu для свободной области и элементов - создать сценарий, создать группу, переименовать, удалить, переместить в группу, открыть группу и вернуться назад. Уровень рассуждения: `Очень высокий`.
+- `Запланировано` Scenario Library Polish v1: довести empty states, состояния карточек, responsive layout, keyboard/selection polish и визуальные статусы сценариев. Уровень рассуждения: `Высокий`.
+- `Запланировано` Map Library Workspace v1: подключить общий library foundation к разделу карт без потери map-specific действий и редактора карты. Уровень рассуждения: `Очень высокий`.
+- `Запланировано` Character/Item Library Alignment v1: заменить локальную групповую логику персонажей и предметов общей library/group моделью. Уровень рассуждения: `Очень высокий`.
+- `Запланировано` Assets Library Platform Migration v1: аккуратно перевести ассеты на общий library foundation, сохранив upload, folders, sets, membership и asset-specific context actions. Уровень рассуждения: `Очень высокий`.
+- `Запланировано` Library E2E Smoke Tests v1: покрыть создание групп, context menu, выбор элементов, переходы по группам и базовые действия для сценариев и следующих подключенных разделов. Уровень рассуждения: `Высокий`.
 
 ### Graph vNext
 
@@ -188,7 +250,6 @@
 
 ### Map vNext
 
-- `Запланировано` Экспорт карт.
 - `Запланировано` Tile Metadata / Autotile Rules v1: технические метки tile-ассетов и правила автоподбора, не смешанные с пользовательскими тегами.
 - `Запланировано` Более глубокая работа с asset layers/tokens после стабилизации общего editor shell.
 
@@ -208,7 +269,7 @@
 - `Запланировано` Notifications API и frontend-индикаторы.
 - `Запланировано` Idempotency middleware для критичных POST/PATCH операций.
 - `Запланировано` Export jobs: очередь экспортов и история результатов.
-- `Запланировано` Экспорт карточек персонажей/предметов.
+- `Запланировано` Экспорт следующих типов материалов отдельными PDF.
 
 ## Отложено
 
@@ -235,6 +296,10 @@
   В проекте есть compatibility migrations `2026_05_07_*`, `2026_05_08_*`, `2026_06_12_*`.
 - `Устарело` Старый фокус “publication/comments/asset layers” как ближайший общий фокус.
   Текущий фокус: editor componentization, Chronicle/Atlas polish и стабилизация общих editor-компонентов.
+- `Устарело` Right-sidebar список сценариев как целевая модель раздела.
+  Целевая модель - центральная library workspace с карточками сценариев и группами.
+- `Устарело` “Папки сценариев” как файловая система.
+  Для v1 используется пользовательская модель `Группы`: один уровень, сценарий принадлежит максимум одной группе, удаление группы не удаляет сценарии.
 - `Отменено` Legacy frontend-редактор глав/блоков сценария.
   Сценарный UX стал graph-first.
 

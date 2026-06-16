@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, ListTree, Redo2, RefreshCw, SlidersHorizontal, Undo2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowRight, ListTree, RefreshCw, SlidersHorizontal, Redo2, Undo2 } from 'lucide-react';
 import {
   Asset,
   Character,
@@ -20,45 +20,18 @@ import {
   WorldLocation
 } from '../../types';
 import { Button } from '../UI';
-import { GraphCanvas } from './GraphCanvas';
+import { EditorShell } from '../EditorShell';
+import {
+  EditorToolbar,
+  createEditorToolbarUtilityGroup,
+  getNextEditorToolbarPosition,
+  type EditorToolbarEntry,
+  type EditorToolbarPosition
+} from '../EditorToolbar';
+import { GraphCanvas, type GraphCanvasHandle, type GraphLayoutDirection } from './GraphCanvas';
 import { GraphInspector, GraphInspectorTab } from './GraphInspector';
 import { GraphNodeList } from './GraphNodeList';
 import { GraphValidationIssue, GraphValidationResult } from './graphValidation';
-
-interface GraphToolbarButtonProps {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}
-
-const GraphToolbarButton: React.FC<GraphToolbarButtonProps> = ({
-  icon: Icon,
-  label,
-  active = false,
-  disabled = false,
-  onClick
-}) => (
-  <button
-    type="button"
-    title={label}
-    aria-label={label}
-    disabled={disabled}
-    onClick={onClick}
-    className={`w-9 h-9 flex items-center justify-center border transition-all ${
-      active
-        ? 'bg-[var(--col-red)] text-[var(--bg-main)] border-[var(--col-red)]'
-        : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--text-main)]/10'
-    } disabled:opacity-30 disabled:pointer-events-none`}
-  >
-    <Icon size={18} />
-  </button>
-);
-
-const GraphToolbarDivider: React.FC = () => (
-  <div className="w-full h-[1px] bg-[var(--border-color)] my-1" />
-);
 
 interface ScenarioGraphWorkspaceProps {
   nodes: ScenarioNode[];
@@ -183,10 +156,125 @@ export const ScenarioGraphWorkspace: React.FC<ScenarioGraphWorkspaceProps> = ({
   onCloseInspector
 }) => {
   const controlsDisabled = graphLoading || graphActionPending;
+  const [toolbarPosition, setToolbarPosition] = React.useState<EditorToolbarPosition>('left');
+  const [layoutDirection, setLayoutDirection] = React.useState<GraphLayoutDirection>('horizontal');
+  const graphCanvasRef = React.useRef<GraphCanvasHandle | null>(null);
+  const toolbarGroups = React.useMemo<EditorToolbarEntry[]>(() => [
+    {
+      id: 'workspace',
+      items: [
+        {
+          id: 'node-list',
+          action: 'toggle-node-list',
+          icon: ListTree,
+          title: 'Узлы',
+          active: nodeListOpen,
+          disabled: controlsDisabled
+        },
+        {
+          id: 'inspector',
+          action: 'toggle-inspector',
+          icon: SlidersHorizontal,
+          title: 'Инспектор',
+          active: inspectorOpen,
+          disabled: controlsDisabled
+        }
+      ]
+    },
+    {
+      id: 'layout-direction',
+      items: [
+        {
+          id: 'layout-horizontal',
+          action: 'layout-horizontal',
+          icon: ArrowRight,
+          title: 'Упорядочить слева направо',
+          active: layoutDirection === 'horizontal',
+          disabled: controlsDisabled || nodes.length === 0
+        },
+        {
+          id: 'layout-vertical',
+          action: 'layout-vertical',
+          icon: ArrowDown,
+          title: 'Упорядочить сверху вниз',
+          active: layoutDirection === 'vertical',
+          disabled: controlsDisabled || nodes.length === 0
+        }
+      ]
+    },
+    {
+      id: 'history',
+      items: [
+        { id: 'undo', action: 'undo', icon: Undo2, title: 'Отменить', disabled: controlsDisabled || !canUndo },
+        { id: 'redo', action: 'redo', icon: Redo2, title: 'Повторить', disabled: controlsDisabled || !canRedo }
+      ]
+    },
+    ...createEditorToolbarUtilityGroup({
+      delete: {
+        action: 'delete-selected',
+        title: 'Удалить выбранное',
+        disabled: controlsDisabled || (!activeNodeId && !activeTransitionId)
+      },
+      position: {
+        action: 'toolbar-position',
+        title: 'Положение панели'
+      }
+    })
+  ], [
+    activeNodeId,
+    activeTransitionId,
+    canRedo,
+    canUndo,
+    controlsDisabled,
+    inspectorOpen,
+    layoutDirection,
+    nodeListOpen,
+    nodes.length
+  ]);
+
+  const handleToolbarAction = (action: string) => {
+    if (action === 'toggle-node-list') {
+      onToggleNodeList();
+      return;
+    }
+
+    if (action === 'toggle-inspector') {
+      onToggleInspector();
+      return;
+    }
+
+    if (action === 'toolbar-position') {
+      setToolbarPosition((current) => getNextEditorToolbarPosition(current));
+      return;
+    }
+
+    if (action === 'layout-horizontal' || action === 'layout-vertical') {
+      const nextDirection = action === 'layout-horizontal' ? 'horizontal' : 'vertical';
+      setLayoutDirection(nextDirection);
+      graphCanvasRef.current?.runLayout(nextDirection);
+      return;
+    }
+
+    if (action === 'undo') {
+      void onUndo();
+      return;
+    }
+
+    if (action === 'redo') {
+      void onRedo();
+      return;
+    }
+
+    if (action === 'delete-selected') {
+      graphCanvasRef.current?.deleteSelected();
+    }
+  };
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col">
-      <div className="h-12 shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-4 flex items-center justify-between gap-4">
+    <EditorShell
+      className="flex-1 min-h-0"
+      header={(
+        <div className="h-12 shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-4 flex items-center justify-between gap-4">
         <div className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">
           {graphLoading ? 'Загрузка графа...' : `${nodes.length} узлов / ${transitions.length} переходов`}
         </div>
@@ -217,51 +305,38 @@ export const ScenarioGraphWorkspace: React.FC<ScenarioGraphWorkspaceProps> = ({
             <RefreshCw size={13} className={graphLoading ? 'animate-spin' : ''} /> Перезагрузить
           </Button>
         </div>
-      </div>
-      {graphError && (
+        </div>
+      )}
+      errorBanner={graphError && (
         <div className="shrink-0 border-b border-[var(--col-red)] bg-[var(--col-red)]/10 px-4 py-3 mono text-[10px] uppercase font-black text-[var(--col-red)]">
           {graphError}
         </div>
       )}
-      <div className="relative flex flex-1 w-full min-h-0 overflow-hidden">
-        <div className="z-30 flex w-14 shrink-0 flex-col items-center gap-1 border-r border-[var(--border-color)] bg-[var(--bg-surface)] px-2 py-4">
-          <GraphToolbarButton icon={ListTree} label="Узлы" active={nodeListOpen} onClick={onToggleNodeList} />
-          <GraphToolbarButton
-            icon={SlidersHorizontal}
-            label="Инспектор"
-            active={inspectorOpen}
-            onClick={onToggleInspector}
-          />
-          <GraphToolbarDivider />
-          <GraphToolbarButton
-            icon={Undo2}
-            label="Отменить"
-            disabled={controlsDisabled || !canUndo}
-            onClick={onUndo}
-          />
-          <GraphToolbarButton
-            icon={Redo2}
-            label="Повторить"
-            disabled={controlsDisabled || !canRedo}
-            onClick={onRedo}
-          />
-        </div>
-        {nodeListOpen && (
-          <div className="absolute inset-y-0 left-14 z-30 flex shadow-2xl">
-            <GraphNodeList
-              nodes={nodes}
-              transitions={transitions}
-              activeNodeId={activeNodeId}
-              newNodeType={newNodeType}
-              loading={graphLoading}
-              disabled={graphActionPending}
-              onNewNodeTypeChange={onNewNodeTypeChange}
-              onCreateNode={onCreateNode}
-              onSelectNode={onSelectNode}
-            />
-          </div>
-        )}
+      toolbar={(
+        <EditorToolbar
+          position={toolbarPosition}
+          groups={toolbarGroups}
+          onAction={handleToolbarAction}
+        />
+      )}
+      toolbarPosition={toolbarPosition}
+      leftPanelConfig={{ width: '18rem', scroll: false }}
+      leftPanel={nodeListOpen && (
+        <GraphNodeList
+          nodes={nodes}
+          transitions={transitions}
+          activeNodeId={activeNodeId}
+          newNodeType={newNodeType}
+          loading={graphLoading}
+          disabled={graphActionPending}
+          onNewNodeTypeChange={onNewNodeTypeChange}
+          onCreateNode={onCreateNode}
+          onSelectNode={onSelectNode}
+        />
+      )}
+      canvas={(
         <GraphCanvas
+          ref={graphCanvasRef}
           nodes={nodes}
           transitions={transitions}
           activeNodeId={activeNodeId}
@@ -277,13 +352,17 @@ export const ScenarioGraphWorkspace: React.FC<ScenarioGraphWorkspaceProps> = ({
           onUpdateTransition={onUpdateTransition}
           onDeleteNode={onDeleteNode}
           onDeleteTransition={onDeleteTransition}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onUndo={onUndo}
-          onRedo={onRedo}
+          canUndoShortcut={canUndo}
+          canRedoShortcut={canRedo}
+          onUndoShortcut={onUndo}
+          onRedoShortcut={onRedo}
         />
+      )}
+      rightPanelConfig={{ placement: 'body', width: '420px', scroll: false }}
+      rightPanel={inspectorOpen && (
         <GraphInspector
           isOpen={inspectorOpen}
+          mode="panel"
           activeTab={inspectorTab}
           selectedNode={selectedNode}
           nodes={nodes}
@@ -314,7 +393,7 @@ export const ScenarioGraphWorkspace: React.FC<ScenarioGraphWorkspaceProps> = ({
           onDeleteTransition={onDeleteTransition}
           onSelectValidationIssue={onSelectValidationIssue}
         />
-      </div>
-    </div>
+      )}
+    />
   );
 };

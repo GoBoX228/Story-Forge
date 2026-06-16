@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Campaign;
 use App\Models\Character;
+use App\Models\EntityLink;
 use App\Models\Item;
 use App\Models\Map;
 use App\Models\Scenario;
@@ -181,6 +182,22 @@ class GoBoxContentSeeder extends Seeder
      */
     private function seedScenarios(User $user, array $campaigns): array
     {
+        $scenarioIds = Scenario::query()
+            ->where('user_id', $user->id)
+            ->pluck('id');
+
+        if ($scenarioIds->isNotEmpty()) {
+            EntityLink::query()
+                ->where('source_type', EntityLink::TARGET_SCENARIO)
+                ->whereIn('source_id', $scenarioIds)
+                ->delete();
+
+            EntityLink::query()
+                ->where('target_type', EntityLink::TARGET_SCENARIO)
+                ->whereIn('target_id', $scenarioIds)
+                ->delete();
+        }
+
         Scenario::query()
             ->where('user_id', $user->id)
             ->delete();
@@ -397,19 +414,25 @@ class GoBoxContentSeeder extends Seeder
         ];
 
         foreach ($dataset as $payload) {
-            Map::updateOrCreate(
+            $map = Map::updateOrCreate(
                 [
                     'user_id' => $user->id,
                     'name' => $payload['name'],
                 ],
                 [
                     'campaign_id' => $campaigns[$payload['campaign_key']]->id ?? null,
-                    'scenario_id' => $scenarios[$payload['scenario_key']]->id ?? null,
+                    'scenario_id' => null,
                     'width' => $payload['width'],
                     'height' => $payload['height'],
                     'cell_size' => $payload['cell_size'],
                     'data' => ['objects' => $payload['objects']],
                 ]
+            );
+
+            $this->linkScenarioMaterial(
+                $scenarios[$payload['scenario_key']] ?? null,
+                EntityLink::TARGET_MAP,
+                (int) $map->id
             );
         }
     }
@@ -477,7 +500,7 @@ class GoBoxContentSeeder extends Seeder
                 }
             }
 
-            Character::updateOrCreate(
+            $character = Character::updateOrCreate(
                 [
                     'user_id' => $user->id,
                     'name' => $payload['name'],
@@ -490,10 +513,43 @@ class GoBoxContentSeeder extends Seeder
                     'stats' => $payload['stats'],
                     'inventory' => $inventory,
                     'campaign_id' => $campaigns[$payload['campaign_key']]->id ?? null,
-                    'scenario_id' => $scenarios[$payload['scenario_key']]->id ?? null,
+                    'scenario_id' => null,
                 ]
             );
+
+            $scenario = $scenarios[$payload['scenario_key']] ?? null;
+
+            $this->linkScenarioMaterial(
+                $scenario,
+                EntityLink::TARGET_CHARACTER,
+                (int) $character->id
+            );
+
+            foreach ($inventory as $itemId) {
+                $this->linkScenarioMaterial($scenario, EntityLink::TARGET_ITEM, (int) $itemId);
+            }
         }
+    }
+
+    private function linkScenarioMaterial(?Scenario $scenario, string $targetType, int $targetId): void
+    {
+        if (!$scenario || $targetId <= 0) {
+            return;
+        }
+
+        EntityLink::query()->updateOrCreate(
+            [
+                'source_type' => EntityLink::TARGET_SCENARIO,
+                'source_id' => $scenario->id,
+                'target_type' => $targetType,
+                'target_id' => $targetId,
+                'relation_type' => EntityLink::RELATION_USES,
+            ],
+            [
+                'label' => null,
+                'metadata' => null,
+            ]
+        );
     }
 
     /**

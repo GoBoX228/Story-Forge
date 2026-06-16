@@ -130,3 +130,67 @@ export const exportScenarioPdf = async (scenarioId: string): Promise<Blob | null
 
   return response.blob();
 };
+
+export type ScenarioCharacterCardsDuplexEdge = 'long' | 'short';
+
+export const exportScenarioCharacterCardsPdf = async (
+  scenarioId: string,
+  duplexEdge: ScenarioCharacterCardsDuplexEdge
+): Promise<Blob | null> => {
+  const requestPdf = async (): Promise<Response> => {
+    const headers = await withCsrfHeader({
+      Accept: 'application/pdf',
+      'Content-Type': 'application/json'
+    });
+
+    return fetch(`${API_BASE_URL}/api/scenarios/${scenarioId}/export/characters/pdf`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({ duplex_edge: duplexEdge })
+    });
+  };
+
+  let response = await requestPdf();
+
+  if (response.status === 401 && await refreshAccessToken()) {
+    response = await requestPdf();
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.blob();
+};
+
+export const exportScenarioItemCardsPdf = async (
+  scenarioId: string,
+  duplexEdge: ScenarioCharacterCardsDuplexEdge
+): Promise<Blob | null> => {
+  const requestPdf = async (): Promise<Response> => {
+    const headers = await withCsrfHeader({
+      Accept: 'application/pdf',
+      'Content-Type': 'application/json'
+    });
+
+    return fetch(`${API_BASE_URL}/api/scenarios/${scenarioId}/export/items/pdf`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({ duplex_edge: duplexEdge })
+    });
+  };
+
+  let response = await requestPdf();
+
+  if (response.status === 401 && await refreshAccessToken()) {
+    response = await requestPdf();
+  }
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.blob();
+};

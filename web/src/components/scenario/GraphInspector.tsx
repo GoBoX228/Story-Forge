@@ -28,6 +28,7 @@ export type GraphInspectorTab = 'properties' | 'links' | 'transitions' | 'valida
 
 interface GraphInspectorProps {
   isOpen: boolean;
+  mode?: 'overlay' | 'panel';
   activeTab: GraphInspectorTab;
   selectedNode: ScenarioNode | null;
   nodes: ScenarioNode[];
@@ -167,6 +168,7 @@ const GraphValidationPanel: React.FC<{
 
 export const GraphInspector: React.FC<GraphInspectorProps> = ({
   isOpen,
+  mode = 'overlay',
   activeTab,
   selectedNode,
   nodes,
@@ -197,11 +199,14 @@ export const GraphInspector: React.FC<GraphInspectorProps> = ({
   onSelectValidationIssue
 }) => {
   if (!isOpen) return null;
+  const rootClassName = mode === 'panel'
+    ? 'flex h-full min-h-0 w-full'
+    : 'absolute inset-y-0 right-0 z-40 flex w-[420px] max-w-[calc(100vw-24px)] pointer-events-none';
 
   return (
-    <div className="absolute inset-y-0 right-0 z-40 flex w-[420px] max-w-[calc(100vw-24px)] pointer-events-none">
+    <div className={rootClassName}>
       <div aria-hidden="true" aria-label="Закрыть инспектор" className="hidden" />
-      <aside className="w-full h-full bg-[var(--bg-main)] border-l-2 border-[var(--col-red)] shadow-2xl flex flex-col pointer-events-auto overflow-hidden">
+      <aside className={`w-full h-full bg-[var(--bg-main)] ${mode === 'panel' ? '' : 'border-l-2 border-[var(--col-red)] shadow-2xl'} flex flex-col pointer-events-auto overflow-hidden`}>
         <div className="h-14 shrink-0 border-b border-[var(--border-color)] bg-[var(--bg-surface)] px-4 flex items-center justify-between gap-3">
           <div>
             <div className="mono text-[8px] uppercase font-black text-[var(--text-muted)]">ГРАФ</div>
