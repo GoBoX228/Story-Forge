@@ -16,7 +16,7 @@ class SystemTileController extends Controller
     public function index(CoreReadRequest $request): JsonResponse
     {
         return response()->json(
-            $this->systemTileCatalog->list($request->getSchemeAndHttpHost())
+            $this->systemTileCatalog->list((string) config('app.url'))
         );
     }
 }

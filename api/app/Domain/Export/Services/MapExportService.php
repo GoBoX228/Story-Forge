@@ -476,7 +476,7 @@ class MapExportService
         }
 
         if (str_starts_with($assetId, 'system:tile:')) {
-            return $this->systemTileCatalog->resolveUrl($assetId, (string) config('app.url'));
+            return $this->systemTileCatalog->resolveLocalUri($assetId);
         }
 
         if (!ctype_digit($assetId)) {
