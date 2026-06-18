@@ -103,7 +103,7 @@ services:
     volumes:
       - api_storage:/app/storage
     depends_on:
-      postgres:
+      api:
         condition: service_healthy
 
   postgres:
