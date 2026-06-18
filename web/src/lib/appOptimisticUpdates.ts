@@ -230,42 +230,6 @@ export const removePublicationAssignment = (
     Object.entries(assignments).filter(([, publication]) => publication?.id !== publicationId)
   );
 
-export const syncCampaignScenarioLinks = (
-  scenarios: Scenario[],
-  campaignId: string,
-  nextScenarioIds: string[]
-): Scenario[] =>
-  scenarios.map((scenario) => {
-    const shouldAttach = nextScenarioIds.includes(scenario.id);
-    if (shouldAttach) return { ...scenario, campaignId };
-    if (scenario.campaignId === campaignId && !shouldAttach) return { ...scenario, campaignId: undefined };
-    return scenario;
-  });
-
-export const syncCampaignMapLinks = (
-  maps: MapData[],
-  campaignId: string,
-  nextMapIds: string[]
-): MapData[] =>
-  maps.map((map) => {
-    const shouldAttach = nextMapIds.includes(map.id);
-    if (shouldAttach) return { ...map, campaignId };
-    if (map.campaignId === campaignId && !shouldAttach) return { ...map, campaignId: null };
-    return map;
-  });
-
-export const syncCampaignCharacterLinks = (
-  characters: Character[],
-  campaignId: string,
-  nextCharacterIds: string[]
-): Character[] =>
-  characters.map((character) => {
-    const shouldAttach = nextCharacterIds.includes(character.id);
-    if (shouldAttach) return { ...character, campaignId };
-    if (character.campaignId === campaignId && !shouldAttach) return { ...character, campaignId: null };
-    return character;
-  });
-
 export const upsertCampaign = (campaigns: Campaign[], campaign: Campaign, existingId?: string): Campaign[] => {
   if (existingId) {
     return replaceById(campaigns, campaign.id, campaign);
@@ -319,14 +283,6 @@ export const removeItemFromScenarios = (scenarios: Scenario[], itemId: string): 
 export const clearCampaignFromScenarios = (scenarios: Scenario[], campaignId: string): Scenario[] =>
   scenarios.map((scenario) =>
     scenario.campaignId === campaignId ? { ...scenario, campaignId: undefined } : scenario
-  );
-
-export const clearCampaignFromMaps = (maps: MapData[], campaignId: string): MapData[] =>
-  maps.map((map) => (map.campaignId === campaignId ? { ...map, campaignId: null } : map));
-
-export const clearCampaignFromCharacters = (characters: Character[], campaignId: string): Character[] =>
-  characters.map((character) =>
-    character.campaignId === campaignId ? { ...character, campaignId: null } : character
   );
 
 export const appendSortedCharacterGroup = (groups: CharacterGroup[], group: CharacterGroup): CharacterGroup[] =>

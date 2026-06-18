@@ -12,16 +12,6 @@ class Campaign extends Model
         'user_id',
         'title',
         'description',
-        'tags',
-        'resources',
-        'progress',
-        'last_played',
-    ];
-
-    protected $casts = [
-        'tags' => 'array',
-        'resources' => 'array',
-        'last_played' => 'date',
     ];
 
     public function user(): BelongsTo
@@ -34,14 +24,11 @@ class Campaign extends Model
         return $this->hasMany(Scenario::class)->orderByDesc('updated_at');
     }
 
-    public function maps(): HasMany
+    public function materialLinks(): HasMany
     {
-        return $this->hasMany(Map::class)->orderByDesc('updated_at');
-    }
-
-    public function characters(): HasMany
-    {
-        return $this->hasMany(Character::class)->orderByDesc('updated_at');
+        return $this->hasMany(EntityLink::class, 'source_id')
+            ->where('source_type', EntityLink::TARGET_CAMPAIGN)
+            ->where('relation_type', EntityLink::RELATION_USES)
+            ->orderBy('id');
     }
 }
-

@@ -66,8 +66,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       [...campaigns]
         .sort(
           (a, b) =>
-            Math.max(toTimestamp(b.updatedAt), toTimestamp(b.createdAt), toTimestamp(b.lastPlayed)) -
-            Math.max(toTimestamp(a.updatedAt), toTimestamp(a.createdAt), toTimestamp(a.lastPlayed))
+            Math.max(toTimestamp(b.updatedAt), toTimestamp(b.createdAt)) -
+            Math.max(toTimestamp(a.updatedAt), toTimestamp(a.createdAt))
         )
         .slice(0, 3),
     [campaigns]
@@ -202,6 +202,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 const scenarioCount = campaign.scenarioIds?.length ?? 0;
                 const mapCount = campaign.mapIds?.length ?? 0;
                 const characterCount = campaign.characterIds?.length ?? 0;
+                const itemCount = campaign.itemIds?.length ?? 0;
 
                 return (
                   <div
@@ -215,7 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       </h4>
                       <div className="w-1.5 h-1.5 bg-[var(--col-purple)]" />
                     </div>
-                    <div className="grid grid-cols-3 gap-2 mb-6 text-center">
+                    <div className="grid grid-cols-4 gap-2 text-center">
                       <div className="p-2 border border-[var(--border-color)] bg-[var(--bg-main)]">
                         <div className="text-lg font-bold mono text-[var(--text-main)]">{scenarioCount}</div>
                         <div className="text-[8px] text-[var(--text-muted)] mono uppercase">Сценарии</div>
@@ -228,17 +229,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <div className="text-lg font-bold mono text-[var(--text-main)]">{characterCount}</div>
                         <div className="text-[8px] text-[var(--text-muted)] mono uppercase">NPC</div>
                       </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[8px] mono uppercase text-[var(--text-main)]">
-                        <span>Прогресс</span>
-                        <span>{campaign.progress}%</span>
-                      </div>
-                      <div className="h-1 bg-[var(--border-color)] w-full">
-                        <div
-                          className="h-full bg-[var(--col-purple)] transition-all"
-                          style={{ width: `${campaign.progress}%` }}
-                        />
+                      <div className="p-2 border border-[var(--border-color)] bg-[var(--bg-main)]">
+                        <div className="text-lg font-bold mono text-[var(--text-main)]">{itemCount}</div>
+                        <div className="text-[8px] text-[var(--text-muted)] mono uppercase">Предметы</div>
                       </div>
                     </div>
                   </div>

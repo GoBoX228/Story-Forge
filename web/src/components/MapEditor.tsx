@@ -19,6 +19,7 @@ import {
   MapLayer,
   MapLayerType,
   MapObject,
+  MapObjectSourceType,
   PublishedContent,
   PublicationAssignmentMap,
   PublicationTargetType,
@@ -36,6 +37,11 @@ import { apiRequest, exportMapPdf } from '../lib/api';
 import { assetCollectionAssignmentKey, entityLinkAssignmentKey, mapMapFromApi, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
 import { buildAssetUsagePayload, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
 import { drawMapContent, isWithinMapBoundsValue, sanitizeMapObjects } from '../lib/mapRendering';
+import {
+  createMapObjectDisplayResolver,
+  mapObjectSourceIdentity,
+  resolveMapMaterialContext
+} from '../lib/mapMaterials';
 import { listSystemTiles } from '../lib/systemTileApi';
 import { TagFilter } from './TagPicker';
 import { AssetUsagePicker } from './AssetUsagePicker';
@@ -78,8 +84,12 @@ interface PaletteAsset {
   type: string;
   label: string;
   color: string;
+  layerType: 'tiles' | 'tokens';
+  sourceType?: MapObjectSourceType | null;
+  sourceId?: string | null;
   assetId?: string | null;
   imageUrl?: string | null;
+  initials?: string | null;
   sourceLabel?: string;
   sourceSetNames?: string[];
 }
@@ -197,6 +207,8 @@ const createMapObject = (
   type: asset.type,
   label: asset.label,
   color: asset.color,
+  sourceType: asset.sourceType ?? null,
+  sourceId: asset.sourceId ?? null,
   assetId: asset.assetId ?? null,
   layerId: layer.id
 });
@@ -204,8 +216,12 @@ const createMapObject = (
 const PENDING_TILE_ASSET: PaletteAsset = {
   type: 'system:pending',
   label: '',
-  color: '#9aa0a6'
+  color: '#9aa0a6',
+  layerType: 'tiles'
 };
+
+const paletteAssetIdentity = (asset: PaletteAsset): string =>
+  mapObjectSourceIdentity(asset.sourceType, asset.sourceId, asset.type, asset.assetId);
 
 interface MapEditorProps {
   data: MapData[];
@@ -262,6 +278,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
   onUpdatePublication,
   onDeletePublication,
   onReplaceAssetCollections,
+  onOpenMaterialLink,
   initialMapId
 }) => {
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -314,6 +331,9 @@ const MapEditor: React.FC<MapEditorProps> = ({
             type: tile.category,
             label: tile.name,
             color: tile.color,
+            layerType: 'tiles',
+            sourceType: 'asset',
+            sourceId: tile.id,
             assetId: tile.id,
             imageUrl: tile.url,
             sourceLabel: tile.setName
@@ -360,6 +380,26 @@ const MapEditor: React.FC<MapEditorProps> = ({
       );
     },
     [activeMapId, entityLinks, scenarios]
+  );
+  const activeMapMaterialContext = useMemo(
+    () => resolveMapMaterialContext({
+      mapId: activeMapId ?? '',
+      scenarios,
+      characters,
+      items,
+      assets: assetsLibrary,
+      entityLinks
+    }),
+    [activeMapId, assetsLibrary, characters, entityLinks, items, scenarios]
+  );
+  const resolveObjectDisplay = useMemo(
+    () => createMapObjectDisplayResolver({
+      characters,
+      items,
+      assets: assetsLibrary,
+      entityLinks
+    }),
+    [assetsLibrary, characters, entityLinks, items]
   );
   const activeMapCollectionIds = useMemo(
     () => activeMap
@@ -470,6 +510,9 @@ const MapEditor: React.FC<MapEditorProps> = ({
         type: tile.category,
         label: tile.name,
         color: tile.color,
+        layerType: 'tiles' as const,
+        sourceType: 'asset' as const,
+        sourceId: tile.id,
         assetId: tile.id,
         imageUrl: tile.url,
         sourceLabel: tile.setName
@@ -482,6 +525,9 @@ const MapEditor: React.FC<MapEditorProps> = ({
             type: `asset:${asset.id}`,
             label: asset.name,
             color: '#2A9D8F',
+            layerType: asset.kind === 'tile' ? 'tiles' as const : 'tokens' as const,
+            sourceType: 'asset' as const,
+            sourceId: asset.id,
             assetId: asset.id,
             imageUrl: asset.url ?? null,
             sourceSetNames,
@@ -491,17 +537,33 @@ const MapEditor: React.FC<MapEditorProps> = ({
                 ? 'CONNECTED SET'
                 : 'ALL ASSETS'
           };
-        })
+        }),
+      ...activeMapMaterialContext.materials.map((material) => {
+        const inheritedLabel = material.scenarioSources.length === 1
+          ? `Из сценария «${material.scenarioSources[0].title}»`
+          : material.scenarioSources.length > 1
+            ? `Из ${material.scenarioSources.length} сценариев`
+            : '';
+        return {
+          type: material.materialType,
+          label: material.name,
+          color: material.color,
+          layerType: 'tokens' as const,
+          sourceType: material.materialType,
+          sourceId: material.id,
+          assetId: material.assetId,
+          imageUrl: material.imageUrl,
+          initials: material.initials,
+          sourceLabel: [material.local ? 'Локальный' : '', inheritedLabel].filter(Boolean).join(' · ')
+        };
+      })
     ],
-    [activeMapCollectionIds.length, getAssetSourceSetNames, mapScopedAssets, systemTiles]
+    [activeMapCollectionIds.length, activeMapMaterialContext.materials, getAssetSourceSetNames, mapScopedAssets, systemTiles]
   );
   const activeLayerPaletteAssets = activeLayer?.type === 'tiles'
-    ? [
-        ...paletteAssets.filter((asset) => !asset.assetId),
-        ...paletteAssets.filter((asset) => asset.assetId && assetById.get(asset.assetId)?.kind === 'tile')
-      ]
+    ? paletteAssets.filter((asset) => asset.layerType === 'tiles')
     : activeLayer?.type === 'tokens'
-      ? paletteAssets.filter((asset) => asset.assetId && assetById.get(asset.assetId)?.kind === 'token')
+      ? paletteAssets.filter((asset) => asset.layerType === 'tokens')
       : [];
   const activeLayerPaletteLabel = activeLayer?.type === 'tiles'
     ? 'ПАЛИТРА ТАЙЛОВ'
@@ -511,7 +573,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
   const activeLayerCanUseAsset = Boolean(
     activeLayerEditable &&
     activeLayerPaletteAssets.some((asset) =>
-      asset.type === activeAsset.type && (asset.assetId ?? null) === (activeAsset.assetId ?? null)
+      paletteAssetIdentity(asset) === paletteAssetIdentity(activeAsset)
     )
   );
   const activeLayerNotice = activeLayer
@@ -782,6 +844,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
       assetById,
       backgroundAssetId: effectiveBackgroundAssetId,
       getImage: getCanvasImage,
+      resolveObjectDisplay,
       drawBorder: false
     });
     if (selectedTool === 'rect' && rectStart && rectEnd) {
@@ -812,6 +875,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
     effectiveBackgroundAssetId,
     rectEnd,
     rectStart,
+    resolveObjectDisplay,
     selectedTool,
     sortedLayers,
     viewport.offsetX,
@@ -915,7 +979,11 @@ const MapEditor: React.FC<MapEditorProps> = ({
       const visibleLayers = [...sortedLayers].filter((layer) => layer.visible && layer.type !== 'background').reverse();
       const obj = visibleLayers.flatMap((layer) => layer.objects).find(o => mapObjectContainsCell(o, x, y));
       if (obj) {
-        const a = paletteAssets.find(as => as.type === obj.type && (as.assetId ?? null) === (obj.assetId ?? null));
+        const objectIdentity = mapObjectSourceIdentity(obj.sourceType, obj.sourceId, obj.type, obj.assetId);
+        const a = paletteAssets.find((asset) => paletteAssetIdentity(asset) === objectIdentity)
+          ?? paletteAssets.find((asset) =>
+            asset.type === obj.type && (asset.assetId ?? null) === (obj.assetId ?? null)
+          );
         if (a) {
           setActiveAsset(a);
           setSelectedTool('brush');
@@ -948,6 +1016,8 @@ const MapEditor: React.FC<MapEditorProps> = ({
       const exist = activeLayer.objects.find(o => mapObjectContainsCell(o, x, y));
       if (
         exist?.type !== activeAsset.type ||
+        (exist.sourceType ?? null) !== (activeAsset.sourceType ?? null) ||
+        (exist.sourceId ?? null) !== (activeAsset.sourceId ?? null) ||
         (exist.assetId ?? null) !== (activeAsset.assetId ?? null) ||
         exist.width !== width ||
         exist.height !== height ||
@@ -1100,10 +1170,18 @@ const MapEditor: React.FC<MapEditorProps> = ({
 
     const selectedLibraryAsset = asset.assetId ? assetById.get(asset.assetId) : undefined;
 
-    if (selectedLibraryAsset?.kind === 'token' && asset.assetId) {
+    if (asset.layerType === 'tokens') {
+      const tokenLayer = activeMap?.layers.find((layer) => layer.type === 'tokens' && layer.visible && !layer.locked)
+        ?? activeMap?.layers.find((layer) => layer.type === 'tokens');
+      if (tokenLayer) setActiveLayerId(tokenLayer.id);
+    }
+
+    if (asset.sourceType === 'asset' && selectedLibraryAsset?.kind === 'token' && asset.assetId) {
       void setMapAssetUsage('map_token', asset.assetId);
       return;
     }
+
+    if (asset.layerType === 'tokens') return;
 
     const tileLayer = activeMap?.layers.find((layer) => layer.type === 'tiles' && layer.visible && !layer.locked)
       ?? activeMap?.layers.find((layer) => layer.type === 'tiles');
@@ -1253,6 +1331,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
                             map={map}
                             assetById={assetById}
                             backgroundAssetId={thumbnailBackgroundAssetId}
+                            resolveObjectDisplay={resolveObjectDisplay}
                           />
                         </EntityLibraryMediaSlot>
                         <div className="flex items-center gap-2 mono text-[10px] uppercase font-black text-[var(--text-main)]">
@@ -1468,8 +1547,10 @@ const MapEditor: React.FC<MapEditorProps> = ({
                   {activeLayerPaletteAssets.length > 0 ? (
                     <div className="grid grid-cols-2 gap-2">
                       {activeLayerPaletteAssets.map(asset => (
-                        <button key={`${asset.type}:${asset.assetId ?? ''}`} disabled={!activeLayerEditable} onClick={() => selectPaletteAsset(asset)} className={`flex flex-col items-center justify-center p-3 border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${activeLayerEditable ? 'hover:scale-105 active:scale-95' : ''} ${(activeAsset.type === asset.type && (activeAsset.assetId ?? null) === (asset.assetId ?? null)) ? 'border-[var(--text-main)] bg-[var(--text-main)]/10' : 'border-[var(--border-color)] hover:border-[var(--border-color-hover)]'}`}>
-                          <div className="w-10 h-10 mb-2 border border-[var(--border-color)] bg-center bg-cover" style={{ backgroundColor: asset.color, backgroundImage: asset.imageUrl ? `url(${asset.imageUrl})` : undefined }} />
+                        <button key={paletteAssetIdentity(asset)} disabled={!activeLayerEditable} onClick={() => selectPaletteAsset(asset)} className={`flex flex-col items-center justify-center p-3 border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${activeLayerEditable ? 'hover:scale-105 active:scale-95' : ''} ${paletteAssetIdentity(activeAsset) === paletteAssetIdentity(asset) ? 'border-[var(--text-main)] bg-[var(--text-main)]/10' : 'border-[var(--border-color)] hover:border-[var(--border-color-hover)]'}`}>
+                          <div className="flex w-10 h-10 mb-2 items-center justify-center border border-[var(--border-color)] bg-center bg-cover mono text-xs font-black text-white" style={{ backgroundColor: asset.color, backgroundImage: asset.imageUrl ? `url(${asset.imageUrl})` : undefined }}>
+                            {!asset.imageUrl ? asset.initials : null}
+                          </div>
                           <span className="mono text-[9px] uppercase font-bold text-[var(--text-main)] truncate max-w-full">{asset.label}</span>
                           <span className="mono text-[7px] uppercase text-[var(--text-muted)] truncate max-w-full">{asset.sourceLabel}</span>
                         </button>
@@ -1516,6 +1597,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
           events={events}
           links={activeMapMaterialLinks}
           scenarioMapLinks={activeMapScenarioLinks}
+          materialContext={activeMapMaterialContext}
           tags={tags}
           selectedTags={activeMapTags}
           publication={publicationAssignments[publicationAssignmentKey('map', activeMap.id)]}
@@ -1534,6 +1616,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
           onDeleteTag={onDeleteTag}
           onCreateMaterialLink={onCreateMaterialLink}
           onDeleteMaterialLink={onDeleteMaterialLink}
+          onOpenMaterialLink={onOpenMaterialLink}
           onUpsertPublication={onUpsertPublication}
           onUpdatePublication={onUpdatePublication}
           onDeletePublication={onDeletePublication}

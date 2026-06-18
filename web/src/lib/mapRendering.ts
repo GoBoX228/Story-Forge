@@ -1,4 +1,5 @@
 import type { Asset, MapData, MapLayer, MapObject } from '../types';
+import type { MapObjectDisplayResolver } from './mapMaterials';
 
 export const isWithinMapBoundsValue = (x: number, y: number, map: MapData) =>
   x >= 0 && y >= 0 && x < map.width && y < map.height;
@@ -30,6 +31,7 @@ export interface DrawMapContentOptions {
   assetById: ReadonlyMap<string, Asset>;
   backgroundAssetId?: string | null;
   getImage: MapImageResolver;
+  resolveObjectDisplay?: MapObjectDisplayResolver;
   drawGrid?: boolean;
   drawBorder?: boolean;
 }
@@ -41,6 +43,7 @@ export const drawMapContent = ({
   assetById,
   backgroundAssetId,
   getImage,
+  resolveObjectDisplay,
   drawGrid = true,
   drawBorder = true
 }: DrawMapContentOptions) => {
@@ -63,12 +66,19 @@ export const drawMapContent = ({
   }
 
   const drawObject = (obj: MapObject, layerOpacity: number) => {
+    const display = resolveObjectDisplay?.(obj) ?? {
+      label: obj.label,
+      color: obj.color,
+      assetId: obj.assetId ?? null,
+      initials: null,
+      detached: false
+    };
     const padding = 1;
     const cellX = obj.x * map.cellSize + padding;
     const cellY = obj.y * map.cellSize + padding;
     const cellWidth = map.cellSize * Math.max(1, obj.width ?? 1) - padding * 2;
     const cellHeight = map.cellSize * Math.max(1, obj.height ?? 1) - padding * 2;
-    const objectAsset = obj.assetId ? assetById.get(obj.assetId) : undefined;
+    const objectAsset = display.assetId ? assetById.get(display.assetId) : undefined;
     const objectImage = objectAsset?.url ? getImage(objectAsset.url) : null;
     const objectOpacity = Math.max(0, Math.min(1, obj.opacity ?? 1)) * layerOpacity;
     const rotation = ((obj.rotation ?? 0) * Math.PI) / 180;
@@ -83,13 +93,28 @@ export const drawMapContent = ({
     if (objectImage) {
       ctx.drawImage(objectImage, cellX, cellY, cellWidth, cellHeight);
     } else {
-      ctx.fillStyle = obj.color;
+      ctx.fillStyle = display.color;
       ctx.fillRect(cellX, cellY, cellWidth, cellHeight);
+      if (display.initials) {
+        const fontSize = Math.max(9, Math.min(cellWidth, cellHeight) * 0.38);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `900 ${fontSize}px Arial, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(display.initials, cellX + cellWidth / 2, cellY + cellHeight / 2, Math.max(1, cellWidth - 4));
+      }
     }
     if (obj.type === 'wall') {
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 2;
       ctx.strokeRect(cellX, cellY, cellWidth, cellHeight);
+    }
+    if (display.detached) {
+      ctx.setLineDash([Math.max(2, Math.min(cellWidth, cellHeight) * 0.12), 3]);
+      ctx.strokeStyle = '#E63946';
+      ctx.lineWidth = Math.max(1.5, Math.min(cellWidth, cellHeight) * 0.06);
+      ctx.strokeRect(cellX + 1, cellY + 1, Math.max(0, cellWidth - 2), Math.max(0, cellHeight - 2));
+      ctx.setLineDash([]);
     }
     ctx.restore();
   };

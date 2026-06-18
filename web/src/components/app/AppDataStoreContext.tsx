@@ -13,6 +13,7 @@ import {
   AssetUpdatePayload,
   AssetUploadPayload,
   Campaign,
+  CampaignPayload,
   Character,
   CharacterGroup,
   Chronicle,
@@ -80,8 +81,10 @@ export interface AppViewActions {
   openScenarioFromDashboard: (scenarioId?: string) => Promise<void>;
   openMapFromDashboard: (mapId?: string) => Promise<void>;
   openCampaignFromDashboard: (campaignId?: string) => void;
-  openCampaignEditor: (campaign?: Campaign) => void;
+  createCampaign: (payload: CampaignPayload) => Promise<Campaign>;
+  updateCampaign: (id: string, payload: CampaignPayload) => Promise<Campaign>;
   deleteCampaign: (id: string) => Promise<void>;
+  updateScenarioCampaign: (scenarioId: string, campaignId: string | null) => Promise<Scenario>;
   createScenarioGroup: () => Promise<ScenarioGroup>;
   updateScenarioGroup: (id: string, payload: Partial<ScenarioGroup>) => Promise<ScenarioGroup>;
   deleteScenarioGroup: (id: string) => Promise<void>;

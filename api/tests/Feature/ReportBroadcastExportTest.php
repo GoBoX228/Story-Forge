@@ -1010,4 +1010,127 @@ class ReportBroadcastExportTest extends TestCase
         Sanctum::actingAs($foreignUser);
         $this->postJson('/api/maps/' . $map->id . '/export/pdf')->assertStatus(404);
     }
+
+    public function test_export_map_pdf_resolves_live_card_tokens_and_keeps_detached_snapshots(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        $currentToken = Asset::create([
+            'user_id' => $owner->id,
+            'type' => 'image',
+            'kind' => 'token',
+            'name' => 'Current Token',
+            'path' => 'assets/current-token.png',
+            'url' => 'https://example.test/storage/current-token.png',
+            'mime_type' => 'image/png',
+            'size' => 100,
+            'metadata' => [],
+        ]);
+        $oldSnapshot = Asset::create([
+            'user_id' => $owner->id,
+            'type' => 'image',
+            'kind' => 'token',
+            'name' => 'Old Snapshot',
+            'path' => 'assets/old-snapshot.png',
+            'url' => 'https://example.test/storage/old-snapshot.png',
+            'mime_type' => 'image/png',
+            'size' => 100,
+            'metadata' => [],
+        ]);
+        $detachedSnapshot = Asset::create([
+            'user_id' => $owner->id,
+            'type' => 'image',
+            'kind' => 'item_image',
+            'name' => 'Detached Snapshot',
+            'path' => 'assets/detached-snapshot.png',
+            'url' => 'https://example.test/storage/detached-snapshot.png',
+            'mime_type' => 'image/png',
+            'size' => 100,
+            'metadata' => [],
+        ]);
+        $character = Character::create([
+            'user_id' => $owner->id,
+            'name' => 'Актуальный Герой',
+            'role' => 'ally',
+            'race' => 'human',
+            'description' => '',
+            'stats' => [],
+            'inventory' => [],
+        ]);
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_CHARACTER,
+            'source_id' => $character->id,
+            'target_type' => EntityLink::TARGET_ASSET,
+            'target_id' => $currentToken->id,
+            'relation_type' => EntityLink::RELATION_USES,
+            'metadata' => ['role' => 'token'],
+        ]);
+
+        $map = Map::create([
+            'user_id' => $owner->id,
+            'name' => 'Live Token Map',
+            'width' => 3,
+            'height' => 2,
+            'cell_size' => 32,
+            'data' => [
+                'layers' => [
+                    [
+                        'id' => 'tokens',
+                        'type' => 'tokens',
+                        'visible' => true,
+                        'opacity' => 1,
+                        'order' => 1,
+                        'objects' => [
+                            [
+                                'id' => 'live-character',
+                                'x' => 0,
+                                'y' => 0,
+                                'type' => 'character',
+                                'label' => 'Старое имя',
+                                'color' => '#FFC300',
+                                'sourceType' => 'character',
+                                'sourceId' => (string) $character->id,
+                                'assetId' => (string) $oldSnapshot->id,
+                            ],
+                            [
+                                'id' => 'detached-item',
+                                'x' => 1,
+                                'y' => 0,
+                                'type' => 'item',
+                                'label' => 'Старый ключ',
+                                'color' => '#8338EC',
+                                'sourceType' => 'item',
+                                'sourceId' => '999999',
+                                'assetId' => (string) $detachedSnapshot->id,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+
+        $capturedHtml = null;
+        $this->mock(GenerateMapPdfAction::class, function (MockInterface $mock) use (&$capturedHtml): void {
+            $mock->shouldReceive('execute')
+                ->once()
+                ->with(\Mockery::on(function (string $html) use (&$capturedHtml): bool {
+                    $capturedHtml = $html;
+
+                    return str_contains($html, 'Актуальный Герой')
+                        && str_contains($html, 'https://example.test/storage/current-token.png')
+                        && !str_contains($html, 'https://example.test/storage/old-snapshot.png')
+                        && str_contains($html, 'Старый ключ')
+                        && str_contains($html, 'https://example.test/storage/detached-snapshot.png')
+                        && str_contains($html, 'data-detached="true"');
+                }), \Mockery::type('string'), \Mockery::type('string'))
+                ->andReturn('%PDF-live-token-map%');
+        });
+
+        $response = $this->postJson('/api/maps/' . $map->id . '/export/pdf');
+
+        $response->assertStatus(200);
+        $this->assertSame('%PDF-live-token-map%', $response->getContent());
+        $this->assertNotNull($capturedHtml);
+    }
 }

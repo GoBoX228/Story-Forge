@@ -10,6 +10,7 @@ use App\Models\Map;
 use App\Models\Scenario;
 use App\Models\ScenarioNode;
 use App\Models\ScenarioTransition;
+use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,14 @@ use Illuminate\Support\Facades\Hash;
 
 class GoBoxContentSeeder extends Seeder
 {
+    private const MAP_NAME = 'Ледяной маяк — нижний ярус';
+
+    private const TILE_FROZEN_FLOOR = 'system:tile:core:v1:frozen-stone-floor';
+
+    private const TILE_FROZEN_WALL = 'system:tile:core:v1:frozen-stone-wall';
+
+    private const TILE_ICE = 'system:tile:core:v1:ice';
+
     public function run(): void
     {
         DB::transaction(function (): void {
@@ -27,70 +36,111 @@ class GoBoxContentSeeder extends Seeder
                     'password' => Hash::make('12345678'),
                     'role' => User::ROLE_ADMIN,
                     'status' => User::STATUS_ACTIVE,
-                    'bio' => 'Демо-профиль мастера для локальной проверки редакторов.',
+                    'bio' => 'Демо-профиль мастера с единым ледяным приключением.',
                     'email_verified_at' => now(),
                 ]
             );
 
-            $campaigns = $this->seedCampaigns($user);
+            $this->clearOwnedDemoContent($user);
+
+            $campaign = $this->seedCampaign($user);
+            $this->seedCampaignTags($campaign, ['зима', 'маяк', 'лед', 'культ']);
             $items = $this->seedItems($user);
-            $scenarios = $this->seedScenarios($user, $campaigns);
-            $this->seedMaps($user, $campaigns, $scenarios);
-            $this->seedCharacters($user, $campaigns, $scenarios, $items);
+            $scenario = $this->seedScenario($user, $campaign, $items);
+            $characters = $this->seedCharacters($user, $campaign, $scenario);
+
+            foreach ($items as $item) {
+                $this->linkScenarioMaterial($scenario, EntityLink::TARGET_ITEM, (int) $item->id);
+                $this->linkCampaignMaterial($campaign, EntityLink::TARGET_ITEM, (int) $item->id);
+            }
+
+            $map = $this->seedMap($user, $campaign, $scenario, $characters, $items);
+            $this->linkCampaignMaterial($campaign, EntityLink::TARGET_MAP, (int) $map->id);
         });
     }
 
-    /**
-     * @return array<string, Campaign>
-     */
-    private function seedCampaigns(User $user): array
+    private function clearOwnedDemoContent(User $user): void
     {
-        $dataset = [
-            'frost' => [
-                'title' => 'Хроники ледяного пика',
-                'description' => 'Северные племена пытаются остановить культ ледяного шторма и снова зажечь старый маяк.',
-                'tags' => ['зима', 'племена', 'маяк', 'культ'],
-                'resources' => ['Карта ледяного маяка', 'Список дозорных', 'Легенды о северном шторме'],
-                'progress' => 35,
-                'last_played' => '2026-02-12',
-            ],
-            'dunes' => [
-                'title' => 'Пески Караму',
-                'description' => 'Караваны исчезают в пустыне, а древние руины просыпаются под барханами.',
-                'tags' => ['пустыня', 'караваны', 'руины'],
-                'resources' => ['Маршрут каравана', 'Список фракций оазиса'],
-                'progress' => 20,
-                'last_played' => '2026-02-03',
-            ],
-            'depths' => [
-                'title' => 'Архив под бездной',
-                'description' => 'Подземный комплекс, где магия и механизмы вышли из-под контроля.',
-                'tags' => ['подземелье', 'архив', 'магия'],
-                'resources' => ['Схема нижнего уровня', 'Дневник архивариуса'],
-                'progress' => 15,
-                'last_played' => '2026-01-28',
-            ],
+        $campaignIds = Campaign::query()->where('user_id', $user->id)->pluck('id');
+        $ownedMaterialIds = [
+            EntityLink::TARGET_SCENARIO => Scenario::query()->where('user_id', $user->id)->pluck('id'),
+            EntityLink::TARGET_MAP => Map::query()->where('user_id', $user->id)->pluck('id'),
+            EntityLink::TARGET_CHARACTER => Character::query()->where('user_id', $user->id)->pluck('id'),
+            EntityLink::TARGET_ITEM => Item::query()->where('user_id', $user->id)->pluck('id'),
         ];
+        $scenarioNodeIds = ScenarioNode::query()
+            ->whereIn('scenario_id', $ownedMaterialIds[EntityLink::TARGET_SCENARIO])
+            ->pluck('id');
 
-        $campaigns = [];
+        foreach ($ownedMaterialIds as $type => $ids) {
+            if ($ids->isEmpty()) {
+                continue;
+            }
 
-        foreach ($dataset as $key => $payload) {
-            $campaigns[$key] = Campaign::updateOrCreate(
-                [
-                    'user_id' => $user->id,
-                    'title' => $payload['title'],
-                ],
-                [
-                    'description' => $payload['description'],
-                    'tags' => $payload['tags'],
-                    'resources' => $payload['resources'],
-                    'progress' => $payload['progress'],
-                    'last_played' => $payload['last_played'],
-                ]
-            );
+            EntityLink::query()
+                ->where(function ($query) use ($type, $ids): void {
+                    $query
+                        ->where('source_type', $type)
+                        ->whereIn('source_id', $ids);
+                })
+                ->orWhere(function ($query) use ($type, $ids): void {
+                    $query
+                        ->where('target_type', $type)
+                        ->whereIn('target_id', $ids);
+                })
+                ->delete();
         }
 
-        return $campaigns;
+        if ($scenarioNodeIds->isNotEmpty()) {
+            EntityLink::query()
+                ->where('source_type', EntityLink::SOURCE_SCENARIO_NODE)
+                ->whereIn('source_id', $scenarioNodeIds)
+                ->delete();
+        }
+
+        if ($campaignIds->isNotEmpty()) {
+            EntityLink::query()
+                ->where('source_type', EntityLink::TARGET_CAMPAIGN)
+                ->whereIn('source_id', $campaignIds)
+                ->delete();
+            DB::table('taggables')
+                ->where('taggable_type', EntityLink::TARGET_CAMPAIGN)
+                ->whereIn('taggable_id', $campaignIds)
+                ->delete();
+        }
+
+        Scenario::query()->where('user_id', $user->id)->delete();
+        Map::query()->where('user_id', $user->id)->delete();
+        Character::query()->where('user_id', $user->id)->delete();
+        Item::query()->where('user_id', $user->id)->delete();
+        Campaign::query()->where('user_id', $user->id)->delete();
+    }
+
+    private function seedCampaign(User $user): Campaign
+    {
+        return Campaign::create([
+            'user_id' => $user->id,
+            'title' => 'Свет над ледяным разломом',
+            'description' => 'Короткая северная кампания о последнем маяке, который удерживает вечную метель над ледяным разломом.',
+        ]);
+    }
+
+    /**
+     * @param array<int, string> $names
+     */
+    private function seedCampaignTags(Campaign $campaign, array $names): void
+    {
+        foreach ($names as $name) {
+            $tag = Tag::query()->firstOrCreate(
+                ['user_id' => $campaign->user_id, 'slug' => $name],
+                ['name' => $name]
+            );
+            DB::table('taggables')->insertOrIgnore([
+                'tag_id' => $tag->id,
+                'taggable_type' => EntityLink::TARGET_CAMPAIGN,
+                'taggable_id' => $campaign->id,
+            ]);
+        }
     }
 
     /**
@@ -99,131 +149,68 @@ class GoBoxContentSeeder extends Seeder
     private function seedItems(User $user): array
     {
         $dataset = [
-            'sun_blade' => [
-                'name' => 'Клинок рассвета',
-                'type' => 'Оружие',
-                'rarity' => 'Эпический',
-                'description' => 'Меч, который ярче горит на открытом воздухе и режет ледяную броню.',
-                'modifiers' => [
-                    ['stat' => 'АТК', 'value' => 4],
-                    ['stat' => 'ХАР', 'value' => 1],
-                ],
-                'weight' => 2.8,
-                'value' => 950,
-            ],
             'warm_potion' => [
-                'name' => 'Зелье тепла',
+                'name' => 'Зелье северного тепла',
                 'type' => 'Расходник',
                 'rarity' => 'Необычный',
-                'description' => 'На час защищает от холода и помогает пережить ледяной шторм.',
-                'modifiers' => [
-                    ['stat' => 'ВЫН', 'value' => 2],
-                ],
+                'description' => 'На час защищает от смертельного холода внутри маяка.',
+                'modifiers' => [['stat' => 'ВЫН', 'value' => 2]],
                 'weight' => 0.3,
                 'value' => 120,
             ],
             'lens_key' => [
-                'name' => 'Ключ от линзы',
+                'name' => 'Ключ от линзы маяка',
                 'type' => 'Ключевой предмет',
                 'rarity' => 'Редкий',
-                'description' => 'Медный ключ с руной маяка. Открывает верхний ярус и блокировку линзы.',
+                'description' => 'Медный ключ с руной полярной звезды, открывающий зал главной линзы.',
                 'modifiers' => [],
                 'weight' => 0.2,
                 'value' => 0,
             ],
-            'ice_totem' => [
-                'name' => 'Тотем стужи',
+            'storm_core' => [
+                'name' => 'Сердце ледяной бури',
                 'type' => 'Артефакт',
-                'rarity' => 'Легендарный',
-                'description' => 'Стабилизирует температуру и рассеивает метель вокруг носителя.',
-                'modifiers' => [
-                    ['stat' => 'ВЫН', 'value' => 3],
-                    ['stat' => 'МДР', 'value' => 2],
-                ],
-                'weight' => 4.1,
-                'value' => 1700,
-            ],
-            'mercenary_kit' => [
-                'name' => 'Набор наемника',
-                'type' => 'Снаряжение',
-                'rarity' => 'Обычный',
-                'description' => 'Веревка, крюки, масло и базовые инструменты для полевого выхода.',
-                'modifiers' => [],
-                'weight' => 5.5,
-                'value' => 130,
+                'rarity' => 'Эпический',
+                'description' => 'Кристалл культистов, способный погасить или перегрузить рунический двигатель.',
+                'modifiers' => [['stat' => 'МДР', 'value' => 2]],
+                'weight' => 1.4,
+                'value' => 900,
             ],
         ];
-
         $items = [];
 
         foreach ($dataset as $key => $payload) {
-            $items[$key] = Item::updateOrCreate(
-                [
-                    'user_id' => $user->id,
-                    'name' => $payload['name'],
-                ],
-                [
-                    'type' => $payload['type'],
-                    'rarity' => $payload['rarity'],
-                    'description' => $payload['description'],
-                    'modifiers' => $payload['modifiers'],
-                    'weight' => $payload['weight'],
-                    'value' => $payload['value'],
-                ]
-            );
+            $items[$key] = Item::create([
+                'user_id' => $user->id,
+                ...$payload,
+            ]);
         }
 
         return $items;
     }
 
     /**
-     * @param array<string, Campaign> $campaigns
-     * @return array<string, Scenario>
+     * @param  array<string, Item>  $items
      */
-    private function seedScenarios(User $user, array $campaigns): array
+    private function seedScenario(User $user, Campaign $campaign, array $items): Scenario
     {
-        $scenarioIds = Scenario::query()
-            ->where('user_id', $user->id)
-            ->pluck('id');
-
-        if ($scenarioIds->isNotEmpty()) {
-            EntityLink::query()
-                ->where('source_type', EntityLink::TARGET_SCENARIO)
-                ->whereIn('source_id', $scenarioIds)
-                ->delete();
-
-            EntityLink::query()
-                ->where('target_type', EntityLink::TARGET_SCENARIO)
-                ->whereIn('target_id', $scenarioIds)
-                ->delete();
-        }
-
-        Scenario::query()
-            ->where('user_id', $user->id)
-            ->delete();
-
         $scenario = Scenario::create([
             'user_id' => $user->id,
-            'title' => 'Петля ледяного маяка',
-            'description' => 'Демонстрационный graph-сценарий: проверка, развилки, успех и провал, добыча, бой, обратные переходы и несколько путей к финалу.',
-            'campaign_id' => $campaigns['frost']->id ?? null,
+            'campaign_id' => $campaign->id,
+            'title' => 'Последний огонь ледяного маяка',
+            'description' => 'Герои должны пройти нижний ярус маяка, восстановить рунический двигатель и зажечь линзу до прихода ледяной бури.',
         ]);
 
-        $this->seedScenarioGraph($scenario, $this->demoShowcaseScenarioGraph());
+        $this->seedScenarioGraph($scenario, $this->lighthouseScenarioGraph($items));
 
-        return [
-            'demo_graph_showcase' => $scenario->fresh(),
-        ];
+        return $scenario->fresh();
     }
 
     /**
-     * @param array<string, mixed> $graph
+     * @param  array<string, mixed>  $graph
      */
     private function seedScenarioGraph(Scenario $scenario, array $graph): void
     {
-        $scenario->transitions()->delete();
-        $scenario->nodes()->delete();
-
         $nodesByKey = [];
 
         foreach (($graph['nodes'] ?? []) as $nodeIndex => $nodePayload) {
@@ -241,17 +228,10 @@ class GoBoxContentSeeder extends Seeder
         }
 
         foreach (($graph['transitions'] ?? []) as $transitionIndex => $transitionPayload) {
-            $fromNode = $nodesByKey[$transitionPayload['from']] ?? null;
-            $toNode = $nodesByKey[$transitionPayload['to']] ?? null;
-
-            if (!$fromNode || !$toNode) {
-                continue;
-            }
-
             ScenarioTransition::create([
                 'scenario_id' => $scenario->id,
-                'from_node_id' => $fromNode->id,
-                'to_node_id' => $toNode->id,
+                'from_node_id' => $nodesByKey[$transitionPayload['from']]->id,
+                'to_node_id' => $nodesByKey[$transitionPayload['to']]->id,
                 'type' => $transitionPayload['type'] ?? 'linear',
                 'label' => $transitionPayload['label'] ?? null,
                 'condition' => $transitionPayload['condition'] ?? [],
@@ -264,335 +244,378 @@ class GoBoxContentSeeder extends Seeder
     /**
      * @return array<string, array<int, array<string, mixed>>>
      */
-    private function demoShowcaseScenarioGraph(): array
+    /**
+     * @param  array<string, Item>  $items
+     */
+    private function lighthouseScenarioGraph(array $items): array
     {
         return [
             'nodes' => [
                 [
-                    'key' => 'briefing',
+                    'key' => 'arrival',
                     'type' => 'description',
-                    'title' => 'Брифинг у ледяного маяка',
-                    'content' => 'Северный дозор просит героев запустить маяк до полуночи. За стенами ревет шторм, а внизу уже видны огни культистов.',
-                    'position' => ['x' => 80, 'y' => 140, 'width' => 260, 'height' => 150],
-                    'config' => ['scene' => 'Ледяной маяк на краю разлома'],
+                    'title' => 'Маяк в белой мгле',
+                    'content' => 'Герои добираются до маяка за час до прихода великой бури. Ворота обледенели, а сигнальный огонь погас.',
+                    'position' => ['x' => 80, 'y' => 180, 'width' => 270, 'height' => 160],
+                    'config' => ['scene' => self::MAP_NAME],
                     'order_index' => 0,
                 ],
                 [
-                    'key' => 'keeper_dialog',
+                    'key' => 'keeper',
                     'type' => 'dialog',
-                    'title' => 'Разговор со смотрителем',
-                    'content' => 'Смотритель Ирма знает старый обходной ход, но требует пообещать, что герои спасут плененных дозорных.',
-                    'position' => ['x' => 460, 'y' => 90, 'width' => 280, 'height' => 160],
-                    'config' => ['speaker' => 'Смотритель Ирма'],
+                    'title' => 'Последняя смотрительница',
+                    'content' => 'Ирма объясняет: культ вырвал сердце двигателя, а без запуска нижнего яруса главная линза останется мертвой.',
+                    'position' => ['x' => 450, 'y' => 180, 'width' => 290, 'height' => 170],
+                    'config' => ['speaker' => 'Ирма Снежная'],
                     'order_index' => 1,
                 ],
                 [
-                    'key' => 'courtyard',
-                    'type' => 'location',
-                    'title' => 'Двор маяка',
-                    'content' => 'Во дворе занесенные снегом ворота, разбитый подъемник и три рунические плиты, которые питают линзу маяка.',
-                    'position' => ['x' => 860, 'y' => 120, 'width' => 280, 'height' => 170],
-                    'config' => ['map_hint' => 'Карта: двор и наружная площадка маяка'],
+                    'key' => 'cache',
+                    'type' => 'loot',
+                    'title' => 'Аварийный шкаф',
+                    'content' => 'Ирма открывает запас: зелье северного тепла и ключ от линзы маяка.',
+                    'position' => ['x' => 830, 'y' => 40, 'width' => 270, 'height' => 150],
+                    'config' => [
+                        'item_hint' => 'Зелье северного тепла и ключ от линзы маяка',
+                        'reward_item_ids' => [
+                            (string) $items['warm_potion']->id,
+                            (string) $items['lens_key']->id,
+                        ],
+                    ],
                     'order_index' => 2,
                 ],
                 [
-                    'key' => 'rune_check',
-                    'type' => 'check',
-                    'title' => 'Проверка рунических плит',
-                    'content' => 'Нужно удержать три руны одновременно. Помехи шторма делают проверку опасной: провал привлекает культистов.',
-                    'position' => ['x' => 1240, 'y' => 70, 'width' => 300, 'height' => 180],
-                    'config' => ['skill' => 'Магия или Выживание', 'dc' => 14],
+                    'key' => 'engine_hall',
+                    'type' => 'location',
+                    'title' => 'Зал рунического двигателя',
+                    'content' => 'Лед покрывает пол и стены. Через центр зала проходит расколотый ледяной канал, у дальней стены стоит двигатель.',
+                    'position' => ['x' => 830, 'y' => 300, 'width' => 300, 'height' => 180],
+                    'config' => ['map_hint' => self::MAP_NAME],
                     'order_index' => 3,
                 ],
                 [
-                    'key' => 'lens_hall',
-                    'type' => 'location',
-                    'title' => 'Зал линз',
-                    'content' => 'Верхний ярус маяка. Здесь можно направить луч, если герои успели стабилизировать руны.',
-                    'position' => ['x' => 1640, 'y' => 40, 'width' => 280, 'height' => 150],
-                    'config' => ['map_hint' => 'Карта: верхний ярус и линза маяка'],
+                    'key' => 'restore_runes',
+                    'type' => 'check',
+                    'title' => 'Восстановить руны',
+                    'content' => 'Нужно очистить три замерзшие печати и синхронно направить энергию к двигателю.',
+                    'position' => ['x' => 1230, 'y' => 260, 'width' => 300, 'height' => 180],
+                    'config' => ['skill' => 'Магия или Выживание', 'dc' => 14],
                     'order_index' => 4,
                 ],
                 [
-                    'key' => 'cult_ambush',
+                    'key' => 'cult_attack',
                     'type' => 'combat',
-                    'title' => 'Засада культистов',
-                    'content' => 'Культисты ледяного шторма пытаются сорвать запуск маяка. Бой можно выиграть или отступить к рунам.',
-                    'position' => ['x' => 1260, 'y' => 390, 'width' => 300, 'height' => 180],
-                    'config' => ['encounter' => '2 культиста, ледяной зверь, опасная зона шторма'],
+                    'title' => 'Хазар выходит из разлома',
+                    'content' => 'При провале печати лопаются. Хазар и ледяные прислужники прорываются в зал с сердцем бури.',
+                    'position' => ['x' => 1620, 'y' => 430, 'width' => 310, 'height' => 180],
+                    'config' => ['encounter' => 'Хазар Безликий и два ледяных прислужника'],
                     'order_index' => 5,
                 ],
                 [
-                    'key' => 'keeper_cache',
-                    'type' => 'loot',
-                    'title' => 'Тайник смотрителя',
-                    'content' => 'За старой печью лежат зелье тепла, ключ от линзы и сигнальный кристалл.',
-                    'position' => ['x' => 850, 'y' => 420, 'width' => 260, 'height' => 150],
-                    'config' => ['item_hint' => 'Зелье тепла, ключ от линзы, сигнальный кристалл'],
+                    'key' => 'engine_started',
+                    'type' => 'location',
+                    'title' => 'Двигатель пробуждается',
+                    'content' => 'После восстановления рун или победы над культистами герои возвращают сердце бури в стабилизирующую оправу.',
+                    'position' => ['x' => 1620, 'y' => 160, 'width' => 310, 'height' => 180],
+                    'config' => ['map_hint' => self::MAP_NAME],
                     'order_index' => 6,
                 ],
                 [
-                    'key' => 'retreat',
-                    'type' => 'description',
-                    'title' => 'Отступление к воротам',
-                    'content' => 'Герои могут перегруппироваться у ворот, потратить ресурсы и снова выбрать путь через двор или к смотрителю.',
-                    'position' => ['x' => 480, 'y' => 430, 'width' => 280, 'height' => 160],
-                    'config' => ['scene' => 'Короткая передышка и обратный переход'],
+                    'key' => 'align_lens',
+                    'type' => 'check',
+                    'title' => 'Направить последний луч',
+                    'content' => 'Ирма открывает линзу ключом. Герои должны удержать поток энергии и направить его сквозь бурю.',
+                    'position' => ['x' => 2030, 'y' => 230, 'width' => 300, 'height' => 180],
+                    'config' => ['skill' => 'Магия или Атлетика', 'dc' => 15],
                     'order_index' => 7,
                 ],
                 [
-                    'key' => 'finale',
+                    'key' => 'light_finale',
                     'type' => 'description',
-                    'title' => 'Маяк снова горит',
-                    'content' => 'Луч маяка разрывает шторм. Дозорные спасены, но культисты оставляют знак: это была только первая попытка.',
-                    'position' => ['x' => 2020, 'y' => 190, 'width' => 300, 'height' => 170],
-                    'config' => ['scene' => 'Финал сценария и крючок продолжения'],
+                    'title' => 'Луч над разломом',
+                    'content' => 'Маяк загорается. Буря расходится вокруг башни, а путь через ледяной разлом снова становится видимым.',
+                    'position' => ['x' => 2440, 'y' => 90, 'width' => 300, 'height' => 170],
+                    'config' => ['scene' => 'Успешный финал кампании'],
                     'order_index' => 8,
+                ],
+                [
+                    'key' => 'dark_finale',
+                    'type' => 'description',
+                    'title' => 'Огонь подо льдом',
+                    'content' => 'Линза трескается, но маяк дает короткую вспышку. Герои спасаются, зная, что буря вернется следующей ночью.',
+                    'position' => ['x' => 2440, 'y' => 390, 'width' => 300, 'height' => 170],
+                    'config' => ['scene' => 'Финал с осложнением'],
+                    'order_index' => 9,
                 ],
             ],
             'transitions' => [
-                ['from' => 'briefing', 'to' => 'keeper_dialog', 'type' => 'linear', 'label' => 'Получить вводную', 'condition' => [], 'order_index' => 0],
-                ['from' => 'keeper_dialog', 'to' => 'courtyard', 'type' => 'choice', 'label' => 'Осмотреть двор', 'condition' => [], 'order_index' => 0],
-                ['from' => 'keeper_dialog', 'to' => 'keeper_cache', 'type' => 'choice', 'label' => 'Попросить снаряжение', 'condition' => [], 'order_index' => 1],
-                ['from' => 'keeper_cache', 'to' => 'courtyard', 'type' => 'linear', 'label' => 'Вернуться во двор', 'condition' => [], 'order_index' => 0],
-                ['from' => 'courtyard', 'to' => 'rune_check', 'type' => 'linear', 'label' => 'Запустить руны', 'condition' => [], 'order_index' => 0],
-                ['from' => 'rune_check', 'to' => 'lens_hall', 'type' => 'success', 'label' => 'Руны стабилизированы', 'condition' => ['outcome' => 'success', 'dc' => 14], 'order_index' => 0],
-                ['from' => 'rune_check', 'to' => 'cult_ambush', 'type' => 'failure', 'label' => 'Шторм срывает ритуал', 'condition' => ['outcome' => 'failure', 'dc' => 14], 'order_index' => 1],
-                ['from' => 'lens_hall', 'to' => 'cult_ambush', 'type' => 'choice', 'label' => 'Спуститься к культистам', 'condition' => [], 'order_index' => 0],
-                ['from' => 'cult_ambush', 'to' => 'rune_check', 'type' => 'choice', 'label' => 'Отступить к рунам', 'condition' => [], 'order_index' => 0],
-                ['from' => 'cult_ambush', 'to' => 'finale', 'type' => 'linear', 'label' => 'Запустить линзу', 'condition' => [], 'order_index' => 1],
-                ['from' => 'cult_ambush', 'to' => 'retreat', 'type' => 'choice', 'label' => 'Отойти и перегруппироваться', 'condition' => [], 'order_index' => 2],
-                ['from' => 'retreat', 'to' => 'keeper_dialog', 'type' => 'choice', 'label' => 'Снова поговорить со смотрителем', 'condition' => [], 'order_index' => 0],
-                ['from' => 'finale', 'to' => 'keeper_dialog', 'type' => 'choice', 'label' => 'Спросить о последствиях', 'condition' => [], 'order_index' => 0],
-            ],
-        ];
-    }
-
-    /**
-     * @param array<string, Campaign> $campaigns
-     * @param array<string, Scenario> $scenarios
-     */
-    private function seedMaps(User $user, array $campaigns, array $scenarios): void
-    {
-        $dataset = [
-            [
-                'name' => 'Двор ледяного маяка',
-                'campaign_key' => 'frost',
-                'scenario_key' => 'demo_graph_showcase',
-                'width' => 30,
-                'height' => 20,
-                'cell_size' => 32,
-                'objects' => $this->buildMapObjects(30, 20, 'frost'),
-            ],
-            [
-                'name' => 'Зал линз',
-                'campaign_key' => 'frost',
-                'scenario_key' => 'demo_graph_showcase',
-                'width' => 24,
-                'height' => 18,
-                'cell_size' => 32,
-                'objects' => $this->buildMapObjects(24, 18, 'dungeon'),
-            ],
-            [
-                'name' => 'Оазис Караму',
-                'campaign_key' => 'dunes',
-                'scenario_key' => 'demo_graph_showcase',
-                'width' => 28,
-                'height' => 20,
-                'cell_size' => 32,
-                'objects' => $this->buildMapObjects(28, 20, 'sand'),
-            ],
-            [
-                'name' => 'Разлом шахты',
-                'campaign_key' => 'depths',
-                'scenario_key' => 'demo_graph_showcase',
-                'width' => 26,
-                'height' => 22,
-                'cell_size' => 32,
-                'objects' => $this->buildMapObjects(26, 22, 'abyss'),
-            ],
-        ];
-
-        foreach ($dataset as $payload) {
-            $map = Map::updateOrCreate(
+                ['from' => 'arrival', 'to' => 'keeper', 'type' => 'linear', 'label' => 'Войти в маяк', 'order_index' => 0],
+                ['from' => 'keeper', 'to' => 'engine_hall', 'type' => 'choice', 'label' => 'Сразу к двигателю', 'order_index' => 1],
+                ['from' => 'keeper', 'to' => 'cache', 'type' => 'choice', 'label' => 'Взять аварийный запас', 'order_index' => 2],
+                ['from' => 'cache', 'to' => 'engine_hall', 'type' => 'linear', 'label' => 'Спуститься в нижний ярус', 'order_index' => 3],
+                ['from' => 'engine_hall', 'to' => 'restore_runes', 'type' => 'linear', 'label' => 'Осмотреть печати', 'order_index' => 4],
                 [
-                    'user_id' => $user->id,
-                    'name' => $payload['name'],
+                    'from' => 'restore_runes',
+                    'to' => 'engine_started',
+                    'type' => 'success',
+                    'label' => 'Руны восстановлены',
+                    'condition' => ['outcome' => 'success', 'dc' => 14],
+                    'order_index' => 5,
                 ],
                 [
-                    'campaign_id' => $campaigns[$payload['campaign_key']]->id ?? null,
-                    'width' => $payload['width'],
-                    'height' => $payload['height'],
-                    'cell_size' => $payload['cell_size'],
-                    'data' => ['objects' => $payload['objects']],
-                ]
-            );
-
-            $this->linkScenarioMaterial(
-                $scenarios[$payload['scenario_key']] ?? null,
-                EntityLink::TARGET_MAP,
-                (int) $map->id
-            );
-        }
+                    'from' => 'restore_runes',
+                    'to' => 'cult_attack',
+                    'type' => 'failure',
+                    'label' => 'Печати раскалываются',
+                    'condition' => ['outcome' => 'failure', 'dc' => 14],
+                    'order_index' => 6,
+                ],
+                ['from' => 'cult_attack', 'to' => 'engine_started', 'type' => 'linear', 'label' => 'Вернуть сердце бури', 'order_index' => 7],
+                ['from' => 'engine_started', 'to' => 'align_lens', 'type' => 'linear', 'label' => 'Поднять энергию к линзе', 'order_index' => 8],
+                [
+                    'from' => 'align_lens',
+                    'to' => 'light_finale',
+                    'type' => 'success',
+                    'label' => 'Удержать луч',
+                    'condition' => ['outcome' => 'success', 'dc' => 15],
+                    'order_index' => 9,
+                ],
+                [
+                    'from' => 'align_lens',
+                    'to' => 'dark_finale',
+                    'type' => 'failure',
+                    'label' => 'Линза не выдерживает',
+                    'condition' => ['outcome' => 'failure', 'dc' => 15],
+                    'order_index' => 10,
+                ],
+            ],
+        ];
     }
 
     /**
-     * @param array<string, Campaign> $campaigns
-     * @param array<string, Scenario> $scenarios
-     * @param array<string, Item> $items
+     * @return array<string, Character>
      */
-    private function seedCharacters(User $user, array $campaigns, array $scenarios, array $items): void
+    private function seedCharacters(User $user, Campaign $campaign, Scenario $scenario): array
     {
         $dataset = [
-            [
+            'torstein' => [
                 'name' => 'Торстейн Ледоруб',
                 'role' => 'Герой',
                 'race' => 'Дварф',
-                'description' => 'Воин дозора, который знает старые тропы к маяку и не доверяет смотрителю.',
+                'description' => 'Воин северного дозора, который провел отряд через метель к маяку.',
                 'stats' => ['АТК' => 14, 'ЗАЩ' => 15, 'СИЛ' => 14, 'ЛОВ' => 9, 'ВЫН' => 15, 'ИНТ' => 10, 'МДР' => 11, 'ХАР' => 10, 'УДЧ' => 8],
-                'inventory_keys' => ['ice_totem', 'mercenary_kit'],
-                'campaign_key' => 'frost',
-                'scenario_key' => 'demo_graph_showcase',
             ],
-            [
+            'irma' => [
                 'name' => 'Ирма Снежная',
                 'role' => 'NPC',
                 'race' => 'Человек',
-                'description' => 'Смотритель маяка. Скрывает вину за прошлый провал ритуала.',
+                'description' => 'Последняя смотрительница маяка и хранительница ключа от главной линзы.',
                 'stats' => ['АТК' => 7, 'ЗАЩ' => 9, 'СИЛ' => 8, 'ЛОВ' => 10, 'ВЫН' => 11, 'ИНТ' => 15, 'МДР' => 14, 'ХАР' => 13, 'УДЧ' => 11],
-                'inventory_keys' => ['lens_key', 'warm_potion'],
-                'campaign_key' => 'frost',
-                'scenario_key' => 'demo_graph_showcase',
             ],
-            [
+            'hazar' => [
                 'name' => 'Хазар Безликий',
                 'role' => 'Монстр',
-                'race' => 'Теневая сущность',
-                'description' => 'Культист, который питается страхом дозорных и открывает путь ледяному зверю.',
+                'race' => 'Ледяной культист',
+                'description' => 'Предводитель культистов, пытающийся навсегда погасить маяк над разломом.',
                 'stats' => ['АТК' => 16, 'ЗАЩ' => 13, 'СИЛ' => 15, 'ЛОВ' => 12, 'ВЫН' => 14, 'ИНТ' => 9, 'МДР' => 8, 'ХАР' => 6, 'УДЧ' => 10],
-                'inventory_keys' => [],
-                'campaign_key' => 'frost',
-                'scenario_key' => 'demo_graph_showcase',
-            ],
-            [
-                'name' => 'Сайра Песчаный Шаг',
-                'role' => 'Герой',
-                'race' => 'Человек',
-                'description' => 'Следопыт караванов. В демо используется как пример персонажа из другой кампании.',
-                'stats' => ['АТК' => 13, 'ЗАЩ' => 11, 'СИЛ' => 10, 'ЛОВ' => 14, 'ВЫН' => 12, 'ИНТ' => 11, 'МДР' => 12, 'ХАР' => 10, 'УДЧ' => 9],
-                'inventory_keys' => ['sun_blade', 'mercenary_kit'],
-                'campaign_key' => 'dunes',
-                'scenario_key' => 'demo_graph_showcase',
             ],
         ];
+        $characters = [];
 
-        foreach ($dataset as $payload) {
-            $inventory = [];
-
-            foreach ($payload['inventory_keys'] as $itemKey) {
-                if (isset($items[$itemKey])) {
-                    $inventory[] = (int) $items[$itemKey]->id;
-                }
-            }
-
-            $character = Character::updateOrCreate(
-                [
-                    'user_id' => $user->id,
-                    'name' => $payload['name'],
-                ],
-                [
-                    'role' => $payload['role'],
-                    'race' => $payload['race'],
-                    'description' => $payload['description'],
-                    'stats' => $payload['stats'],
-                    'inventory' => $inventory,
-                    'campaign_id' => $campaigns[$payload['campaign_key']]->id ?? null,
-                ]
-            );
-
-            $scenario = $scenarios[$payload['scenario_key']] ?? null;
+        foreach ($dataset as $key => $payload) {
+            $characters[$key] = Character::create([
+                'user_id' => $user->id,
+                'name' => $payload['name'],
+                'role' => $payload['role'],
+                'race' => $payload['race'],
+                'description' => $payload['description'],
+                'stats' => $payload['stats'],
+                'inventory' => [],
+            ]);
 
             $this->linkScenarioMaterial(
                 $scenario,
                 EntityLink::TARGET_CHARACTER,
-                (int) $character->id
+                (int) $characters[$key]->id
             );
-
-            foreach ($inventory as $itemId) {
-                $this->linkScenarioMaterial($scenario, EntityLink::TARGET_ITEM, (int) $itemId);
-            }
-        }
-    }
-
-    private function linkScenarioMaterial(?Scenario $scenario, string $targetType, int $targetId): void
-    {
-        if (!$scenario || $targetId <= 0) {
-            return;
+            $this->linkCampaignMaterial(
+                $campaign,
+                EntityLink::TARGET_CHARACTER,
+                (int) $characters[$key]->id
+            );
         }
 
-        EntityLink::query()->updateOrCreate(
-            [
-                'source_type' => EntityLink::TARGET_SCENARIO,
-                'source_id' => $scenario->id,
-                'target_type' => $targetType,
-                'target_id' => $targetId,
-                'relation_type' => EntityLink::RELATION_USES,
-            ],
-            [
-                'label' => null,
-                'metadata' => null,
-            ]
-        );
+        return $characters;
     }
 
     /**
-     * @return array<int, array<string, int|string>>
+     * @param  array<string, Character>  $characters
+     * @param  array<string, Item>  $items
      */
-    private function buildMapObjects(int $width, int $height, string $theme): array
+    private function seedMap(
+        User $user,
+        Campaign $campaign,
+        Scenario $scenario,
+        array $characters,
+        array $items
+    ): Map {
+        $width = 24;
+        $height = 16;
+        $tileObjects = $this->buildIceMapTiles($width, $height);
+        $tokenObjects = [
+            $this->cardToken('token-torstein', 5, 10, EntityLink::TARGET_CHARACTER, $characters['torstein'], '#FFC300'),
+            $this->cardToken('token-irma', 5, 4, EntityLink::TARGET_CHARACTER, $characters['irma'], '#FFC300'),
+            $this->cardToken('token-hazar', 18, 8, EntityLink::TARGET_CHARACTER, $characters['hazar'], '#E63946'),
+            $this->cardToken('token-storm-core', 20, 8, EntityLink::TARGET_ITEM, $items['storm_core'], '#8338EC'),
+        ];
+        $layers = [
+            [
+                'id' => 'background',
+                'type' => 'background',
+                'name' => 'ФОН',
+                'visible' => true,
+                'locked' => false,
+                'opacity' => 1,
+                'order' => 0,
+                'objects' => [],
+            ],
+            [
+                'id' => 'tiles',
+                'type' => 'tiles',
+                'name' => 'ЛЕДЯНОЙ КАМЕНЬ',
+                'visible' => true,
+                'locked' => false,
+                'opacity' => 1,
+                'order' => 1,
+                'objects' => $tileObjects,
+            ],
+            [
+                'id' => 'tokens',
+                'type' => 'tokens',
+                'name' => 'УЧАСТНИКИ СЦЕНЫ',
+                'visible' => true,
+                'locked' => false,
+                'opacity' => 1,
+                'order' => 2,
+                'objects' => $tokenObjects,
+            ],
+        ];
+
+        $map = Map::create([
+            'user_id' => $user->id,
+            'name' => self::MAP_NAME,
+            'width' => $width,
+            'height' => $height,
+            'cell_size' => 32,
+            'data' => [
+                'backgroundAssetId' => null,
+                'layers' => $layers,
+                'objects' => collect([$tileObjects, $tokenObjects])
+                    ->flatten(1)
+                    ->values()
+                    ->all(),
+            ],
+        ]);
+
+        $this->linkScenarioMaterial($scenario, EntityLink::TARGET_MAP, (int) $map->id);
+
+        return $map;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildIceMapTiles(int $width, int $height): array
     {
         $objects = [];
 
-        for ($x = 0; $x < $width; $x++) {
-            $objects[] = $this->obj("wall-top-{$x}", $x, 0, 'wall', 'Стена', '#8A8F98');
-            $objects[] = $this->obj("wall-bottom-{$x}", $x, $height - 1, 'wall', 'Стена', '#8A8F98');
-        }
+        for ($y = 0; $y < $height; $y++) {
+            for ($x = 0; $x < $width; $x++) {
+                $isBorder = $x === 0 || $y === 0 || $x === $width - 1 || $y === $height - 1;
+                $isIceChannel = ! $isBorder
+                    && (
+                        ($x >= 10 && $x <= 13)
+                        || ($y === 8 && $x >= 7 && $x <= 19)
+                    );
+                $assetId = $isBorder
+                    ? self::TILE_FROZEN_WALL
+                    : ($isIceChannel ? self::TILE_ICE : self::TILE_FROZEN_FLOOR);
+                $type = $isBorder ? 'wall' : 'floor';
 
-        for ($y = 1; $y < $height - 1; $y++) {
-            $objects[] = $this->obj("wall-left-{$y}", 0, $y, 'wall', 'Стена', '#8A8F98');
-            $objects[] = $this->obj("wall-right-{$y}", $width - 1, $y, 'wall', 'Стена', '#8A8F98');
-        }
-
-        for ($x = 2; $x < $width - 2; $x += 2) {
-            $y = (int) floor($height / 2);
-
-            if ($theme === 'sand') {
-                $objects[] = $this->obj("sand-{$x}", $x, $y, 'floor', 'Песок', '#9C7A52');
-            } elseif ($theme === 'dungeon') {
-                $objects[] = $this->obj("dungeon-{$x}", $x, $y, 'loot', 'Руны', '#8338EC');
-            } elseif ($theme === 'abyss') {
-                $objects[] = $this->obj("abyss-{$x}", $x, $y, 'lava', 'Разлом', '#E63946');
-            } else {
-                $objects[] = $this->obj("frost-{$x}", $x, $y, 'water', 'Лед', '#7CB7E5');
+                $objects[] = [
+                    'id' => "tile-{$x}-{$y}",
+                    'x' => $x,
+                    'y' => $y,
+                    'width' => 1,
+                    'height' => 1,
+                    'rotation' => 0,
+                    'opacity' => 1,
+                    'type' => $type,
+                    'label' => $isBorder ? 'Каменная стена во льду' : ($isIceChannel ? 'Лёд' : 'Каменный пол во льду'),
+                    'color' => $isBorder ? '#8ba7b8' : ($isIceChannel ? '#9ed2ed' : '#829cad'),
+                    'sourceType' => EntityLink::TARGET_ASSET,
+                    'sourceId' => $assetId,
+                    'assetId' => $assetId,
+                    'layerId' => 'tiles',
+                ];
             }
         }
-
-        $objects[] = $this->obj('npc-center', (int) floor($width / 2), (int) floor($height / 2) - 2, 'npc', 'NPC', '#FFC300');
 
         return $objects;
     }
 
     /**
-     * @return array<string, int|string>
+     * @return array<string, mixed>
      */
-    private function obj(string $id, int $x, int $y, string $type, string $label, string $color): array
-    {
+    private function cardToken(
+        string $id,
+        int $x,
+        int $y,
+        string $sourceType,
+        Character|Item $material,
+        string $color
+    ): array {
         return [
             'id' => $id,
             'x' => $x,
             'y' => $y,
-            'type' => $type,
-            'label' => $label,
+            'width' => 1,
+            'height' => 1,
+            'rotation' => 0,
+            'opacity' => 1,
+            'type' => $sourceType,
+            'label' => $material->name,
             'color' => $color,
+            'sourceType' => $sourceType,
+            'sourceId' => (string) $material->id,
+            'assetId' => null,
+            'layerId' => 'tokens',
         ];
+    }
+
+    private function linkScenarioMaterial(Scenario $scenario, string $targetType, int $targetId): void
+    {
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenario->id,
+            'target_type' => $targetType,
+            'target_id' => $targetId,
+            'relation_type' => EntityLink::RELATION_USES,
+            'label' => null,
+            'metadata' => null,
+        ]);
+    }
+
+    private function linkCampaignMaterial(Campaign $campaign, string $targetType, int $targetId): void
+    {
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_CAMPAIGN,
+            'source_id' => $campaign->id,
+            'target_type' => $targetType,
+            'target_id' => $targetId,
+            'relation_type' => EntityLink::RELATION_USES,
+            'label' => null,
+            'metadata' => null,
+        ]);
     }
 }

@@ -46,4 +46,8 @@ chmod -R 777 storage bootstrap/cache
 
 php artisan storage:link --force >/dev/null 2>&1 || true
 
-php artisan serve --host=0.0.0.0 --port=8000
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
+exec php artisan serve --host=0.0.0.0 --port=8000

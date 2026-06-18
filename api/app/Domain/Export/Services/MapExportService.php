@@ -9,6 +9,9 @@ use App\Domain\Export\Actions\RenderMapExportHtmlAction;
 use App\Domain\Export\DTO\ExportMapPdfData;
 use App\Domain\Export\DTO\ExportedPdfData;
 use App\Models\Asset;
+use App\Models\Character;
+use App\Models\EntityLink;
+use App\Models\Item;
 use App\Models\Map as StoryMap;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -58,7 +61,8 @@ class MapExportService
     {
         $data = is_array($map->data) ? $map->data : [];
         $layers = $this->normalizedLayers($data);
-        $assetIds = $this->collectVisibleAssetIds($layers, $data);
+        $sourceContext = $this->resolveSourceContext($userId, $layers);
+        $assetIds = $this->collectVisibleAssetIds($layers, $data, $sourceContext);
         $assetsById = $this->fetchOwnedAssetsById($userId, $assetIds);
         [$pageWidthMm, $pageHeightMm] = $this->pageDimensions($pageSize, $orientation);
 
@@ -75,7 +79,7 @@ class MapExportService
                 'pixelHeight' => (int) $map->height * (int) $map->cell_size,
             ],
             'background' => $this->backgroundExportData($layers, $data, $assetsById),
-            'layers' => $this->visibleObjectLayers($layers, $map, $assetsById),
+            'layers' => $this->visibleObjectLayers($layers, $map, $assetsById, $sourceContext),
         ];
     }
 
@@ -144,9 +148,10 @@ class MapExportService
 
     /**
      * @param array<int, array<string, mixed>> $layers
+     * @param array<string, array<string, mixed>> $sourceContext
      * @return array<int, string>
      */
-    private function collectVisibleAssetIds(array $layers, array $data): array
+    private function collectVisibleAssetIds(array $layers, array $data, array $sourceContext): array
     {
         $assetIds = [];
 
@@ -160,8 +165,11 @@ class MapExportService
             }
 
             foreach ($layer['objects'] as $object) {
-                if (is_array($object) && !empty($object['assetId'])) {
-                    $assetIds[] = (string) $object['assetId'];
+                if (is_array($object)) {
+                    $assetId = $this->resolvedObjectAssetId($object, $sourceContext);
+                    if ($assetId !== '') {
+                        $assetIds[] = $assetId;
+                    }
                 }
             }
         }
@@ -231,9 +239,10 @@ class MapExportService
     /**
      * @param array<int, array<string, mixed>> $layers
      * @param array<int, Asset> $assetsById
+     * @param array<string, array<string, mixed>> $sourceContext
      * @return array<int, array<string, mixed>>
      */
-    private function visibleObjectLayers(array $layers, StoryMap $map, array $assetsById): array
+    private function visibleObjectLayers(array $layers, StoryMap $map, array $assetsById, array $sourceContext): array
     {
         return collect($layers)
             ->filter(fn (array $layer): bool => $layer['visible'] && $layer['type'] !== 'background')
@@ -241,7 +250,7 @@ class MapExportService
                 'id' => $layer['id'],
                 'type' => $layer['type'],
                 'opacity' => $layer['opacity'],
-                'objects' => $this->objectExportData($layer['objects'], $map, $assetsById),
+                'objects' => $this->objectExportData($layer['objects'], $map, $assetsById, $sourceContext),
             ])
             ->values()
             ->all();
@@ -250,13 +259,14 @@ class MapExportService
     /**
      * @param array<int, mixed> $objects
      * @param array<int, Asset> $assetsById
+     * @param array<string, array<string, mixed>> $sourceContext
      * @return array<int, array<string, mixed>>
      */
-    private function objectExportData(array $objects, StoryMap $map, array $assetsById): array
+    private function objectExportData(array $objects, StoryMap $map, array $assetsById, array $sourceContext): array
     {
         return collect($objects)
             ->filter(fn (mixed $object): bool => is_array($object))
-            ->map(fn (array $object): array => $this->normalizedObject($object, $map, $assetsById))
+            ->map(fn (array $object): array => $this->normalizedObject($object, $map, $assetsById, $sourceContext))
             ->filter()
             ->values()
             ->all();
@@ -264,9 +274,10 @@ class MapExportService
 
     /**
      * @param array<int, Asset> $assetsById
+     * @param array<string, array<string, mixed>> $sourceContext
      * @return array<string, mixed>|null
      */
-    private function normalizedObject(array $object, StoryMap $map, array $assetsById): ?array
+    private function normalizedObject(array $object, StoryMap $map, array $assetsById, array $sourceContext): ?array
     {
         $x = (int) ($object['x'] ?? -1);
         $y = (int) ($object['y'] ?? -1);
@@ -279,14 +290,18 @@ class MapExportService
 
         $width = min($width, (int) $map->width - $x);
         $height = min($height, (int) $map->height - $y);
-        $assetId = (string) ($object['assetId'] ?? '');
+        $display = $this->resolvedObjectDisplay($object, $sourceContext);
 
         return [
             'id' => (string) ($object['id'] ?? ''),
             'type' => (string) ($object['type'] ?? 'tile'),
-            'label' => (string) ($object['label'] ?? ''),
-            'color' => $this->safeColor((string) ($object['color'] ?? '#9AA0A6')),
-            'assetUrl' => $this->resolveAssetUrl($assetId, $assetsById),
+            'label' => $display['label'],
+            'color' => $this->safeColor($display['color']),
+            'assetUrl' => $this->resolveAssetUrl($display['assetId'], $assetsById),
+            'initials' => $display['initials'],
+            'detached' => $display['detached'],
+            'sourceType' => $display['sourceType'],
+            'sourceId' => $display['sourceId'],
             'x' => $x * (int) $map->cell_size + 1,
             'y' => $y * (int) $map->cell_size + 1,
             'width' => $width * (int) $map->cell_size - 2,
@@ -294,6 +309,156 @@ class MapExportService
             'rotation' => (float) ($object['rotation'] ?? 0),
             'opacity' => max(0, min(1, (float) ($object['opacity'] ?? 1))),
         ];
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $layers
+     * @return array<string, array{label: string, assetId: string, initials: string}>
+     */
+    private function resolveSourceContext(int $userId, array $layers): array
+    {
+        $characterIds = [];
+        $itemIds = [];
+
+        foreach ($layers as $layer) {
+            if (!$layer['visible'] || $layer['type'] === 'background') {
+                continue;
+            }
+
+            foreach ($layer['objects'] as $object) {
+                if (!is_array($object)) {
+                    continue;
+                }
+
+                $sourceType = (string) ($object['sourceType'] ?? $object['source_type'] ?? '');
+                $sourceId = (string) ($object['sourceId'] ?? $object['source_id'] ?? '');
+                if (!ctype_digit($sourceId)) {
+                    continue;
+                }
+
+                if ($sourceType === EntityLink::TARGET_CHARACTER) {
+                    $characterIds[] = (int) $sourceId;
+                } elseif ($sourceType === EntityLink::TARGET_ITEM) {
+                    $itemIds[] = (int) $sourceId;
+                }
+            }
+        }
+
+        $characterIds = array_values(array_unique($characterIds));
+        $itemIds = array_values(array_unique($itemIds));
+        if ($characterIds === [] && $itemIds === []) {
+            return [];
+        }
+
+        $characters = $characterIds === []
+            ? collect()
+            : Character::query()->where('user_id', $userId)->whereIn('id', $characterIds)->get()->keyBy('id');
+        $items = $itemIds === []
+            ? collect()
+            : Item::query()->where('user_id', $userId)->whereIn('id', $itemIds)->get()->keyBy('id');
+        $links = EntityLink::query()
+            ->where('target_type', EntityLink::TARGET_ASSET)
+            ->where('relation_type', EntityLink::RELATION_USES)
+            ->where(function ($query) use ($characterIds, $itemIds): void {
+                if ($characterIds !== []) {
+                    $query->orWhere(function ($characterQuery) use ($characterIds): void {
+                        $characterQuery
+                            ->where('source_type', EntityLink::TARGET_CHARACTER)
+                            ->whereIn('source_id', $characterIds);
+                    });
+                }
+                if ($itemIds !== []) {
+                    $query->orWhere(function ($itemQuery) use ($itemIds): void {
+                        $itemQuery
+                            ->where('source_type', EntityLink::TARGET_ITEM)
+                            ->whereIn('source_id', $itemIds);
+                    });
+                }
+            })
+            ->orderBy('id')
+            ->get();
+
+        $assetRoles = [];
+        foreach ($links as $link) {
+            $role = (string) ($link->metadata['role'] ?? '');
+            $assetRoles[$link->source_type . ':' . $link->source_id][$role] ??= (string) $link->target_id;
+        }
+
+        $context = [];
+        foreach ($characters as $character) {
+            $key = EntityLink::TARGET_CHARACTER . ':' . $character->id;
+            $context[$key] = [
+                'label' => (string) $character->name,
+                'assetId' => $assetRoles[$key]['token'] ?? $assetRoles[$key]['portrait'] ?? '',
+                'initials' => $this->initials((string) $character->name),
+            ];
+        }
+        foreach ($items as $item) {
+            $key = EntityLink::TARGET_ITEM . ':' . $item->id;
+            $context[$key] = [
+                'label' => (string) $item->name,
+                'assetId' => $assetRoles[$key]['item_image'] ?? '',
+                'initials' => $this->initials((string) $item->name),
+            ];
+        }
+
+        return $context;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $sourceContext
+     */
+    private function resolvedObjectAssetId(array $object, array $sourceContext): string
+    {
+        $sourceType = (string) ($object['sourceType'] ?? $object['source_type'] ?? '');
+        $sourceId = (string) ($object['sourceId'] ?? $object['source_id'] ?? '');
+        $sourceKey = $sourceType . ':' . $sourceId;
+
+        if (isset($sourceContext[$sourceKey])) {
+            return (string) ($sourceContext[$sourceKey]['assetId'] ?? '');
+        }
+
+        if ($sourceType === EntityLink::TARGET_ASSET && $sourceId !== '') {
+            return $sourceId;
+        }
+
+        return (string) ($object['assetId'] ?? $object['asset_id'] ?? '');
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $sourceContext
+     * @return array{label: string, color: string, assetId: string, initials: string, detached: bool, sourceType: string, sourceId: string}
+     */
+    private function resolvedObjectDisplay(array $object, array $sourceContext): array
+    {
+        $sourceType = (string) ($object['sourceType'] ?? $object['source_type'] ?? '');
+        $sourceId = (string) ($object['sourceId'] ?? $object['source_id'] ?? '');
+        $sourceKey = $sourceType . ':' . $sourceId;
+        $current = $sourceContext[$sourceKey] ?? null;
+        $label = $current['label'] ?? (string) ($object['label'] ?? '');
+        $isCardSource = in_array($sourceType, [EntityLink::TARGET_CHARACTER, EntityLink::TARGET_ITEM], true);
+
+        return [
+            'label' => (string) $label,
+            'color' => (string) ($object['color'] ?? '#9AA0A6'),
+            'assetId' => $this->resolvedObjectAssetId($object, $sourceContext),
+            'initials' => (string) ($current['initials'] ?? ($isCardSource ? $this->initials((string) $label) : '')),
+            'detached' => $isCardSource && $sourceId !== '' && $current === null,
+            'sourceType' => $sourceType,
+            'sourceId' => $sourceId,
+        ];
+    }
+
+    private function initials(string $label): string
+    {
+        $parts = preg_split('/\s+/u', trim($label), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $initials = '';
+
+        foreach (array_slice($parts, 0, 2) as $part) {
+            $initials .= mb_strtoupper(mb_substr($part, 0, 1));
+        }
+
+        return $initials !== '' ? $initials : '?';
     }
 
     private function safeColor(string $color): string

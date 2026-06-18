@@ -6,6 +6,7 @@ use App\Domain\Core\DTO\TagAssignmentData;
 use App\Domain\Core\DTO\TagStoreData;
 use App\Domain\Core\DTO\TagUpdateData;
 use App\Models\Asset;
+use App\Models\Campaign;
 use App\Models\Character;
 use App\Models\Faction;
 use App\Models\Item;
@@ -24,6 +25,7 @@ use Illuminate\Validation\ValidationException;
 class TagService
 {
     private const TARGET_TYPES = [
+        'campaign' => Campaign::class,
         'scenario' => Scenario::class,
         'map' => Map::class,
         'character' => Character::class,

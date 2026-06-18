@@ -209,6 +209,7 @@ export function useAppDataLoading({ dismissedBroadcastIds }: UseAppDataLoadingOp
     setTags(tagsResponse);
 
     const materialTargets = [
+      ...campaignsResponse.map((campaign) => ({ type: 'campaign' as const, id: String(campaign.id) })),
       ...scenariosResponse.map((scenario) => ({ type: 'scenario' as const, id: String(scenario.id) })),
       ...mapsResponse.map((map) => ({ type: 'map' as const, id: String(map.id) })),
       ...charactersResponse.map((character) => ({ type: 'character' as const, id: String(character.id) })),

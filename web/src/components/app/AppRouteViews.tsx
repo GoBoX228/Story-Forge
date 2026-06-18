@@ -151,9 +151,27 @@ export const CampaignsRoute: React.FC<NavigationRouteProps> = ({ navigation }) =
   return (
     <CampaignsView
       campaigns={data.campaigns}
-      onOpenCampaignEditor={actions.openCampaignEditor}
+      scenarios={data.scenarios}
+      maps={data.maps}
+      characters={data.characters}
+      items={data.items}
+      tags={data.tags}
+      tagAssignments={data.tagAssignments}
+      entityLinks={data.entityLinks}
+      initialCampaignId={navigation.campaignEditorTargetId}
+      onCreateCampaign={actions.createCampaign}
+      onUpdateCampaign={actions.updateCampaign}
       onDeleteCampaign={actions.deleteCampaign}
-      onOpenView={navigation.setActiveView}
+      onUpdateScenarioCampaign={actions.updateScenarioCampaign}
+      onReplaceTargetTags={actions.replaceTargetTags}
+      onUpdateTag={actions.updateTag}
+      onDeleteTag={actions.deleteTag}
+      onCreateMaterialLink={actions.createMaterialLink}
+      onDeleteMaterialLink={actions.deleteMaterialLink}
+      onOpenScenario={(id) => navigation.openScenario(id)}
+      onOpenMap={(id) => navigation.openMap(id)}
+      onOpenCharacter={(id) => navigation.openCharacter(id)}
+      onOpenItem={(id) => navigation.openItem(id)}
     />
   );
 };

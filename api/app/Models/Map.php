@@ -9,7 +9,6 @@ class Map extends Model
 {
     protected $fillable = [
         'user_id',
-        'campaign_id',
         'name',
         'width',
         'height',
@@ -26,8 +25,4 @@ class Map extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function campaign(): BelongsTo
-    {
-        return $this->belongsTo(Campaign::class);
-    }
 }

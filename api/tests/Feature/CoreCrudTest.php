@@ -194,15 +194,16 @@ class CoreCrudTest extends TestCase
             'relation_type' => EntityLink::RELATION_USES,
         ])->assertStatus(404);
 
-        $this->postJson('/api/characters', [
-            'name' => 'My Character',
-            'campaign_id' => $foreignCampaign->id,
-        ])->assertStatus(404);
-
-        $this->postJson('/api/campaigns', [
+        $ownCampaign = Campaign::create([
+            'user_id' => $owner->id,
             'title' => 'My Campaign',
-            'scenario_ids' => [$foreignScenario->id],
-        ])->assertStatus(422)->assertJsonValidationErrors(['scenario_ids']);
+        ]);
+
+        $this->postJson("/api/entity-links/campaign/{$ownCampaign->id}", [
+            'target_type' => EntityLink::TARGET_SCENARIO,
+            'target_id' => $foreignScenario->id,
+            'relation_type' => EntityLink::RELATION_USES,
+        ])->assertStatus(404);
     }
 
     public function test_list_filters_search_and_sorting_behavior_are_preserved(): void
@@ -347,9 +348,6 @@ class CoreCrudTest extends TestCase
 
         $campaignResponse = $this->postJson('/api/campaigns', [
             'title' => 'Campaign',
-            'scenario_ids' => [$scenario->id],
-            'map_ids' => [$map->id],
-            'character_ids' => [$character->id],
         ])->assertStatus(201);
 
         $campaignKeys = array_keys($campaignResponse->json());
@@ -357,13 +355,10 @@ class CoreCrudTest extends TestCase
             'id',
             'title',
             'description',
-            'tags',
-            'resources',
-            'progress',
-            'last_played',
             'scenario_ids',
             'map_ids',
             'character_ids',
+            'item_ids',
             'created_at',
             'updated_at',
         ], $campaignKeys);

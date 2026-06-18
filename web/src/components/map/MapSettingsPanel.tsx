@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Download, Link2, Maximize, Package, Tags } from 'lucide-react';
+import { Download, Link2, Maximize, Package, Tags, Users } from 'lucide-react';
 import {
   Asset,
   AssetCollection,
@@ -10,6 +10,7 @@ import {
   Faction,
   Item,
   MapData,
+  MapMaterialContext,
   PublishedContent,
   PublicationTargetType,
   PublicationUpdatePayload,
@@ -39,6 +40,7 @@ interface MapSettingsPanelProps {
   events: WorldEvent[];
   links: EntityLink[];
   scenarioMapLinks: EntityLink[];
+  materialContext: MapMaterialContext;
   tags: Tag[];
   selectedTags: Tag[];
   publication?: PublishedContent;
@@ -57,6 +59,7 @@ interface MapSettingsPanelProps {
   onDeleteTag: (id: string) => Promise<void>;
   onCreateMaterialLink: (sourceType: EntityLinkTargetType, sourceId: string, payload: EntityLinkCreatePayload) => Promise<EntityLink>;
   onDeleteMaterialLink: (id: string) => Promise<void>;
+  onOpenMaterialLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
   onUpsertPublication: (type: PublicationTargetType, id: string, payload: PublicationUpsertPayload) => Promise<PublishedContent>;
   onUpdatePublication: (id: string, payload: PublicationUpdatePayload) => Promise<PublishedContent>;
   onDeletePublication: (id: string) => Promise<void>;
@@ -101,6 +104,7 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
   assets,
   links,
   scenarioMapLinks,
+  materialContext,
   tags,
   selectedTags,
   publication,
@@ -119,17 +123,18 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
   onDeleteTag,
   onCreateMaterialLink,
   onDeleteMaterialLink,
+  onOpenMaterialLink,
   onUpsertPublication,
   onUpdatePublication,
   onDeletePublication
 }) => {
-  const fields = useMemo<MaterialFieldConfig[]>(() => [
-    {
-      id: 'scenarios',
-      label: 'Сценарии',
-      targetType: 'scenario',
-      options: toOptions(scenarios, (scenario) => scenario.title)
-    },
+  const scenarioField = useMemo<MaterialFieldConfig>(() => ({
+    id: 'scenarios',
+    label: 'Сценарии',
+    targetType: 'scenario',
+    options: toOptions(scenarios, (scenario) => scenario.title)
+  }), [scenarios]);
+  const localMaterialFields = useMemo<MaterialFieldConfig[]>(() => [
     {
       id: 'characters',
       label: 'Персонажи',
@@ -141,14 +146,14 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
       label: 'Предметы',
       targetType: 'item',
       options: toOptions(items, (item) => item.name)
-    },
-    {
-      id: 'assets',
-      label: 'Ассеты',
-      targetType: 'asset',
-      options: toOptions(assets, (asset) => asset.name)
     }
-  ], [assets, characters, items, scenarios]);
+  ], [characters, items]);
+  const assetField = useMemo<MaterialFieldConfig>(() => ({
+    id: 'assets',
+    label: 'Ассеты',
+    targetType: 'asset',
+    options: toOptions(assets, (asset) => asset.name)
+  }), [assets]);
 
   const selectedForScenarioField = (field: MaterialFieldConfig): TypedMaterialOption[] => {
     const optionById = new Map(field.options.map((option) => [option.id, option]));
@@ -315,9 +320,23 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
         />
       </Section>
 
-      <Section title="Связанные материалы" icon={<Link2 size={14} />}>
+      <Section title="Связанные сценарии" icon={<Link2 size={14} />}>
+        <TypedMaterialSelectField
+          label={scenarioField.label}
+          accentColor={accentColor}
+          options={optionsForField(scenarioField)}
+          selected={selectedForField(scenarioField)}
+          onAdd={(targetId) => addLink(scenarioField, targetId)}
+          onRemove={(targetId) => removeLinks(scenarioField, targetId)}
+        />
+        <p className="mono text-[9px] uppercase leading-relaxed text-[var(--text-muted)]">
+          Карта автоматически получает глобальных персонажей и предметы подключенных сценариев.
+        </p>
+      </Section>
+
+      <Section title="Локальные материалы карты" icon={<Users size={14} />}>
         <div className="space-y-5">
-          {fields.map((field) => (
+          {localMaterialFields.map((field) => (
             <TypedMaterialSelectField
               key={field.id}
               label={field.label}
@@ -329,6 +348,74 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
             />
           ))}
         </div>
+        <p className="mono text-[9px] uppercase leading-relaxed text-[var(--text-muted)]">
+          Локальные материалы доступны только этой карте и не добавляются обратно в сценарии.
+        </p>
+      </Section>
+
+      <Section title="Унаследованные материалы" icon={<Link2 size={14} />}>
+        {materialContext.materials.some((material) => material.scenarioSources.length > 0) ? (
+          <div className="space-y-3">
+            {materialContext.materials
+              .filter((material) => material.scenarioSources.length > 0)
+              .map((material) => (
+                <div key={material.key} className="border border-[var(--border-color)] bg-[var(--bg-surface)] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="mono text-[10px] font-black uppercase text-[var(--text-main)]">
+                        {material.name}
+                      </div>
+                      <div className="mono mt-1 text-[8px] uppercase text-[var(--text-muted)]">
+                        {material.materialType === 'character' ? 'Персонаж' : 'Предмет'}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      {material.local && (
+                        <span className="border border-[var(--text-main)] px-2 py-1 mono text-[7px] font-black uppercase text-[var(--text-main)]">
+                          Локальный
+                        </span>
+                      )}
+                      <span className="border border-[var(--border-color)] px-2 py-1 mono text-[7px] font-black uppercase text-[var(--text-muted)]">
+                        {material.scenarioSources.length === 1
+                          ? `Из сценария «${material.scenarioSources[0].title}»`
+                          : `Из ${material.scenarioSources.length} сценариев`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {material.scenarioSources.map((source) => (
+                      <button
+                        key={source.id}
+                        type="button"
+                        onClick={() => onOpenMaterialLink?.('scenario', source.id)}
+                        className="border border-[var(--border-color)] px-2 py-1 mono text-[8px] uppercase text-[var(--text-muted)] transition-colors hover:border-[var(--text-main)] hover:text-[var(--text-main)]"
+                      >
+                        {source.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+          </div>
+        ) : (
+          <div className="border border-dashed border-[var(--border-color)] p-4 mono text-[9px] uppercase text-[var(--text-muted)]">
+            Подключенные сценарии пока не передают персонажей или предметы.
+          </div>
+        )}
+        <p className="mono text-[9px] uppercase leading-relaxed text-[var(--text-muted)]">
+          Унаследованный материал удаляется через сценарий-источник. Уже размещенные токены останутся на карте.
+        </p>
+      </Section>
+
+      <Section title="Связанные ассеты" icon={<Package size={14} />}>
+        <TypedMaterialSelectField
+          label={assetField.label}
+          accentColor={accentColor}
+          options={optionsForField(assetField)}
+          selected={selectedForField(assetField)}
+          onAdd={(targetId) => addLink(assetField, targetId)}
+          onRemove={(targetId) => removeLinks(assetField, targetId)}
+        />
       </Section>
 
       <Section title="Теги" icon={<Tags size={14} />}>

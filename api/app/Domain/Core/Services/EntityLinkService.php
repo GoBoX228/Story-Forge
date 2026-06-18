@@ -5,6 +5,7 @@ namespace App\Domain\Core\Services;
 use App\Domain\Core\DTO\EntityLinkStoreData;
 use App\Domain\Core\DTO\EntityLinkUpdateData;
 use App\Models\Asset;
+use App\Models\Campaign;
 use App\Models\Character;
 use App\Models\EntityLink;
 use App\Models\Faction;
@@ -29,6 +30,7 @@ class EntityLinkService
     ];
 
     private const MATERIAL_TYPES = [
+        EntityLink::TARGET_CAMPAIGN => Campaign::class,
         EntityLink::TARGET_SCENARIO => Scenario::class,
         EntityLink::TARGET_MAP => Map::class,
         EntityLink::TARGET_CHARACTER => Character::class,

@@ -133,12 +133,41 @@ export interface MapObject {
   type: string;
   label: string;
   color: string;
+  sourceType?: MapObjectSourceType | null;
+  sourceId?: string | null;
   assetId?: string | null;
   width?: number;
   height?: number;
   rotation?: number;
   opacity?: number;
   layerId?: string | null;
+}
+
+export type MapObjectSourceType = 'character' | 'item' | 'asset';
+
+export interface MapMaterialScenarioSource {
+  id: string;
+  title: string;
+}
+
+export interface EffectiveMapMaterial {
+  key: string;
+  materialType: 'character' | 'item';
+  id: string;
+  name: string;
+  local: boolean;
+  scenarioSources: MapMaterialScenarioSource[];
+  assetId: string | null;
+  imageUrl: string | null;
+  color: string;
+  initials: string;
+}
+
+export interface MapMaterialContext {
+  linkedScenarios: Scenario[];
+  characters: EffectiveMapMaterial[];
+  items: EffectiveMapMaterial[];
+  materials: EffectiveMapMaterial[];
 }
 
 export type MapLayerType = 'background' | 'tiles' | 'tokens';
@@ -165,12 +194,11 @@ export interface MapData {
   backgroundAssetId?: string | null;
   createdAt?: string;
   updatedAt?: string;
-  campaignId?: string | null;
 }
 
 export type StatKey = string;
 
-export type TaggableTargetType = 'scenario' | 'map' | 'character' | 'item' | 'asset' | 'location' | 'faction' | 'event';
+export type TaggableTargetType = 'campaign' | 'scenario' | 'map' | 'character' | 'item' | 'asset' | 'location' | 'faction' | 'event';
 
 export type EntityLinkTargetType = TaggableTargetType;
 
@@ -196,7 +224,7 @@ export interface EntityLink {
 
 export type EntityLinkAssignmentMap = Record<string, EntityLink[]>;
 
-export type PublicationTargetType = TaggableTargetType;
+export type PublicationTargetType = Exclude<TaggableTargetType, 'campaign'>;
 
 export type PublicationStatus = 'draft' | 'published' | 'archived';
 
@@ -286,7 +314,6 @@ export interface Character {
   description: string;
   baseStats: Record<StatKey, number>;
   inventory: string[];
-  campaignId?: string | null;
   groupId?: string | null;
 }
 
@@ -348,15 +375,38 @@ export interface Campaign {
   id: string;
   title: string;
   description: string;
-  tags: string[];
-  resources: string[];
   scenarioIds: string[];
   mapIds: string[];
   characterIds: string[];
-  progress: number;
-  lastPlayed: string;
+  itemIds: string[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface CampaignPayload {
+  title: string;
+  description?: string | null;
+}
+
+export interface CampaignExportOptions {
+  mapPageSize: 'a4' | 'a3' | 'a2' | 'a1' | 'a0';
+  mapOrientation: 'landscape' | 'portrait';
+  duplexEdge: 'long' | 'short';
+}
+
+export interface CampaignExportJob {
+  id: number;
+  target_type: 'campaign';
+  target_id: number;
+  type: 'campaign_zip';
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  options: Record<string, unknown>;
+  error: string | null;
+  download_url: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export type AssetType = 'image' | 'document' | 'other';

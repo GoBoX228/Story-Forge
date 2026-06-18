@@ -706,9 +706,9 @@ const WorldEditor: React.FC<WorldEditorProps> = ({
 
           {form.id && isAtlasEntityKind(form.kind) && editingSourceType && (
             <PublicationPanel
-              targetType={editingSourceType}
+              targetType={editingSourceType as PublicationTargetType}
               targetId={form.id}
-              publication={publicationAssignments[publicationAssignmentKey(editingSourceType, form.id)]}
+              publication={publicationAssignments[publicationAssignmentKey(editingSourceType as PublicationTargetType, form.id)]}
               accentColor={SECTION_ACCENT}
               onUpsertPublication={onUpsertPublication}
               onUpdatePublication={onUpdatePublication}

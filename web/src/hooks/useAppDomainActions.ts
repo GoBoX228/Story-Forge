@@ -11,7 +11,7 @@ import {
   AssetFolderUpdatePayload,
   AssetUpdatePayload,
   AssetUploadPayload,
-  Campaign,
+  CampaignPayload,
   CharacterGroup,
   ChroniclePayload,
   ChronicleUpdatePayload,
@@ -34,8 +34,6 @@ import {
 } from '../types';
 import { apiRequest } from '../lib/api';
 import {
-  mapCampaignFromApi,
-  mapCampaignToApiPayload,
   mapItemFromApi,
   mapItemToApiPayload,
   mapMapFromApi,
@@ -83,14 +81,17 @@ import {
 } from '../lib/cardGroupApi';
 import { mapUserProfile } from '../lib/userProfile';
 import {
+  createCampaign,
+  deleteCampaign,
+  updateCampaign
+} from '../lib/campaignApi';
+import {
   addAssetToCollectionMembership,
   addAssetToFolderMembership,
   addEntityLinkAssignment,
   appendSortedCharacterGroup,
   appendSortedItemGroup,
   appendSortedScenarioGroup,
-  clearCampaignFromCharacters,
-  clearCampaignFromMaps,
   clearCampaignFromScenarios,
   clearAssetFolderFromAssets,
   clearCharacterGroupFromCharacters,
@@ -122,9 +123,6 @@ import {
   sortByName,
   syncAssetCollectionMembership,
   syncAssetFolderMembership,
-  syncCampaignCharacterLinks,
-  syncCampaignMapLinks,
-  syncCampaignScenarioLinks,
   upsertById,
   upsertCampaign,
   upsertPublication as upsertPublicationList,
@@ -143,8 +141,6 @@ interface UseAppDomainActionsOptions {
   navigation: AppNavigation;
   fetchCurrentUser: () => Promise<UserProfile>;
   setCurrentUser: React.Dispatch<React.SetStateAction<UserProfile | null>>;
-  openCampaignEditor: (campaign?: Campaign) => void;
-  closeCampaignEditor: () => void;
 }
 
 const toTimestamp = (value?: string | null): number => {
@@ -682,9 +678,7 @@ const useTaxonomyAndPublicationActions = (data: AppDataLoadingState) => {
 
 const useCampaignAndDashboardActions = (
   data: AppDataLoadingState,
-  navigation: AppNavigation,
-  openCampaignEditor: (campaign?: Campaign) => void,
-  closeCampaignEditor: () => void
+  navigation: AppNavigation
 ) => {
   const {
     campaigns,
@@ -693,53 +687,59 @@ const useCampaignAndDashboardActions = (
     setCampaigns,
     setScenarios,
     setMaps,
-    setCharacters,
+    setEntityLinks,
+    setTagAssignments,
   } = data;
 
-  const syncCampaignLinks = useCallback(
-    (campaignId: string, nextScenarioIds: string[], nextMapIds: string[], nextCharacterIds: string[]) => {
-      setScenarios((prev) => syncCampaignScenarioLinks(prev, campaignId, nextScenarioIds));
-      setMaps((prev) => syncCampaignMapLinks(prev, campaignId, nextMapIds));
-      setCharacters((prev) => syncCampaignCharacterLinks(prev, campaignId, nextCharacterIds));
-    },
-    [setCharacters, setMaps, setScenarios]
-  );
+  const createCampaignAction = useCallback(async (payload: CampaignPayload) => {
+    const created = await createCampaign(payload);
+    setCampaigns((prev) => upsertCampaign(prev, created));
+    return created;
+  }, [setCampaigns]);
 
-  const saveCampaign = useCallback(async (updated: Campaign) => {
-    try {
-      const payload = mapCampaignToApiPayload(updated);
-      const response = updated.id
-        ? await apiRequest(`/campaigns/${updated.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(payload)
-          })
-        : await apiRequest('/campaigns', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-          });
-
-      const mapped = mapCampaignFromApi(response);
-
-      setCampaigns((prev) => upsertCampaign(prev, mapped, updated.id));
-
-      syncCampaignLinks(mapped.id, mapped.scenarioIds ?? [], mapped.mapIds ?? [], mapped.characterIds ?? []);
-      closeCampaignEditor();
-    } catch {
-      // ignore
-    }
-  }, [closeCampaignEditor, setCampaigns, syncCampaignLinks]);
+  const updateCampaignAction = useCallback(async (id: string, payload: CampaignPayload) => {
+    const updated = await updateCampaign(id, payload);
+    setCampaigns((prev) => upsertCampaign(prev, updated, id));
+    return updated;
+  }, [setCampaigns]);
 
   const deleteCampaignAction = useCallback(async (id: string) => {
     if (!confirm('Вы уверены, что хотите удалить этот мир?')) return;
 
     try {
-      await apiRequest(`/campaigns/${id}`, { method: 'DELETE' });
+      await deleteCampaign(id);
       setCampaigns((prev) => removeById(prev, id));
-      syncCampaignLinks(id, [], [], []);
+      setScenarios((prev) => clearCampaignFromScenarios(prev, id));
+      setEntityLinks((prev) => {
+        const next = { ...prev };
+        delete next[`campaign:${id}`];
+        return next;
+      });
+      setTagAssignments((prev) => {
+        const next = { ...prev };
+        delete next[`campaign:${id}`];
+        return next;
+      });
     } catch {
       // ignore
     }
-  }, [setCampaigns, syncCampaignLinks]);
+  }, [setCampaigns, setEntityLinks, setScenarios, setTagAssignments]);
+
+  const updateScenarioCampaign = useCallback(async (scenarioId: string, campaignId: string | null) => {
+    const response = await apiRequest(`/scenarios/${scenarioId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ campaign_id: campaignId })
+    });
+    const updated = mapScenarioSummary(response);
+    setScenarios((prev) => upsertById(prev, updated));
+    setCampaigns((prev) => prev.map((campaign) => ({
+      ...campaign,
+      scenarioIds: campaign.id === campaignId
+        ? Array.from(new Set([...campaign.scenarioIds, scenarioId]))
+        : campaign.scenarioIds.filter((id) => id !== scenarioId)
+    })));
+    return updated;
+  }, [setCampaigns, setScenarios]);
 
   const openScenarioFromDashboard = useCallback(async (scenarioId?: string) => {
     let targetId = scenarioId;
@@ -807,21 +807,21 @@ const useCampaignAndDashboardActions = (
   }, [maps, navigation, setMaps]);
 
   const openCampaignFromDashboard = useCallback((campaignId?: string) => {
-    const targetCampaign = campaignId
-      ? campaigns.find((campaign) => campaign.id === campaignId) ?? null
-      : [...campaigns].sort(
+    const targetCampaignId = campaignId
+      ?? [...campaigns].sort(
           (a, b) =>
-            Math.max(toTimestamp(b.updatedAt), toTimestamp(b.createdAt), toTimestamp(b.lastPlayed)) -
-            Math.max(toTimestamp(a.updatedAt), toTimestamp(a.createdAt), toTimestamp(a.lastPlayed))
-        )[0] ?? null;
+            Math.max(toTimestamp(b.updatedAt), toTimestamp(b.createdAt)) -
+            Math.max(toTimestamp(a.updatedAt), toTimestamp(a.createdAt))
+        )[0]?.id;
 
-    navigation.setActiveView('campaigns');
-    openCampaignEditor(targetCampaign ?? undefined);
-  }, [campaigns, navigation, openCampaignEditor]);
+    navigation.openCampaign(targetCampaignId);
+  }, [campaigns, navigation]);
 
   return {
-    saveCampaign,
+    createCampaign: createCampaignAction,
+    updateCampaign: updateCampaignAction,
     deleteCampaign: deleteCampaignAction,
+    updateScenarioCampaign,
     openScenarioFromDashboard,
     openMapFromDashboard,
     openCampaignFromDashboard,
@@ -866,8 +866,6 @@ const useAdminActions = (data: AppDataLoadingState) => {
     if (type === 'campaign') {
       setCampaigns((prev) => removeById(prev, contentId));
       setScenarios((prev) => clearCampaignFromScenarios(prev, contentId));
-      setMaps((prev) => clearCampaignFromMaps(prev, contentId));
-      setCharacters((prev) => clearCampaignFromCharacters(prev, contentId));
     }
   }, [setCampaigns, setCharacters, setItems, setMaps, setScenarios]);
 
@@ -879,8 +877,6 @@ export function useAppDomainActions({
   navigation,
   fetchCurrentUser,
   setCurrentUser,
-  openCampaignEditor,
-  closeCampaignEditor,
 }: UseAppDomainActionsOptions) {
   const accountActions = useAccountActions(fetchCurrentUser, setCurrentUser);
   const scenarioGroupActions = useScenarioGroupActions(data);
@@ -888,7 +884,7 @@ export function useAppDomainActions({
   const assetActions = useAssetActions(data);
   const atlasActions = useAtlasActions(data);
   const taxonomyActions = useTaxonomyAndPublicationActions(data);
-  const campaignActions = useCampaignAndDashboardActions(data, navigation, openCampaignEditor, closeCampaignEditor);
+  const campaignActions = useCampaignAndDashboardActions(data, navigation);
   const adminActions = useAdminActions(data);
 
   const viewActions: AppViewActions = useMemo(() => ({
@@ -899,8 +895,10 @@ export function useAppDomainActions({
     openScenarioFromDashboard: campaignActions.openScenarioFromDashboard,
     openMapFromDashboard: campaignActions.openMapFromDashboard,
     openCampaignFromDashboard: campaignActions.openCampaignFromDashboard,
-    openCampaignEditor,
+    createCampaign: campaignActions.createCampaign,
+    updateCampaign: campaignActions.updateCampaign,
     deleteCampaign: campaignActions.deleteCampaign,
+    updateScenarioCampaign: campaignActions.updateScenarioCampaign,
     createScenarioGroup: scenarioGroupActions.createScenarioGroup,
     updateScenarioGroup: scenarioGroupActions.updateScenarioGroup,
     deleteScenarioGroup: scenarioGroupActions.deleteScenarioGroup,
@@ -963,13 +961,9 @@ export function useAppDomainActions({
     data.setMaps,
     data.setScenarios,
     itemActions,
-    openCampaignEditor,
     scenarioGroupActions,
     taxonomyActions,
   ]);
 
-  return {
-    viewActions,
-    handleSaveCampaign: campaignActions.saveCampaign,
-  };
+  return { viewActions };
 }

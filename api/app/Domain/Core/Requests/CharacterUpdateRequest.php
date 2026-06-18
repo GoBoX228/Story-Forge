@@ -21,7 +21,6 @@ class CharacterUpdateRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'stats' => ['nullable', 'array'],
             'inventory' => ['nullable', 'array'],
-            'campaign_id' => ['nullable', 'integer'],
             'group_id' => ['nullable', 'integer'],
         ];
     }

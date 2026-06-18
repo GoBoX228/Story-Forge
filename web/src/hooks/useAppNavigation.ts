@@ -6,6 +6,7 @@ const GRAPH_RETURN_VIEWS: AppView[] = ['maps', 'characters', 'items', 'assets'];
 
 export const useAppNavigation = () => {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
+  const [campaignEditorTargetId, setCampaignEditorTargetId] = useState<string | null>(null);
   const [scenarioEditorTargetId, setScenarioEditorTargetId] = useState<string | null>(null);
   const [mapEditorTargetId, setMapEditorTargetId] = useState<string | null>(null);
   const [characterEditorTargetId, setCharacterEditorTargetId] = useState<string | null>(null);
@@ -16,6 +17,7 @@ export const useAppNavigation = () => {
 
   useEffect(() => {
     if (activeView !== 'scenarios') setScenarioEditorTargetId(null);
+    if (activeView !== 'campaigns') setCampaignEditorTargetId(null);
     if (activeView !== 'maps') setMapEditorTargetId(null);
     if (activeView !== 'characters') setCharacterEditorTargetId(null);
     if (activeView !== 'items') setItemEditorTargetId(null);
@@ -27,6 +29,11 @@ export const useAppNavigation = () => {
   const openScenario = useCallback((id?: string | null) => {
     setScenarioEditorTargetId(id ?? null);
     setActiveView('scenarios');
+  }, []);
+
+  const openCampaign = useCallback((id?: string | null) => {
+    setCampaignEditorTargetId(id ?? null);
+    setActiveView('campaigns');
   }, []);
 
   const openMap = useCallback((id?: string | null) => {
@@ -128,6 +135,7 @@ export const useAppNavigation = () => {
   return {
     activeView,
     setActiveView,
+    campaignEditorTargetId,
     scenarioEditorTargetId,
     mapEditorTargetId,
     characterEditorTargetId,
@@ -136,6 +144,7 @@ export const useAppNavigation = () => {
     worldEditorTarget,
     graphReturnScenarioId,
     openScenario,
+    openCampaign,
     openMap,
     openCharacter,
     openItem,

@@ -121,6 +121,10 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perHour(10)->by(self::actorKey($request));
         });
 
+        RateLimiter::for('campaign-export', function (Request $request) {
+            return Limit::perHour(5)->by(self::actorKey($request));
+        });
+
         RateLimiter::for('reports', function (Request $request) {
             return Limit::perHour(10)->by(self::actorKey($request));
         });

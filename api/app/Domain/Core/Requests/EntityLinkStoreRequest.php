@@ -18,6 +18,7 @@ class EntityLinkStoreRequest extends FormRequest
     {
         return [
             'target_type' => ['required', 'string', Rule::in([
+                EntityLink::TARGET_CAMPAIGN,
                 EntityLink::TARGET_SCENARIO,
                 EntityLink::TARGET_MAP,
                 EntityLink::TARGET_CHARACTER,

@@ -108,6 +108,22 @@
             stroke-width: 1.4;
             vector-effect: non-scaling-stroke;
         }
+
+        .token-initials {
+            fill: #ffffff;
+            font-family: DejaVu Sans, Arial, sans-serif;
+            font-weight: 900;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }
+
+        .detached-border {
+            fill: none;
+            stroke: #e63946;
+            stroke-width: 1.5;
+            stroke-dasharray: 5 3;
+            vector-effect: non-scaling-stroke;
+        }
     </style>
 </head>
 <body>
@@ -138,14 +154,20 @@
                                 $rotation = (float) ($object['rotation'] ?? 0);
                                 $opacity = max(0, min(1, (float) ($object['opacity'] ?? 1)));
                             @endphp
-                            <g data-map-object="{{ $object['id'] }}" data-object-type="{{ $object['type'] }}" data-object-label="{{ $object['label'] }}" opacity="{{ $opacity }}" @if($rotation !== 0.0) transform="rotate({{ $rotation }} {{ $centerX }} {{ $centerY }})" @endif>
+                            <g data-map-object="{{ $object['id'] }}" data-object-type="{{ $object['type'] }}" data-object-label="{{ $object['label'] }}" data-source-type="{{ $object['sourceType'] }}" data-source-id="{{ $object['sourceId'] }}" data-detached="{{ $object['detached'] ? 'true' : 'false' }}" opacity="{{ $opacity }}" @if($rotation !== 0.0) transform="rotate({{ $rotation }} {{ $centerX }} {{ $centerY }})" @endif>
                                 @if(!empty($object['assetUrl']))
                                     <image href="{{ $object['assetUrl'] }}" x="{{ $object['x'] }}" y="{{ $object['y'] }}" width="{{ $object['width'] }}" height="{{ $object['height'] }}" preserveAspectRatio="none" />
                                 @else
                                     <rect x="{{ $object['x'] }}" y="{{ $object['y'] }}" width="{{ $object['width'] }}" height="{{ $object['height'] }}" fill="{{ $object['color'] }}" />
+                                    @if(!empty($object['initials']))
+                                        <text class="token-initials" x="{{ $centerX }}" y="{{ $centerY }}" font-size="{{ max(9, min((float) $object['width'], (float) $object['height']) * 0.38) }}">{{ $object['initials'] }}</text>
+                                    @endif
                                 @endif
                                 @if(($object['type'] ?? '') === 'wall')
                                     <rect class="object-border" x="{{ $object['x'] }}" y="{{ $object['y'] }}" width="{{ $object['width'] }}" height="{{ $object['height'] }}" />
+                                @endif
+                                @if($object['detached'])
+                                    <rect class="detached-border" x="{{ $object['x'] }}" y="{{ $object['y'] }}" width="{{ $object['width'] }}" height="{{ $object['height'] }}" />
                                 @endif
                             </g>
                         @endforeach
@@ -172,11 +194,17 @@
                                 $rotation = (float) ($object['rotation'] ?? 0);
                                 $opacity = max(0, min(1, (float) ($object['opacity'] ?? 1)));
                             @endphp
-                            <g data-map-object="{{ $object['id'] }}" data-object-type="{{ $object['type'] }}" data-object-label="{{ $object['label'] }}" opacity="{{ $opacity }}" @if($rotation !== 0.0) transform="rotate({{ $rotation }} {{ $centerX }} {{ $centerY }})" @endif>
+                            <g data-map-object="{{ $object['id'] }}" data-object-type="{{ $object['type'] }}" data-object-label="{{ $object['label'] }}" data-source-type="{{ $object['sourceType'] }}" data-source-id="{{ $object['sourceId'] }}" data-detached="{{ $object['detached'] ? 'true' : 'false' }}" opacity="{{ $opacity }}" @if($rotation !== 0.0) transform="rotate({{ $rotation }} {{ $centerX }} {{ $centerY }})" @endif>
                                 @if(!empty($object['assetUrl']))
                                     <image href="{{ $object['assetUrl'] }}" x="{{ $object['x'] }}" y="{{ $object['y'] }}" width="{{ $object['width'] }}" height="{{ $object['height'] }}" preserveAspectRatio="none" />
                                 @else
                                     <rect x="{{ $object['x'] }}" y="{{ $object['y'] }}" width="{{ $object['width'] }}" height="{{ $object['height'] }}" fill="{{ $object['color'] }}" />
+                                    @if(!empty($object['initials']))
+                                        <text class="token-initials" x="{{ $centerX }}" y="{{ $centerY }}" font-size="{{ max(9, min((float) $object['width'], (float) $object['height']) * 0.38) }}">{{ $object['initials'] }}</text>
+                                    @endif
+                                @endif
+                                @if($object['detached'])
+                                    <rect class="detached-border" x="{{ $object['x'] }}" y="{{ $object['y'] }}" width="{{ $object['width'] }}" height="{{ $object['height'] }}" />
                                 @endif
                             </g>
                         @endforeach

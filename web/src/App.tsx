@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { CampaignEditorModal } from './components/CampaignEditorModal';
 import { LandingPage } from './components/LandingPage';
 import { AppDataStoreProvider, AppViewData } from './components/app/AppDataStoreContext';
 import { AppFrame } from './components/app/AppFrame';
@@ -9,7 +8,7 @@ import { AppViewRouter } from './components/app/AppViewRouter';
 import { LoadingSpinner } from './components/app/LoadingSpinner';
 import { apiRequest, clearAccessToken, refreshAccessToken } from './lib/api';
 import { mapUserProfile } from './lib/userProfile';
-import { Campaign, UserProfile } from './types';
+import { UserProfile } from './types';
 import { useAppDataLoading } from './hooks/useAppDataLoading';
 import { useAppDomainActions } from './hooks/useAppDomainActions';
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -24,8 +23,6 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [editingCampaign, setEditingCampaign] = useState<Partial<Campaign> | null>(null);
   const [dismissedBroadcastIds, setDismissedBroadcastIds] = useStickyState<number[]>(
     [],
     'sf_dismissed_broadcast_ids'
@@ -69,32 +66,11 @@ const App: React.FC = () => {
     return mapUserProfile(response);
   }, []);
 
-  const openCampaignEditor = useCallback((campaign?: Campaign) => {
-    setEditingCampaign(
-      campaign || {
-        title: '',
-        description: '',
-        tags: [],
-        resources: [],
-        scenarioIds: [],
-        mapIds: [],
-        characterIds: []
-      }
-    );
-    setIsEditorOpen(true);
-  }, []);
-
-  const closeCampaignEditor = useCallback(() => {
-    setIsEditorOpen(false);
-  }, []);
-
-  const { viewActions, handleSaveCampaign } = useAppDomainActions({
+  const { viewActions } = useAppDomainActions({
     data: appData,
     navigation,
     fetchCurrentUser,
     setCurrentUser,
-    openCampaignEditor,
-    closeCampaignEditor,
   });
 
   useEffect(() => {
@@ -256,18 +232,7 @@ const App: React.FC = () => {
       isAdmin={currentUser?.role === 'admin'}
       onLogout={handleLogout}
       onClearNotifications={handleClearNotifications}
-      modal={isEditorOpen && editingCampaign ? (
-        <CampaignEditorModal
-          isOpen={isEditorOpen}
-          onClose={closeCampaignEditor}
-          campaign={editingCampaign}
-          onSave={handleSaveCampaign}
-          allScenarios={scenarios}
-          allMaps={maps}
-          allCharacters={characters}
-          allItems={items}
-        />
-      ) : null}
+      modal={null}
     >
       {renderView}
     </AppFrame>

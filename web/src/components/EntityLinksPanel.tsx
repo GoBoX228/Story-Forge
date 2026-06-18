@@ -18,6 +18,7 @@ import {
 import { Button, Input, Select } from './UI';
 
 const TARGET_LABELS: Record<EntityLinkTargetType, string> = {
+  campaign: 'КАМПАНИЯ',
   scenario: 'СЦЕНАРИЙ',
   map: 'КАРТА',
   character: 'ПЕРСОНАЖ',

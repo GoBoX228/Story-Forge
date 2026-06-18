@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>Карточки персонажей - {{ $scenario->title }}</title>
+    <title>Карточки персонажей - {{ $documentTitle }}</title>
     <style>
         @page {
             size: A4 portrait;

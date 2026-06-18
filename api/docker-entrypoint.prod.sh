@@ -75,4 +75,8 @@ php artisan config:cache
 php artisan route:cache || php artisan route:clear
 php artisan view:cache
 
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
+
 exec php artisan serve --host=0.0.0.0 --port=8000

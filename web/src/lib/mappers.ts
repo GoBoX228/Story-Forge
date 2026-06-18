@@ -10,6 +10,7 @@ import {
   AssetType,
   AssetUpdatePayload,
   Campaign,
+  CampaignPayload,
   Character,
   CharacterGroup,
   CharacterGroupPayload,
@@ -191,6 +192,8 @@ const mapMapObjectFromApi = (object: any, layerId?: string | null, index = 0): M
     type,
     label: String(object?.label ?? object?.type ?? 'Object'),
     color: String(object?.color ?? '#888888'),
+    sourceType: object?.sourceType ?? object?.source_type ?? null,
+    sourceId: object?.sourceId ?? object?.source_id ?? null,
     assetId: object?.assetId ?? object?.asset_id ?? null,
     width: positiveNumber(object?.width, 1),
     height: positiveNumber(object?.height, 1),
@@ -521,8 +524,7 @@ export const mapMapFromApi = (api: any): MapData => {
     layers,
     backgroundAssetId: backgroundAssetId as string | null,
     createdAt: api.created_at ?? new Date().toISOString(),
-    updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString(),
-    campaignId: api.campaign_id ? String(api.campaign_id) : null
+    updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString()
   };
 };
 
@@ -534,7 +536,6 @@ export const mapCharacterFromApi = (api: any): Character => ({
   description: api.description ?? '',
   baseStats: api.stats ?? { ...DEFAULT_STATS },
   inventory: api.inventory ?? [],
-  campaignId: api.campaign_id ? String(api.campaign_id) : null,
   groupId: api.character_group_id || api.group_id ? String(api.character_group_id ?? api.group_id) : null
 });
 
@@ -604,13 +605,10 @@ export const mapCampaignFromApi = (api: any): Campaign => ({
   id: String(api.id),
   title: api.title ?? '',
   description: api.description ?? '',
-  tags: toStringArray(api.tags),
-  resources: toStringArray(api.resources),
   scenarioIds: toStringArray(api.scenario_ids),
   mapIds: toStringArray(api.map_ids),
   characterIds: toStringArray(api.character_ids),
-  progress: Number.isFinite(api.progress) ? Number(api.progress) : 0,
-  lastPlayed: api.last_played ?? new Date().toISOString().slice(0, 10),
+  itemIds: toStringArray(api.item_ids),
   createdAt: api.created_at ?? new Date().toISOString(),
   updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString()
 });
@@ -759,16 +757,9 @@ export const mapWorldEventToApiPayload = (payload: WorldEventPayload | WorldEven
   ...(payload.metadata !== undefined ? { metadata: payload.metadata } : {})
 });
 
-export const mapCampaignToApiPayload = (campaign: Partial<Campaign>) => ({
-  title: campaign.title ?? '',
-  description: campaign.description ?? '',
-  tags: campaign.tags ?? [],
-  resources: campaign.resources ?? [],
-  progress: campaign.progress ?? 0,
-  last_played: toApiDate(campaign.lastPlayed),
-  scenario_ids: (campaign.scenarioIds ?? []).map((id) => Number(id)).filter((id) => Number.isFinite(id)),
-  map_ids: (campaign.mapIds ?? []).map((id) => Number(id)).filter((id) => Number.isFinite(id)),
-  character_ids: (campaign.characterIds ?? []).map((id) => Number(id)).filter((id) => Number.isFinite(id))
+export const mapCampaignToApiPayload = (campaign: CampaignPayload) => ({
+  title: campaign.title,
+  description: campaign.description ?? null
 });
 
 export const mapTagFromApi = (api: any): Tag => ({

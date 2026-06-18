@@ -6,8 +6,8 @@ ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_CACHE_DIR=/tmp/composer-cache
 
 RUN apt-get update \
-    && apt-get install -y git unzip libpq-dev nodejs npm chromium fonts-dejavu-core \
-    && docker-php-ext-install pdo_pgsql \
+    && apt-get install -y git unzip zip libpq-dev libzip-dev nodejs npm chromium fonts-dejavu-core \
+    && docker-php-ext-install pdo_pgsql zip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN { \

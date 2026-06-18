@@ -103,12 +103,17 @@ export const ScenarioSettingsPanel: React.FC<ScenarioSettingsPanelProps> = ({
   const relatedItemIds = new Set(relatedItems.map((item) => item.id));
 
   return (
-    <div className={`${embedded ? 'w-full max-h-[70vh]' : 'w-80 border-l'} bg-[var(--bg-surface)] border-[var(--border-color)] flex flex-col z-10`}>
-      <div className="p-6 border-b border-[var(--border-color)] flex items-center gap-2 bg-[var(--bg-main)]">
-        <Settings size={16} className="text-[var(--col-red)]" />
-        <span className="mono text-[10px] uppercase font-black text-[var(--text-main)] tracking-widest">Параметры</span>
-      </div>
-      <div className="flex-1 overflow-y-auto p-6 space-y-8">
+    <div className={embedded
+      ? 'flex max-h-[70vh] w-full flex-col'
+      : 'z-10 flex w-80 flex-col border-l border-[var(--border-color)] bg-[var(--bg-surface)]'
+    }>
+      {!embedded && (
+        <div className="flex items-center gap-2 border-b border-[var(--border-color)] bg-[var(--bg-main)] p-6">
+          <Settings size={16} className="text-[var(--col-red)]" />
+          <span className="mono text-[10px] font-black uppercase tracking-widest text-[var(--text-main)]">Параметры</span>
+        </div>
+      )}
+      <div className={`flex-1 space-y-8 overflow-y-auto ${embedded ? 'pr-2' : 'p-6'}`}>
         <div className="space-y-2">
           <label className="mono text-[9px] text-[var(--text-muted)] uppercase font-black flex items-center gap-2">
             <Layers size={10} /> Кампания

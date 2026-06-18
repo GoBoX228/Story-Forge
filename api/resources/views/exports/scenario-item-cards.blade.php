@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="utf-8">
-    <title>Карточки предметов - {{ $scenario->title }}</title>
+    <title>Карточки предметов - {{ $documentTitle }}</title>
     <style>
         @page { size: A4 portrait; margin: 0; }
         * { box-sizing: border-box; }

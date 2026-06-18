@@ -64,6 +64,9 @@ Route::middleware(['cookie_auth', 'active_user', 'csrf_cookie'])->group(function
     Route::get('/campaigns/{id}', [CampaignController::class, 'show']);
     Route::patch('/campaigns/{id}', [CampaignController::class, 'update']);
     Route::delete('/campaigns/{id}', [CampaignController::class, 'destroy']);
+    Route::post('/campaigns/{id}/export/zip', [ExportController::class, 'exportCampaignZip'])->middleware('throttle:campaign-export');
+    Route::get('/export-jobs/{id}', [ExportController::class, 'exportJobStatus']);
+    Route::get('/export-jobs/{id}/download', [ExportController::class, 'downloadExportJob']);
 
     Route::get('/scenarios', [ScenarioController::class, 'index']);
     Route::post('/scenarios', [ScenarioController::class, 'store']);

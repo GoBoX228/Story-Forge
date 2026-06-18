@@ -11,7 +11,6 @@ use App\Domain\Core\Actions\UpdateModelAction;
 use App\Domain\Core\DTO\MapIndexData;
 use App\Domain\Core\DTO\MapStoreData;
 use App\Domain\Core\DTO\MapUpdateData;
-use App\Models\Campaign;
 use App\Models\EntityLink;
 use App\Models\Map;
 use App\Models\User;
@@ -55,14 +54,9 @@ class MapService
     {
         $payload = $data->data;
 
-        if (!empty($payload['campaign_id'])) {
-            $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $payload['campaign_id']);
-        }
-
         /** @var Map $map */
         $map = $this->createModelAction->execute(Map::class, [
             'user_id' => $user->id,
-            'campaign_id' => $payload['campaign_id'] ?? null,
             'name' => $payload['name'],
             'width' => $payload['width'],
             'height' => $payload['height'],
@@ -85,13 +79,6 @@ class MapService
     {
         /** @var Map $map */
         $map = $this->findOwnedModelAction->execute(Map::class, $user->id, $id);
-
-        if (
-            array_key_exists('campaign_id', $data->data) &&
-            $data->data['campaign_id'] !== null
-        ) {
-            $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $data->data['campaign_id']);
-        }
 
         $this->updateModelAction->execute($map, $data->data);
 

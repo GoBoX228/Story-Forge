@@ -20,7 +20,6 @@ class MapStoreRequest extends FormRequest
             'height' => ['required', 'integer', 'min:1'],
             'cell_size' => ['required', 'integer', 'min:1'],
             'data' => ['nullable', 'array'],
-            'campaign_id' => ['nullable', 'integer'],
         ];
     }
 

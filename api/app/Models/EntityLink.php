@@ -8,6 +8,8 @@ class EntityLink extends Model
 {
     public const SOURCE_SCENARIO_NODE = 'scenario_node';
 
+    public const TARGET_CAMPAIGN = 'campaign';
+
     public const TARGET_SCENARIO = 'scenario';
 
     public const TARGET_MAP = 'map';

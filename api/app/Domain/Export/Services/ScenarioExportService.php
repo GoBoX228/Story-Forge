@@ -71,7 +71,7 @@ class ScenarioExportService
         $characterCardsExport = $this->buildCharacterCardsExportData($user->id, $scenario, $data->duplexEdge);
 
         $html = $this->renderScenarioCharacterCardsExportHtmlAction->execute(
-            scenario: $scenario,
+            documentTitle: $scenario->title,
             exportedAt: now(),
             characterCardsExport: $characterCardsExport
         );
@@ -90,7 +90,7 @@ class ScenarioExportService
         $itemCardsExport = $this->buildItemCardsExportData($user->id, $scenario, $data->duplexEdge);
 
         $html = $this->renderScenarioItemCardsExportHtmlAction->execute(
-            scenario: $scenario,
+            documentTitle: $scenario->title,
             exportedAt: now(),
             itemCardsExport: $itemCardsExport
         );
@@ -99,6 +99,55 @@ class ScenarioExportService
 
         return new ExportedPdfData(
             bytes: $pdfBytes,
+            filename: $filename
+        );
+    }
+
+    /**
+     * @param Collection<int, Character> $characters
+     */
+    public function exportCharacterCardsForMaterials(
+        User $user,
+        string $documentTitle,
+        Collection $characters,
+        string $duplexEdge,
+        string $filename
+    ): ExportedPdfData {
+        $characterCardsExport = $this->buildCharacterCardsExportDataForCharacters(
+            $user->id,
+            $characters,
+            $duplexEdge
+        );
+        $html = $this->renderScenarioCharacterCardsExportHtmlAction->execute(
+            documentTitle: $documentTitle,
+            exportedAt: now(),
+            characterCardsExport: $characterCardsExport
+        );
+
+        return new ExportedPdfData(
+            bytes: $this->generateCharacterCardsPdfAction->execute($html),
+            filename: $filename
+        );
+    }
+
+    /**
+     * @param Collection<int, Item> $items
+     */
+    public function exportItemCardsForMaterials(
+        string $documentTitle,
+        Collection $items,
+        string $duplexEdge,
+        string $filename
+    ): ExportedPdfData {
+        $itemCardsExport = $this->buildItemCardsExportDataForItems($items, $duplexEdge);
+        $html = $this->renderScenarioItemCardsExportHtmlAction->execute(
+            documentTitle: $documentTitle,
+            exportedAt: now(),
+            itemCardsExport: $itemCardsExport
+        );
+
+        return new ExportedPdfData(
+            bytes: $this->generateItemCardsPdfAction->execute($html),
             filename: $filename
         );
     }
@@ -114,6 +163,19 @@ class ScenarioExportService
     {
         $items = $this->fetchScenarioCompositionItems($userId, $scenario);
 
+        return $this->buildItemCardsExportDataForItems($items, $duplexEdge);
+    }
+
+    /**
+     * @param Collection<int, Item> $items
+     * @return array{
+     *     duplexEdge: string,
+     *     cards: array<int, array<string, mixed>>,
+     *     sheets: array<int, array<string, mixed>>
+     * }
+     */
+    private function buildItemCardsExportDataForItems(Collection $items, string $duplexEdge): array
+    {
         $cards = $items
             ->map(fn (Item $item): array => $this->buildItemCardData($item))
             ->values()
@@ -265,6 +327,23 @@ class ScenarioExportService
     private function buildCharacterCardsExportData(int $userId, Scenario $scenario, string $duplexEdge): array
     {
         $characters = $this->fetchScenarioCompositionCharacters($userId, $scenario);
+
+        return $this->buildCharacterCardsExportDataForCharacters($userId, $characters, $duplexEdge);
+    }
+
+    /**
+     * @param Collection<int, Character> $characters
+     * @return array{
+     *     duplexEdge: string,
+     *     cards: array<int, array<string, mixed>>,
+     *     sheets: array<int, array<string, mixed>>
+     * }
+     */
+    private function buildCharacterCardsExportDataForCharacters(
+        int $userId,
+        Collection $characters,
+        string $duplexEdge
+    ): array {
         $inventoryItemsById = $this->fetchInventoryItems($userId, $characters);
         $portraitAssetsByCharacterId = $this->fetchPortraitAssetsByCharacterId($userId, $characters);
 

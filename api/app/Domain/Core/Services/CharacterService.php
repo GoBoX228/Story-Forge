@@ -11,7 +11,6 @@ use App\Domain\Core\Actions\UpdateModelAction;
 use App\Domain\Core\DTO\CharacterIndexData;
 use App\Domain\Core\DTO\CharacterStoreData;
 use App\Domain\Core\DTO\CharacterUpdateData;
-use App\Models\Campaign;
 use App\Models\Character;
 use App\Models\CharacterGroup;
 use App\Models\EntityLink;
@@ -74,10 +73,6 @@ class CharacterService
     {
         $payload = $data->data;
 
-        if (!empty($payload['campaign_id'])) {
-            $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $payload['campaign_id']);
-        }
-
         if (!empty($payload['group_id'])) {
             $this->ensureOwnedModelExistsAction->execute(CharacterGroup::class, $user->id, $payload['group_id']);
         }
@@ -85,7 +80,6 @@ class CharacterService
         /** @var Character $character */
         $character = $this->createModelAction->execute(Character::class, [
             'user_id' => $user->id,
-            'campaign_id' => $payload['campaign_id'] ?? null,
             'character_group_id' => $payload['group_id'] ?? null,
             'name' => $payload['name'],
             'role' => $payload['role'] ?? 'NPC',
@@ -102,13 +96,6 @@ class CharacterService
     {
         /** @var Character $character */
         $character = $this->findOwnedModelAction->execute(Character::class, $user->id, $id);
-
-        if (
-            array_key_exists('campaign_id', $data->data) &&
-            $data->data['campaign_id'] !== null
-        ) {
-            $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $data->data['campaign_id']);
-        }
 
         if (
             array_key_exists('group_id', $data->data) &&

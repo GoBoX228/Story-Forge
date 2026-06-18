@@ -1,17 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Asset, MapData } from '../../types';
 import { drawMapSnapshotToCanvas } from '../../lib/mapRendering';
+import type { MapObjectDisplayResolver } from '../../lib/mapMaterials';
 
 export interface MapThumbnailProps {
   map: MapData;
   assetById: ReadonlyMap<string, Asset>;
   backgroundAssetId?: string | null;
+  resolveObjectDisplay?: MapObjectDisplayResolver;
 }
 
 export const MapThumbnail = React.memo<MapThumbnailProps>(({
   map,
   assetById,
-  backgroundAssetId
+  backgroundAssetId,
+  resolveObjectDisplay
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageCacheRef = useRef<Record<string, HTMLImageElement>>({});
@@ -64,10 +67,11 @@ export const MapThumbnail = React.memo<MapThumbnailProps>(({
       assetById,
       backgroundAssetId: backgroundAssetId ?? map.backgroundAssetId ?? null,
       getImage: getCanvasImage,
+      resolveObjectDisplay,
       width: canvas.width,
       height: canvas.height
     });
-  }, [assetById, backgroundAssetId, canvasSize.height, canvasSize.width, getCanvasImage, imageRevision, map]);
+  }, [assetById, backgroundAssetId, canvasSize.height, canvasSize.width, getCanvasImage, imageRevision, map, resolveObjectDisplay]);
 
   return <canvas ref={canvasRef} className="h-full w-full" aria-label={`Миниатюра карты ${map.name}`} />;
 });
