@@ -20,7 +20,6 @@ class MapUpdateRequest extends FormRequest
             'height' => ['sometimes', 'integer', 'min:1'],
             'cell_size' => ['sometimes', 'integer', 'min:1'],
             'data' => ['nullable', 'array'],
-            'scenario_id' => ['nullable', 'integer'],
             'campaign_id' => ['nullable', 'integer'],
         ];
     }

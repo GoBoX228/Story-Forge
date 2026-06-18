@@ -1,6 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Plus, RefreshCw, Settings } from 'lucide-react';
-import { Button, SectionHeader } from './UI';
+import {
+  ArrowLeft,
+  ClipboardPaste,
+  FolderOpen,
+  FolderPlus,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Scissors,
+  Settings,
+  Trash2,
+  X
+} from 'lucide-react';
+import { Button, SearchInput, SectionHeader } from './UI';
 import { Modal } from './Modal';
 import {
   Campaign,
@@ -20,6 +32,7 @@ import {
   PublicationUpdatePayload,
   PublicationUpsertPayload,
   Scenario,
+  ScenarioGroup,
   ScenarioNode,
   ScenarioNodeConfig,
   ScenarioNodeEntityLink,
@@ -54,8 +67,6 @@ import {
   updateScenarioTransition
 } from '../lib/scenarioApi';
 import {
-  mapCharacterFromApi,
-  mapMapFromApi,
   mapScenarioDetail,
   mapScenarioSummary,
   entityLinkAssignmentKey,
@@ -64,14 +75,31 @@ import {
 } from '../lib/mappers';
 import { GraphInspector, GraphInspectorTab } from './scenario/GraphInspector';
 import { ScenarioGraphWorkspace } from './scenario/ScenarioGraphWorkspace';
-import { ScenarioListPanel } from './scenario/ScenarioListPanel';
 import { ScenarioPreviewWorkspace } from './scenario/ScenarioPreviewWorkspace';
 import { ScenarioSettingsPanel } from './scenario/ScenarioSettingsPanel';
 import { GraphValidationIssue, validateScenarioGraph } from './scenario/graphValidation';
+import {
+  EntityLibraryCard,
+  EntityLibraryContextMenu,
+  EntityLibraryGroupCard,
+  EntityLibraryWorkspace,
+  type EntityLibraryActionSection,
+  useEntityLibraryDragDrop,
+  useEntityLibraryKeyboard,
+  useEntityLibraryMoveBuffer,
+  useEntityLibraryNavigation,
+  useEntityLibraryContextMenu,
+  useEntityLibrarySelection
+} from './entityLibrary';
+import { TagFilter } from './TagPicker';
 
 interface ScenarioEditorProps {
   data: Scenario[];
   onUpdate: (data: Scenario[]) => void;
+  scenarioGroups: ScenarioGroup[];
+  onCreateScenarioGroup: () => Promise<ScenarioGroup>;
+  onUpdateScenarioGroup: (id: string, payload: Partial<ScenarioGroup>) => Promise<ScenarioGroup>;
+  onDeleteScenarioGroup: (id: string) => Promise<void>;
   campaigns: Campaign[];
   characters: Character[];
   items: Item[];
@@ -148,6 +176,10 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
   data,
   onUpdate,
+  scenarioGroups,
+  onCreateScenarioGroup,
+  onUpdateScenarioGroup,
+  onDeleteScenarioGroup,
   campaigns,
   characters,
   items,
@@ -156,8 +188,6 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
   locations,
   factions,
   events,
-  onUpdateCharacters,
-  onUpdateMaps,
   tags,
   tagAssignments,
   entityLinks,
@@ -200,9 +230,17 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [undoStack, setUndoStack] = useState<GraphHistoryAction[]>([]);
   const [redoStack, setRedoStack] = useState<GraphHistoryAction[]>([]);
+  const librarySelection = useEntityLibrarySelection({ mode: 'multi' });
+  const libraryNavigation = useEntityLibraryNavigation();
+  const libraryContextMenu = useEntityLibraryContextMenu();
+  const scenarioMoveBuffer = useEntityLibraryMoveBuffer();
+  const { currentGroupId, isRoot: libraryIsRoot, openGroup, returnToRoot } = libraryNavigation;
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+  const [renamingGroupName, setRenamingGroupName] = useState('');
 
   const initialScenarioAppliedRef = useRef<string | null>(null);
   const graphHistoryReplayRef = useRef(false);
+  const renameGroupInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeScenario = data.find((scenario) => scenario.id === activeId);
   const selectedNode = scenarioNodes.find((node) => node.id === activeNodeId) ?? null;
@@ -234,18 +272,52 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
       .map((link) => link.targetId)
   );
   const relatedCharacters = activeScenario
-    ? characters.filter((character) => character.scenarioId === activeScenario.id || compositionCharacterIds.has(character.id))
+    ? characters.filter((character) => compositionCharacterIds.has(character.id))
     : [];
   const relatedMaps = activeScenario
-    ? maps.filter((map) => map.scenarioId === activeScenario.id || compositionMapIds.has(map.id))
+    ? maps.filter((map) => compositionMapIds.has(map.id))
     : [];
   const relatedItems = activeScenario ? items.filter((item) => compositionItemIds.has(item.id)) : [];
-  const visibleScenarios = data.filter((scenario) => {
+  const hasScenarioLibraryFilters = searchQuery.trim().length > 0 || Boolean(selectedTagFilter);
+  const currentScenarioGroup = currentGroupId
+    ? scenarioGroups.find((group) => group.id === currentGroupId) ?? null
+    : null;
+  const scenariosInCurrentGroup = data.filter((scenario) =>
+    currentGroupId ? scenario.scenarioGroupId === currentGroupId : !scenario.scenarioGroupId
+  );
+  const visibleScenarios = scenariosInCurrentGroup.filter((scenario) => {
     const matchesSearch = scenario.title.toLowerCase().includes(searchQuery.toLowerCase());
     const assignedTags = tagAssignments[tagAssignmentKey('scenario', scenario.id)] ?? [];
     const matchesTag = !selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter);
     return matchesSearch && matchesTag;
   });
+  const visibleScenarioIds = visibleScenarios.map((scenario) => scenario.id);
+  const visibleScenarioIdKey = visibleScenarioIds.join('\u0000');
+  const visibleScenarioGroups = libraryIsRoot && !hasScenarioLibraryFilters ? scenarioGroups : [];
+  const scenarioGroupCountById = useMemo(() => {
+    const counts = new Map<string, number>();
+    data.forEach((scenario) => {
+      if (!scenario.scenarioGroupId) return;
+      counts.set(scenario.scenarioGroupId, (counts.get(scenario.scenarioGroupId) ?? 0) + 1);
+    });
+    return counts;
+  }, [data]);
+  const scenarioMoveIds = useMemo(() => {
+    const existingIds = new Set(data.map((scenario) => scenario.id));
+    return scenarioMoveBuffer.itemIds.filter((id) => existingIds.has(id));
+  }, [data, scenarioMoveBuffer.itemIds]);
+  const scenarioMoveCount = scenarioMoveIds.length;
+  const isScenarioLibraryFilteredEmpty = hasScenarioLibraryFilters && visibleScenarios.length === 0;
+  const scenarioLibraryEmptyTitle = isScenarioLibraryFilteredEmpty
+    ? 'Ничего не найдено'
+    : currentGroupId
+      ? 'В группе пока нет сценариев'
+      : 'Сценариев пока нет';
+  const scenarioLibraryEmptyDescription = isScenarioLibraryFilteredEmpty
+    ? 'Измените поиск или фильтр тегов, чтобы увидеть другие сценарии.'
+    : currentGroupId
+      ? 'Создайте сценарий кнопкой выше или через контекстное меню этой области.'
+      : 'Чтобы создать сценарий или группу, нажмите правой кнопкой мыши по этой области.';
   const activeScenarioTags = activeScenario
     ? tagAssignments[tagAssignmentKey('scenario', activeScenario.id)] ?? []
     : [];
@@ -359,6 +431,21 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
   }, [initialScenarioId, data]);
 
   useEffect(() => {
+    if (!renamingGroupId) return;
+    const focusTimeout = window.setTimeout(() => {
+      renameGroupInputRef.current?.focus();
+      renameGroupInputRef.current?.select();
+    }, 0);
+
+    return () => window.clearTimeout(focusTimeout);
+  }, [renamingGroupId]);
+
+  useEffect(() => {
+    if (activeId) return;
+    librarySelection.pruneSelection(visibleScenarioIds);
+  }, [activeId, librarySelection, visibleScenarioIds, visibleScenarioIdKey]);
+
+  useEffect(() => {
     if (!activeId || graphLoadedScenarioId === activeId) return;
     void loadScenarioGraph(activeId);
   }, [activeId, graphLoadedScenarioId, loadScenarioGraph]);
@@ -398,14 +485,72 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
     void loadPreviewNodeEntityLinks(previewNodeId);
   }, [activeTab, loadPreviewNodeEntityLinks, previewNodeId]);
 
+  const startRenamingScenarioGroup = (group: ScenarioGroup) => {
+    setRenamingGroupId(group.id);
+    setRenamingGroupName(group.name);
+  };
+
+  const cancelScenarioGroupRename = () => {
+    setRenamingGroupId(null);
+    setRenamingGroupName('');
+  };
+
+  const commitScenarioGroupRename = async () => {
+    if (!renamingGroupId) return;
+    const group = scenarioGroups.find((candidate) => candidate.id === renamingGroupId);
+    const nextName = renamingGroupName.trim();
+    cancelScenarioGroupRename();
+
+    if (!group || !nextName || nextName === group.name) return;
+
+    try {
+      await onUpdateScenarioGroup(group.id, { name: nextName });
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleCreateScenarioGroup = async () => {
+    try {
+      const group = await onCreateScenarioGroup();
+      setSearchQuery('');
+      setSelectedTagFilter('');
+      returnToRoot();
+      librarySelection.clearSelection();
+      startRenamingScenarioGroup(group);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDeleteScenarioGroup = async (groupId: string) => {
+    const group = scenarioGroups.find((candidate) => candidate.id === groupId);
+    const label = group?.name ? ` "${group.name}"` : '';
+    if (!confirm(`Удалить группу${label}? Сценарии останутся без группы.`)) return;
+
+    try {
+      await onDeleteScenarioGroup(groupId);
+      if (currentGroupId === groupId) returnToRoot();
+      if (renamingGroupId === groupId) cancelScenarioGroupRename();
+      librarySelection.clearSelection();
+    } catch {
+      // ignore
+    }
+  };
+
   const handleCreateScenario = async () => {
     try {
       const created = await apiRequest('/scenarios', {
         method: 'POST',
-        body: JSON.stringify({ title: 'НОВЫЙ СЦЕНАРИЙ', description: '' })
+        body: JSON.stringify({
+          title: 'НОВЫЙ СЦЕНАРИЙ',
+          description: '',
+          ...(currentGroupId ? { scenario_group_id: currentGroupId } : {})
+        })
       });
       const scenario = mapScenarioSummary(created);
       onUpdate([...data, scenario]);
+      librarySelection.clearSelection();
       setActiveId(scenario.id);
       setActiveTab('graph');
       resetGraphState();
@@ -432,12 +577,13 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
     }
   };
 
-  const handleDeleteScenario = async (scenarioId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
+  const deleteScenarioById = async (scenarioId: string) => {
     if (!confirm('Удалить сценарий?')) return;
     try {
       await apiRequest(`/scenarios/${scenarioId}`, { method: 'DELETE' });
       onUpdate(data.filter((scenario) => scenario.id !== scenarioId));
+      librarySelection.clearSelection();
+      scenarioMoveBuffer.removeIds([scenarioId]);
       if (activeId === scenarioId) {
         setActiveId(null);
         resetGraphState();
@@ -446,6 +592,189 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
       // ignore
     }
   };
+
+  const handleDeleteScenario = async (scenarioId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    await deleteScenarioById(scenarioId);
+  };
+
+  const cutScenariosToClipboard = (scenarioId?: string | null) => {
+    const existingIds = new Set(data.map((scenario) => scenario.id));
+    const targetIds = librarySelection
+      .getActionTargetIds(scenarioId)
+      .filter((id) => existingIds.has(id));
+
+    if (targetIds.length === 0) return;
+    scenarioMoveBuffer.cut(targetIds);
+  };
+
+  const moveScenariosToGroup = async (itemIds: string[], targetGroupId: string | null) => {
+    const existingIds = new Set(data.map((scenario) => scenario.id));
+    const targetIds = itemIds.filter((id) => existingIds.has(id));
+    if (targetIds.length === 0) return;
+
+    const updatedScenarios = await Promise.all(
+      targetIds.map(async (scenarioId) => {
+        const updated = await apiRequest(`/scenarios/${scenarioId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ scenario_group_id: targetGroupId })
+        });
+        return mapScenarioSummary(updated);
+      })
+    );
+    const updatedById = new Map(updatedScenarios.map((scenario) => [scenario.id, scenario]));
+    onUpdate(data.map((scenario) => updatedById.get(scenario.id) ?? scenario));
+  };
+
+  const pasteScenariosToGroup = async (targetGroupId: string | null) => {
+    try {
+      await scenarioMoveBuffer.paste(async (bufferedIds) => {
+        await moveScenariosToGroup(bufferedIds, targetGroupId);
+      });
+      librarySelection.clearSelection();
+    } catch {
+      // ignore
+    }
+  };
+
+  const libraryDragDrop = useEntityLibraryDragDrop({
+    getDragItemIds: (scenarioId) => librarySelection.getActionTargetIds(scenarioId),
+    onDropItems: async ({ itemIds, targetGroupId }) => {
+      try {
+        await moveScenariosToGroup(itemIds, targetGroupId);
+        librarySelection.clearSelection();
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  const getScenarioLibraryContextSections = (): EntityLibraryActionSection[] => {
+    const context = libraryContextMenu.contextMenu;
+    if (!context) return [];
+
+    if (context.kind === 'workspace') {
+      return [
+        {
+          actions: [
+            {
+              id: 'create-scenario',
+              label: 'Создать сценарий',
+              icon: <Plus size={13} />,
+              onSelect: () => void handleCreateScenario()
+            },
+            {
+              id: 'create-group',
+              label: 'Создать группу',
+              icon: <FolderPlus size={13} />,
+              hidden: !libraryIsRoot,
+              onSelect: () => void handleCreateScenarioGroup()
+            },
+            {
+              id: 'paste-scenarios',
+              label: context.groupId ? 'Вставить сюда' : 'Вставить в корень',
+              icon: <ClipboardPaste size={13} />,
+              disabled: scenarioMoveCount === 0,
+              onSelect: () => void pasteScenariosToGroup(context.groupId)
+            }
+          ]
+        }
+      ];
+    }
+
+    if (context.kind === 'group') {
+      const group = scenarioGroups.find((candidate) => candidate.id === context.groupId);
+      return [
+        {
+          actions: [
+            {
+              id: 'open-group',
+              label: 'Открыть группу',
+              icon: <FolderOpen size={13} />,
+              onSelect: () => {
+                openGroup(context.groupId);
+                librarySelection.clearSelection();
+              }
+            },
+            {
+              id: 'rename-group',
+              label: 'Переименовать',
+              icon: <Pencil size={13} />,
+              disabled: !group,
+              onSelect: () => {
+                if (group) startRenamingScenarioGroup(group);
+              }
+            },
+            {
+              id: 'paste-to-group',
+              label: 'Вставить в группу',
+              icon: <ClipboardPaste size={13} />,
+              disabled: scenarioMoveCount === 0,
+              onSelect: () => void pasteScenariosToGroup(context.groupId)
+            }
+          ]
+        },
+        {
+          actions: [
+            {
+              id: 'delete-group',
+              label: 'Удалить группу',
+              icon: <Trash2 size={13} />,
+              destructive: true,
+              onSelect: () => void handleDeleteScenarioGroup(context.groupId)
+            }
+          ]
+        }
+      ];
+    }
+
+    const targetIds = librarySelection.getActionTargetIds(context.itemId);
+    const cutLabel = targetIds.length > 1 ? 'Вырезать выбранное' : 'Вырезать';
+
+    return [
+      {
+        actions: [
+          {
+            id: 'open-scenario',
+            label: 'Открыть',
+            icon: <FolderOpen size={13} />,
+            onSelect: () => void handleSelectScenario(context.itemId)
+          },
+          {
+            id: 'cut-scenario',
+            label: cutLabel,
+            icon: <Scissors size={13} />,
+            onSelect: () => cutScenariosToClipboard(context.itemId)
+          }
+        ]
+      },
+      {
+        actions: [
+          {
+            id: 'delete-scenario',
+            label: 'Удалить',
+            icon: <Trash2 size={13} />,
+            destructive: true,
+            onSelect: () => void deleteScenarioById(context.itemId)
+          }
+        ]
+      }
+    ];
+  };
+
+  useEntityLibraryKeyboard({
+    enabled: !activeId,
+    contextMenuOpen: Boolean(libraryContextMenu.contextMenu),
+    onCloseContextMenu: libraryContextMenu.closeContextMenu,
+    renameActive: Boolean(renamingGroupId),
+    onCancelRename: cancelScenarioGroupRename,
+    selectedIds: librarySelection.selectedIds,
+    onClearSelection: librarySelection.clearSelection,
+    moveBufferCount: scenarioMoveCount,
+    onCancelMoveBuffer: scenarioMoveBuffer.cancel,
+    onOpenSelected: (scenarioId) => void handleSelectScenario(scenarioId),
+    onDeleteSelected: (scenarioId) => void deleteScenarioById(scenarioId)
+  });
 
   const updateScenarioField = (field: keyof Scenario, value: string) => {
     if (!activeId) return;
@@ -530,48 +859,14 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
   const findScenarioCompositionLink = (targetType: EntityLinkTargetType, targetId: string): EntityLink | undefined =>
     activeScenarioCompositionLinks.find((link) => link.targetType === targetType && link.targetId === targetId);
 
-  const removeLegacyScenarioRelation = async (targetType: EntityLinkTargetType, targetId: string) => {
-    if (!activeScenario) return;
-
-    if (targetType === 'character') {
-      const target = characters.find((character) => character.id === targetId);
-      if (target?.scenarioId !== activeScenario.id) return;
-
-      const updated = await apiRequest(`/characters/${targetId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ scenario_id: null })
-      });
-      const mapped = mapCharacterFromApi(updated);
-      onUpdateCharacters(characters.map((character) => (character.id === mapped.id ? mapped : character)));
-    }
-
-    if (targetType === 'map') {
-      const target = maps.find((map) => map.id === targetId);
-      if (target?.scenarioId !== activeScenario.id) return;
-
-      const updated = await apiRequest(`/maps/${targetId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ scenario_id: null })
-      });
-      const mapped = mapMapFromApi(updated);
-      onUpdateMaps(maps.map((map) => (map.id === mapped.id ? mapped : map)));
-    }
-  };
-
   const toggleScenarioComposition = async (targetType: EntityLinkTargetType, targetId: string) => {
     if (!activeScenario || !['character', 'map', 'item'].includes(targetType)) return;
 
     const existingLink = findScenarioCompositionLink(targetType, targetId);
-    const isLegacyCharacter = targetType === 'character'
-      && characters.some((character) => character.id === targetId && character.scenarioId === activeScenario.id);
-    const isLegacyMap = targetType === 'map'
-      && maps.some((map) => map.id === targetId && map.scenarioId === activeScenario.id);
-    const isAssigned = Boolean(existingLink || isLegacyCharacter || isLegacyMap);
 
     try {
-      if (isAssigned) {
-        if (existingLink) await onDeleteMaterialLink(existingLink.id);
-        await removeLegacyScenarioRelation(targetType, targetId);
+      if (existingLink) {
+        await onDeleteMaterialLink(existingLink.id);
         return;
       }
 
@@ -1087,34 +1382,238 @@ const ScenarioEditor: React.FC<ScenarioEditorProps> = ({
 
   if (!activeId) {
     return (
-      <div className="flex h-full w-full bg-[var(--bg-main)]">
-        <div className="flex-1 flex flex-col min-w-0 bauhaus-bg relative border-r border-[var(--border-color)]">
-          <div className="px-12 pt-12 pb-6 shrink-0 z-10">
-            <div className="mx-auto w-full max-w-7xl">
+      <div className="flex h-full w-full flex-col bg-[var(--bg-main)] bauhaus-bg">
+        <div className="shrink-0 px-8 pb-5 pt-7">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+            <div className="flex flex-col gap-4">
               <SectionHeader
                 title="СЦЕНАРНАЯ МАСТЕРСКАЯ"
-                subtitle="КОНСТРУКТОР СЮЖЕТОВ"
-                accentColor="var(--col-red)"
+                subtitle="Конструктор сюжетов"
+                  accentColor="var(--col-red)"
               />
+              {!libraryIsRoot && currentScenarioGroup && (
+                <div className="mono flex flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-[0.28em] text-[var(--text-muted)]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      returnToRoot();
+                      librarySelection.clearSelection();
+                    }}
+                    className="transition-colors hover:text-[var(--col-red)]"
+                  >
+                    Сценарии
+                  </button>
+                  <span>/</span>
+                  <span className="text-[var(--text-main)]">{currentScenarioGroup.name}</span>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="min-w-[260px] flex-1">
+                <SearchInput
+                value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="НАЗВАНИЕ..."
+                  accentColor="var(--col-red)"
+                />
+              </div>
+              <div className="min-w-[220px]">
+                <TagFilter
+                  tags={tags}
+                  value={selectedTagFilter}
+                    onChange={setSelectedTagFilter}
+                    accentColor="var(--col-red)"
+                />
+              </div>
+              {!libraryIsRoot && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    returnToRoot();
+                    librarySelection.clearSelection();
+                  }}
+                  className="h-11 border-2 border-[var(--border-color)] px-4 mono text-[10px] font-black uppercase text-[var(--text-muted)] transition-colors hover:border-[var(--col-red)] hover:text-[var(--col-red)]"
+                >
+                  Все сценарии
+                </button>
+              )}
+              <div className="flex-1" />
+              <Button variant="accent-red" onClick={handleCreateScenario}>
+                <Plus size={16} /> Создать сценарий
+              </Button>
             </div>
           </div>
-          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center opacity-70">
-            <Button variant="accent-red" onClick={handleCreateScenario}>
-              <Plus size={16} /> СОЗДАТЬ СЦЕНАРИЙ
-            </Button>
+        </div>
+        <div className="min-h-0 flex-1 px-8 pb-8 pt-3">
+          <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3">
+            {scenarioMoveCount > 0 && (
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-2 border-[var(--col-red)] bg-[var(--col-red)]/10 px-4 py-3">
+                <div className="mono text-[10px] uppercase font-black text-[var(--text-main)]">
+                  Вырезано сценариев: <span className="text-[var(--col-red)]">{scenarioMoveCount}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void pasteScenariosToGroup(currentGroupId)}
+                    className="inline-flex h-9 items-center gap-2 border border-[var(--col-red)] px-3 mono text-[9px] font-black uppercase text-[var(--col-red)] transition-colors hover:bg-[var(--col-red)] hover:text-[var(--text-inverted)]"
+                  >
+                    <ClipboardPaste size={13} /> Вставить сюда
+                  </button>
+                  <button
+                    type="button"
+                    onClick={scenarioMoveBuffer.cancel}
+                    className="inline-flex h-9 items-center gap-2 border border-[var(--border-color)] px-3 mono text-[9px] font-black uppercase text-[var(--text-muted)] transition-colors hover:border-[var(--text-main)] hover:text-[var(--text-main)]"
+                  >
+                    <X size={13} /> Отменить
+                  </button>
+                </div>
+              </div>
+            )}
+            <EntityLibraryWorkspace<Scenario, ScenarioGroup>
+              items={visibleScenarios}
+              groups={visibleScenarioGroups}
+              getItemId={(scenario) => scenario.id}
+              getGroupId={(group) => group.id}
+              selectedIds={librarySelection.selectedIds}
+              cutItemIds={scenarioMoveBuffer.itemIds}
+              draggingItemIds={libraryDragDrop.draggingIds}
+              dragOverGroupId={libraryDragDrop.dragOverGroupId}
+              currentGroupId={currentGroupId}
+              draggableItems
+              surface="transparent"
+              framed
+              className="min-h-[420px] flex-1"
+              gridClassName=""
+              onSelectItem={(scenarioId, _scenario, event) => librarySelection.selectFromEvent(scenarioId, event, visibleScenarioIds)}
+              onOpenItem={(scenarioId) => {
+                void handleSelectScenario(scenarioId);
+              }}
+              onOpenGroup={(groupId) => {
+                openGroup(groupId);
+                librarySelection.clearSelection();
+              }}
+              onClearSelection={librarySelection.clearSelection}
+              onWorkspaceContextMenu={(context) => {
+                libraryContextMenu.setContextMenu(context);
+              }}
+              onItemContextMenu={(scenarioId, _scenario, event) => {
+                if (!librarySelection.isSelected(scenarioId)) librarySelection.replaceSelection(scenarioId);
+                libraryContextMenu.openItemMenu(event, scenarioId, currentGroupId);
+              }}
+              onGroupContextMenu={(groupId, _group, event) => {
+                librarySelection.clearSelection();
+                libraryContextMenu.openGroupMenu(event, groupId);
+              }}
+              onItemDragStart={(scenarioId, _scenario, event) => {
+                if (!librarySelection.isSelected(scenarioId)) librarySelection.replaceSelection(scenarioId);
+                libraryDragDrop.handleItemDragStart(scenarioId, event);
+              }}
+              onItemDragEnd={(_scenarioId, _scenario, _event) => {
+                libraryDragDrop.handleItemDragEnd();
+              }}
+              onWorkspaceDragOver={(groupId, event) => libraryDragDrop.handleWorkspaceDragOver(groupId, event)}
+              onWorkspaceDragLeave={(groupId, event) => libraryDragDrop.handleWorkspaceDragLeave(groupId, event)}
+              onWorkspaceDrop={(groupId, event) => libraryDragDrop.handleWorkspaceDrop(groupId, event)}
+              onGroupDragOver={(groupId, _group, event) => libraryDragDrop.handleGroupDragOver(groupId, event)}
+              onGroupDragLeave={(groupId, _group, event) => libraryDragDrop.handleGroupDragLeave(groupId, event)}
+              onGroupDrop={(groupId, _group, event) => libraryDragDrop.handleGroupDrop(groupId, event)}
+              renderGroup={(group, state) => (
+                <EntityLibraryGroupCard
+                  name={group.name}
+                  nameContent={renamingGroupId === group.id ? (
+                    <input
+                      ref={renameGroupInputRef}
+                      value={renamingGroupName}
+                        onChange={(event) => setRenamingGroupName(event.target.value)}
+                      onBlur={() => void commitScenarioGroupRename()}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          void commitScenarioGroupRename();
+                        }
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          cancelScenarioGroupRename();
+                        }
+                      }}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                      onContextMenu={(event) => event.stopPropagation()}
+                      className="w-full bg-transparent mono text-[10px] uppercase font-black tracking-[0.2em] text-[var(--text-main)] outline-none"
+                    />
+                  ) : undefined}
+                  count={scenarioGroupCountById.get(group.id) ?? 0}
+                  accentColor="var(--col-red)"
+                  dragOver={state.dragOver}
+                />
+              )}
+              renderItem={(scenario, state) => {
+                const groupName = scenario.scenarioGroupId
+                  ? scenarioGroups.find((group) => group.id === scenario.scenarioGroupId)?.name
+                  : null;
+                const dateLabel = (scenario.updatedAt ?? scenario.createdAt).split('T')[0];
+                const isCut = scenarioMoveIds.includes(scenario.id);
+                return (
+                  <EntityLibraryCard
+                    title={scenario.title}
+                      accentColor="var(--col-red)"
+                    selected={state.selected}
+                    cut={state.cut}
+                    dragging={state.dragging}
+                    loading={loadingScenarioId === scenario.id}
+                    headerExtra={
+                      <>
+                        {isCut && (
+                          <span className="border border-[var(--col-red)] px-2 py-1 mono text-[8px] uppercase font-black text-[var(--col-red)]">
+                            ВЫРЕЗАНО
+                          </span>
+                        )}
+                        <button
+                        type="button"
+                        onClick={(event) => handleDeleteScenario(scenario.id, event)}
+                        className="p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--col-red)]"
+                        title="Удалить сценарий"
+                        aria-label="Удалить сценарий"
+                      >
+                        <Trash2 size={14} />
+                        </button>
+                      </>
+                    }
+                  >
+                    <div className="flex h-full flex-col justify-between gap-5">
+                      <p className="mono line-clamp-3 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+                        {scenario.description || 'Описание пока не добавлено.'}
+                      </p>
+                      <div className="space-y-3 border-t border-[var(--border-color)] pt-4">
+                        <div className="flex items-center justify-between gap-3 mono text-[9px] uppercase text-[var(--text-muted)]">
+                          <span>{dateLabel}</span>
+                          <span className="font-black text-[var(--col-red)]">GRAPH</span>
+                        </div>
+                        <div className="mono text-[9px] uppercase text-[var(--text-muted)]">
+                          {groupName ? `Группа: ${groupName}` : 'Без группы'}
+                        </div>
+                      </div>
+                    </div>
+                  </EntityLibraryCard>
+                );
+              }}
+              emptyTitle={scenarioLibraryEmptyTitle}
+              emptyDescription={scenarioLibraryEmptyDescription}
+              emptyAction={
+                isScenarioLibraryFilteredEmpty ? null : <Button variant="accent-red" onClick={handleCreateScenario}>
+                  <Plus size={16} /> СОЗДАТЬ СЦЕНАРИЙ
+                </Button>
+              }
+            />
+            <EntityLibraryContextMenu
+              context={libraryContextMenu.contextMenu}
+              sections={getScenarioLibraryContextSections()}
+              onClose={libraryContextMenu.closeContextMenu}
+              accentColor="var(--col-red)"
+            />
           </div>
         </div>
-        <ScenarioListPanel
-          scenarios={visibleScenarios}
-          searchQuery={searchQuery}
-          tags={tags}
-          selectedTagId={selectedTagFilter}
-          loadingScenarioId={loadingScenarioId}
-          onSearchChange={setSearchQuery}
-          onTagFilterChange={setSelectedTagFilter}
-          onSelectScenario={handleSelectScenario}
-          onDeleteScenario={handleDeleteScenario}
-        />
       </div>
     );
   }

@@ -1,8 +1,6 @@
 
-import Image from 'next/image';
 import React, { useEffect, useRef, useState } from 'react';
-import { BaseCard } from './BaseCard';
-import { Button, Input, SearchInput, Select, AddTile, SectionHeader, StatBadge, TextArea } from './UI';
+import { Button, Input, SearchInput, Select, SectionHeader, StatBadge, TextArea } from './UI';
 import { Modal } from './Modal';
 import {
   Asset,
@@ -15,46 +13,62 @@ import {
   EntityLinkAssignmentMap,
   EntityLinkCreatePayload,
   EntityLinkTargetType,
-  EntityLinkUpdatePayload,
-  Faction,
   Item,
   StatKey,
   ItemRarity,
-  MapData,
   PublishedContent,
   PublicationAssignmentMap,
   PublicationTargetType,
   PublicationUpdatePayload,
   PublicationUpsertPayload,
-  Scenario,
   Tag,
   TagAssignmentMap,
-  TaggableTargetType,
-  WorldEvent,
-  WorldLocation
+  TaggableTargetType
 } from '../types';
 import { apiRequest } from '../lib/api';
 import { assetCollectionAssignmentKey, entityLinkAssignmentKey, mapCharacterFromApi, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
-import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
+import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink } from '../lib/assetUsage';
 import { TagFilter, TagPicker } from './TagPicker';
-import { EntityLinksPanel } from './EntityLinksPanel';
 import { AssetUsagePicker } from './AssetUsagePicker';
 import { AssetCollectionTargetPicker } from './AssetCollectionTargetPicker';
 import { PublicationPanel } from './PublicationPanel';
-import { UserPlus, Zap, Edit3, Save, Scale, Package, Plus, X } from 'lucide-react';
+import {
+  ClipboardPaste,
+  FolderOpen,
+  FolderPlus,
+  Pencil,
+  Scissors,
+  Trash2,
+  UserPlus,
+  Zap,
+  Edit3,
+  Save,
+  Package,
+  Plus,
+  X
+} from 'lucide-react';
+import {
+  EntityLibraryCard,
+  EntityLibraryContextMenu,
+  EntityLibraryGroupCard,
+  EntityLibraryMediaSlot,
+  EntityLibraryWorkspace,
+  type EntityLibraryActionSection,
+  useEntityLibraryContextMenu,
+  useEntityLibraryDragDrop,
+  useEntityLibraryKeyboard,
+  useEntityLibraryMoveBuffer,
+  useEntityLibraryNavigation,
+  useEntityLibrarySelection
+} from './entityLibrary';
 
 interface CharactersEditorProps {
   data: Character[];
   onUpdate: (data: Character[]) => void;
   items: Item[];
-  scenarios: Scenario[];
-  maps: MapData[];
   assets: Asset[];
   assetCollections: AssetCollection[];
   assetCollectionAssignments: AssetCollectionAssignmentMap;
-  locations: WorldLocation[];
-  factions: Faction[];
-  events: WorldEvent[];
   tags: Tag[];
   tagAssignments: TagAssignmentMap;
   entityLinks: EntityLinkAssignmentMap;
@@ -63,12 +77,10 @@ interface CharactersEditorProps {
   onUpdateTag: (id: string, name: string) => Promise<Tag>;
   onDeleteTag: (id: string) => Promise<void>;
   onCreateMaterialLink: (sourceType: EntityLinkTargetType, sourceId: string, payload: EntityLinkCreatePayload) => Promise<EntityLink>;
-  onUpdateMaterialLink: (id: string, payload: EntityLinkUpdatePayload) => Promise<EntityLink>;
   onDeleteMaterialLink: (id: string) => Promise<void>;
   onUpsertPublication: (type: PublicationTargetType, id: string, payload: PublicationUpsertPayload) => Promise<PublishedContent>;
   onUpdatePublication: (id: string, payload: PublicationUpdatePayload) => Promise<PublishedContent>;
   onDeletePublication: (id: string) => Promise<void>;
-  onOpenMaterialLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
   onReplaceAssetCollections: (type: AssetCollectionTargetType, id: string, collectionIds: string[]) => Promise<AssetCollection[]>;
   initialCharacterId?: string | null;
   characterGroups: CharacterGroup[];
@@ -88,7 +100,13 @@ const RARITY_COLORS: Record<ItemRarity, string> = {
   'Обычный': 'var(--col-grey)',
 };
 
-const ROLE_COLORS = { 'Герой': 'var(--col-yellow)', 'NPC': 'var(--col-purple)', 'Монстр': 'var(--col-red)', 'ВСЕ': 'var(--col-white)' };
+const ROLE_COLORS = { 'Герой': 'var(--col-yellow)', 'NPC': 'var(--col-purple)', 'Монстр': 'var(--col-red)' };
+const ROLE_FILTER_OPTIONS = [
+  { value: 'all', label: 'ВСЕ' },
+  { value: 'Герой', label: 'ГЕРОЙ' },
+  { value: 'NPC', label: 'NPC' },
+  { value: 'Монстр', label: 'МОНСТР' }
+];
 
 const EMPTY_STATS: Record<StatKey, number> = { 'АТК': 10, 'ЗАЩ': 10, 'СИЛ': 10, 'ЛОВ': 10, 'ВЫН': 10, 'ИНТ': 10, 'МДР': 10, 'ХАР': 10, 'УДЧ': 10 };
 
@@ -104,20 +122,15 @@ const STAT_HINTS: Record<StatKey, string> = {
   'УДЧ': 'Удача: случайные шансы, редкие находки и рискованные исходы.'
 };
 
-const EMPTY_CHARACTER: Partial<Character> = { name: '', role: 'NPC', race: 'ЧЕЛОВЕК', description: '', level: 1, baseStats: { ...EMPTY_STATS }, inventory: [] };
+const EMPTY_CHARACTER: Partial<Character> = { name: '', role: 'NPC', race: 'ЧЕЛОВЕК', description: '', baseStats: { ...EMPTY_STATS }, inventory: [] };
 
 const CharactersEditor: React.FC<CharactersEditorProps> = ({
   data,
   onUpdate,
   items,
-  scenarios,
-  maps,
   assets,
   assetCollections,
   assetCollectionAssignments,
-  locations,
-  factions,
-  events,
   tags,
   tagAssignments,
   entityLinks,
@@ -126,12 +139,10 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
   onUpdateTag,
   onDeleteTag,
   onCreateMaterialLink,
-  onUpdateMaterialLink,
   onDeleteMaterialLink,
   onUpsertPublication,
   onUpdatePublication,
   onDeletePublication,
-  onOpenMaterialLink,
   onReplaceAssetCollections,
   initialCharacterId,
   characterGroups,
@@ -141,15 +152,18 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTagFilter, setSelectedTagFilter] = useState('');
-  const [activeGroupId, setActiveGroupId] = useState<'all' | 'none' | string>('all');
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [renamingGroupName, setRenamingGroupName] = useState('');
-  const [activeRole, setActiveRole] = useState<'ВСЕ' | 'Герой' | 'NPC' | 'Монстр'>('ВСЕ');
-  const [sortOrder, setSortOrder] = useState('NAME_ASC');
+  const [activeRole, setActiveRole] = useState<'all' | 'Герой' | 'NPC' | 'Монстр'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Character>>(EMPTY_CHARACTER);
   const initialCharacterAppliedRef = useRef<string | null>(null);
+  const librarySelection = useEntityLibrarySelection({ mode: 'multi' });
+  const libraryNavigation = useEntityLibraryNavigation();
+  const libraryContextMenu = useEntityLibraryContextMenu();
+  const moveBuffer = useEntityLibraryMoveBuffer();
+  const { currentGroupId, isRoot: libraryIsRoot, openGroup, returnToRoot } = libraryNavigation;
 
   const calculateEffectiveStats = (char: Partial<Character>) => {
     const effective = { ...(char.baseStats || EMPTY_STATS) };
@@ -211,10 +225,6 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     );
   };
 
-  const calculateWeight = (inventory: string[]) => inventory.reduce((acc, id) => acc + (items.find(i => i.id === id)?.weight || 0), 0);
-
-  const maxWeight = (formData.baseStats?.СИЛ || 10) * 5;
-  const currentWeight = calculateWeight(formData.inventory || []);
   const inventorySlots = 12;
 
   const handleOpenEdit = (char: Character) => { setEditingId(char.id); setFormData({ ...char }); setIsModalOpen(true); };
@@ -222,7 +232,7 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     setEditingId(null);
     setFormData({
       ...EMPTY_CHARACTER,
-      groupId: activeGroupId !== 'all' && activeGroupId !== 'none' ? activeGroupId : null
+      groupId: currentGroupId
     });
     setIsModalOpen(true);
   };
@@ -245,10 +255,8 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
       role: formData.role ?? 'NPC',
       race: formData.race ?? '',
       description: formData.description ?? '',
-      level: formData.level ?? 1,
       stats: formData.baseStats ?? { ...EMPTY_STATS },
       inventory: formData.inventory ?? [],
-      scenario_id: formData.scenarioId ?? null,
       group_id: formData.groupId ?? null
     };
 
@@ -279,6 +287,8 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     try {
       await apiRequest(`/characters/${id}`, { method: 'DELETE' });
       onUpdate(data.filter(c => c.id !== id));
+      librarySelection.clearSelection();
+      moveBuffer.removeIds([id]);
     } catch {
       // ignore
     }
@@ -289,33 +299,55 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     const index = inv.indexOf(id);
     if (index > -1) inv.splice(index, 1);
     else {
-      const item = items.find((candidate) => candidate.id === id);
-      const nextWeight = currentWeight + (item?.weight || 0);
       if (inv.length >= inventorySlots) return alert('ИНВЕНТАРЬ ПЕРЕПОЛНЕН');
-      if (nextWeight > maxWeight) return alert('ПРЕДМЕТ ПРИВЕДЕТ К ПЕРЕВЕСУ');
       inv.push(id);
     }
     setFormData({ ...formData, inventory: inv });
   };
 
+  const hasLibraryFilters = searchQuery.trim().length > 0 || Boolean(selectedTagFilter) || activeRole !== 'all';
+  const currentCharacterGroup = currentGroupId ? characterGroups.find((group) => group.id === currentGroupId) : null;
+  const visibleCharacterGroups = libraryIsRoot && !hasLibraryFilters ? characterGroups : [];
+  const characterGroupCountById = new Map(characterGroups.map((group) => [
+    group.id,
+    data.filter((character) => character.groupId === group.id).length
+  ]));
+
   const filteredCharacters = data
     .filter(c => {
       const assignedTags = tagAssignments[tagAssignmentKey('character', c.id)] ?? [];
-      return c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        (activeRole === 'ВСЕ' || c.role === activeRole) &&
-        (activeGroupId === 'all' || (activeGroupId === 'none' ? !c.groupId : c.groupId === activeGroupId)) &&
+      const matchesContext = libraryIsRoot ? !c.groupId : c.groupId === currentGroupId;
+      return matchesContext &&
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (activeRole === 'all' || c.role === activeRole) &&
         (!selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter));
     })
     .sort((a, b) => {
-      if (sortOrder === 'NAME_ASC') return a.name.localeCompare(b.name);
-      if (sortOrder === 'LEVEL_DESC') return b.level - a.level;
-      if (sortOrder === 'WEIGHT_DESC') return calculateWeight(b.inventory) - calculateWeight(a.inventory);
-      return 0;
+      return a.name.localeCompare(b.name);
     });
+  const visibleCharacterIds = filteredCharacters.map((character) => character.id);
+  const visibleCharacterIdKey = visibleCharacterIds.join('|');
+  const isCharacterLibraryFilteredEmpty = data.length > 0 && filteredCharacters.length === 0 && hasLibraryFilters;
+  const characterLibraryEmptyTitle = isCharacterLibraryFilteredEmpty
+    ? 'Ничего не найдено'
+    : libraryIsRoot
+      ? 'Персонажей пока нет'
+      : 'В группе пока нет персонажей';
+  const characterLibraryEmptyDescription = isCharacterLibraryFilteredEmpty
+    ? 'Попробуйте изменить поиск, тег или фильтр роли.'
+    : libraryIsRoot
+      ? 'Чтобы создать персонажа или группу, нажмите правой кнопкой мыши по этой области.'
+      : 'Чтобы создать персонажа в текущей группе, нажмите правой кнопкой мыши по этой области.';
+
+  useEffect(() => {
+    librarySelection.pruneSelection(visibleCharacterIds);
+  }, [librarySelection, visibleCharacterIdKey, visibleCharacterIds]);
 
   const createGroup = async () => {
     const created = await onCreateCharacterGroup();
-    setActiveGroupId(created.id);
+    openGroup(created.id);
+    librarySelection.clearSelection();
+    startRenameGroup(created);
   };
 
   const startRenameGroup = (group: CharacterGroup) => {
@@ -323,105 +355,341 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     setRenamingGroupName(group.name);
   };
 
+  const cancelRenameGroup = () => {
+    setRenamingGroupId(null);
+    setRenamingGroupName('');
+  };
+
   const commitRenameGroup = async () => {
     if (!renamingGroupId) return;
     const groupId = renamingGroupId;
     const name = renamingGroupName.trim();
-    setRenamingGroupId(null);
+    cancelRenameGroup();
     if (name) await onUpdateCharacterGroup(groupId, { name });
   };
 
   const deleteGroup = async (groupId: string) => {
     if (!confirm('Удалить группу? Персонажи останутся без группы.')) return;
     await onDeleteCharacterGroup(groupId);
-    if (activeGroupId === groupId) setActiveGroupId('all');
+    if (currentGroupId === groupId) returnToRoot();
+    if (renamingGroupId === groupId) cancelRenameGroup();
+    librarySelection.clearSelection();
   };
 
+  const cutCharactersToClipboard = (characterId?: string | null) => {
+    const existingIds = new Set(data.map((character) => character.id));
+    const targetIds = librarySelection
+      .getActionTargetIds(characterId)
+      .filter((id) => existingIds.has(id));
+
+    if (targetIds.length === 0) return;
+    moveBuffer.cut(targetIds);
+  };
+
+  const moveCharactersToGroup = async (characterIds: string[], targetGroupId: string | null) => {
+    const existingIds = new Set(data.map((character) => character.id));
+    const targetIds = characterIds.filter((id) => existingIds.has(id));
+    if (targetIds.length === 0) return;
+
+    const updatedCharacters = await Promise.all(
+      targetIds.map(async (characterId) => {
+        const updated = await apiRequest(`/characters/${characterId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ group_id: targetGroupId })
+        });
+        return mapCharacterFromApi(updated);
+      })
+    );
+    const updatedById = new Map(updatedCharacters.map((character) => [character.id, character]));
+    onUpdate(data.map((character) => updatedById.get(character.id) ?? character));
+  };
+
+  const pasteCharactersToGroup = async (targetGroupId: string | null) => {
+    try {
+      await moveBuffer.paste(async (bufferedIds) => {
+        await moveCharactersToGroup(bufferedIds, targetGroupId);
+      });
+      librarySelection.clearSelection();
+    } catch {
+      // ignore
+    }
+  };
+
+  const libraryDragDrop = useEntityLibraryDragDrop({
+    getDragItemIds: (characterId) => librarySelection.getActionTargetIds(characterId),
+    onDropItems: async ({ itemIds, targetGroupId }) => {
+      try {
+        await moveCharactersToGroup(itemIds, targetGroupId);
+        librarySelection.clearSelection();
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  const getCharacterLibraryContextSections = (): EntityLibraryActionSection[] => {
+    const context = libraryContextMenu.contextMenu;
+    if (!context) return [];
+
+    if (context.kind === 'workspace') {
+      return [
+        {
+          actions: [
+            { id: 'create-character', label: 'Создать персонажа', icon: <UserPlus size={13} />, onSelect: handleOpenCreate },
+            { id: 'create-group', label: 'Создать группу', icon: <FolderPlus size={13} />, hidden: !libraryIsRoot, onSelect: () => void createGroup() },
+            { id: 'paste-character', label: context.groupId ? 'Вставить сюда' : 'Вставить в корень', icon: <ClipboardPaste size={13} />, disabled: moveBuffer.count === 0, onSelect: () => void pasteCharactersToGroup(context.groupId) }
+          ]
+        }
+      ];
+    }
+
+    if (context.kind === 'group') {
+      const group = characterGroups.find((candidate) => candidate.id === context.groupId);
+      return [
+        {
+          actions: [
+            { id: 'open-group', label: 'Открыть группу', icon: <FolderOpen size={13} />, onSelect: () => { openGroup(context.groupId); librarySelection.clearSelection(); } },
+            { id: 'rename-group', label: 'Переименовать', icon: <Pencil size={13} />, disabled: !group, onSelect: () => { if (group) startRenameGroup(group); } },
+            { id: 'paste-to-group', label: 'Вставить в группу', icon: <ClipboardPaste size={13} />, disabled: moveBuffer.count === 0, onSelect: () => void pasteCharactersToGroup(context.groupId) }
+          ]
+        },
+        {
+          actions: [
+            { id: 'delete-group', label: 'Удалить группу', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void deleteGroup(context.groupId) }
+          ]
+        }
+      ];
+    }
+
+    const targetIds = librarySelection.getActionTargetIds(context.itemId);
+    return [
+      {
+        actions: [
+          { id: 'open-character', label: 'Редактировать', icon: <Edit3 size={13} />, onSelect: () => { const character = data.find((candidate) => candidate.id === context.itemId); if (character) handleOpenEdit(character); } },
+          { id: 'cut-character', label: targetIds.length > 1 ? 'Вырезать выбранное' : 'Вырезать', icon: <Scissors size={13} />, onSelect: () => cutCharactersToClipboard(context.itemId) }
+        ]
+      },
+      {
+        actions: [
+          { id: 'delete-character', label: 'Удалить', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void handleDelete(context.itemId) }
+        ]
+      }
+    ];
+  };
+
+  useEntityLibraryKeyboard({
+    contextMenuOpen: Boolean(libraryContextMenu.contextMenu),
+    onCloseContextMenu: libraryContextMenu.closeContextMenu,
+    renameActive: Boolean(renamingGroupId),
+    onCancelRename: cancelRenameGroup,
+    selectedIds: librarySelection.selectedIds,
+    onClearSelection: librarySelection.clearSelection,
+    moveBufferCount: moveBuffer.count,
+    onCancelMoveBuffer: moveBuffer.cancel,
+    onOpenSelected: (characterId) => {
+      const character = data.find((candidate) => candidate.id === characterId);
+      if (character) handleOpenEdit(character);
+    },
+    onDeleteSelected: (characterId) => void handleDelete(characterId)
+  });
+
   return (
-    <div className="flex h-full w-full">
-      <div className="flex-1 bg-[var(--bg-main)] overflow-auto p-12 bauhaus-bg">
-        <div className="max-w-6xl mx-auto">
-          <SectionHeader title="РЕЕСТР СУЩЕСТВ" subtitle="NPC И ГЕРОИ ТЕКУЩЕГО МИРА" accentColor={SECTION_ACCENT} actions={<Button color="yellow" onClick={handleOpenCreate}><UserPlus size={16} /> НОВЫЙ ГЕРОЙ</Button>} />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 pb-20">
-            {filteredCharacters.map(char => {
-              const { effective: eff, bonus: bns } = calculateEffectiveStats(char);
-              const accent = ROLE_COLORS[char.role as keyof typeof ROLE_COLORS] || 'var(--col-blue)';
-              const portraitAsset = findAssetForUsage(linksForCharacter(char.id), assets, 'portrait');
-              return (
-                <BaseCard key={char.id} title={char.name} accentColor={accent}>
-                  <div className="space-y-6 flex flex-col h-full">
-                    {portraitAsset?.url && (
-                      <div className="relative h-36 border border-[var(--border-color)] bg-black overflow-hidden">
-                        <Image
-                          src={portraitAsset.url}
-                          alt={portraitAsset.name}
-                          fill
-                          sizes="360px"
-                          unoptimized
-                          className="object-cover"
-                        />
-                      </div>
-                    )}
-                    <div className="flex justify-between items-center">
-                      <span className="mono text-[11px] font-black uppercase tracking-[0.15em]" style={{ color: accent }}>{char.role}</span>
-                      <span className="mono text-[9px] text-[var(--text-muted)] uppercase font-bold tracking-widest">{char.race}</span>
-                    </div>
-                    <div className="relative pl-5 py-1 border-l border-[var(--border-color)]">
-                      <p className="text-[11px] text-[var(--text-main)] opacity-60 mono leading-relaxed text-left">{char.description || 'БИОГРАФИЯ НЕ ЗАПОЛНЕНА'}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 pt-1">{['АТК', 'ЗАЩ', 'СИЛ'].map(sk => (<StatBadge key={sk} stat={sk as StatKey} value={eff[sk as StatKey]} bonus={bns[sk as StatKey]} showBonus={false} accentColor={accent} />))}</div>
-                    <div className="flex-1 min-h-[10px]" />
-                    <div className="grid grid-cols-2 gap-4 border-t border-[var(--border-color)] pt-4">
-                      <div className="flex items-center gap-2"><Scale size={14} className="text-[var(--text-muted)]" /><span className="mono text-[10px] uppercase font-black text-[var(--text-main)] opacity-80">{calculateWeight(char.inventory).toFixed(1)} КГ</span></div>
-                      <div className="flex items-center gap-2 justify-end"><Package size={14} className="text-[var(--col-yellow)]" /><span className="mono text-[10px] uppercase font-black text-[var(--col-yellow)]">{char.inventory.length} / {inventorySlots}</span></div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <Button inverted color={char.role === 'Герой' ? 'yellow' : char.role === 'NPC' ? 'purple' : 'red'} className="w-full h-12" onClick={() => handleOpenEdit(char)}><Edit3 size={14} /> РЕДАКТИРОВАТЬ</Button>
-                      <button onClick={() => handleDelete(char.id)} className="py-1 mono text-[8px] uppercase font-black text-[var(--text-muted)] hover:text-[var(--col-red)] transition-colors self-center">УДАЛИТЬ ИЗ БАЗЫ</button>
-                    </div>
-                  </div>
-                </BaseCard>
-              );
-            })}
-            <AddTile label="ДОБАВИТЬ ГЕРОЯ" accentColor={SECTION_ACCENT} onClick={handleOpenCreate} />
+    <div className="flex h-full w-full flex-col bg-[var(--bg-main)] bauhaus-bg">
+      <div className="shrink-0 px-8 pb-5 pt-7">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+          <div className="flex flex-col gap-4">
+            <SectionHeader title="РЕЕСТР СУЩЕСТВ" subtitle="NPC И ГЕРОИ ТЕКУЩЕГО МИРА" accentColor={SECTION_ACCENT} />
+            {!libraryIsRoot && currentCharacterGroup && (
+              <div className="mono flex flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-[0.28em] text-[var(--text-muted)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    returnToRoot();
+                    librarySelection.clearSelection();
+                  }}
+                  className="transition-colors hover:text-[var(--col-yellow)]"
+                >
+                  Персонажи
+                </button>
+                <span>/</span>
+                <span className="text-[var(--text-main)]">{currentCharacterGroup.name}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="min-w-[240px] flex-1">
+              <SearchInput value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="ИМЯ..." accentColor={SECTION_ACCENT} />
+            </div>
+            <div className="min-w-[190px]">
+              <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
+            </div>
+            <div className="min-w-[180px]">
+              <Select
+                value={activeRole}
+                onChange={(value) => setActiveRole(value as 'all' | 'Герой' | 'NPC' | 'Монстр')}
+                options={ROLE_FILTER_OPTIONS}
+                accentColor={SECTION_ACCENT}
+              />
+            </div>
+            {!libraryIsRoot && (
+              <button
+                type="button"
+                onClick={() => {
+                  returnToRoot();
+                  librarySelection.clearSelection();
+                }}
+                className="h-11 border-2 border-[var(--border-color)] px-4 mono text-[10px] font-black uppercase text-[var(--text-muted)] transition-colors hover:border-[var(--col-yellow)] hover:text-[var(--col-yellow)]"
+              >
+                Все персонажи
+              </button>
+            )}
+            <div className="flex-1" />
+            <Button color="yellow" onClick={handleOpenCreate}><UserPlus size={16} /> НОВЫЙ ГЕРОЙ</Button>
           </div>
         </div>
       </div>
-      <div className="w-80 bg-[var(--bg-surface)] border-l-4 border-[var(--col-yellow)] flex flex-col p-8 space-y-10 z-10 overflow-y-auto">
-        <h2 className="text-4xl font-black uppercase tracking-tighter text-[var(--col-yellow)] glitch-text leading-none">АРХИВ</h2>
-        <SearchInput value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ИМЯ..." accentColor={SECTION_ACCENT} />
-        <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
-        <Select value={sortOrder} onChange={val => setSortOrder(val)} options={[{value:'NAME_ASC', label:'ИМЯ'}, {value:'LEVEL_DESC', label:'УРОВЕНЬ'}, {value:'WEIGHT_DESC', label:'ВЕС'}]} accentColor={SECTION_ACCENT} />
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <label className="mono text-[10px] text-[var(--col-yellow)] uppercase tracking-[0.3em] font-black">Группы</label>
-            <button onClick={() => void createGroup()} className="mono text-[9px] uppercase font-black text-[var(--col-yellow)] hover:text-[var(--text-main)]">+ группа</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            <button onClick={() => setActiveGroupId('all')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'all' ? 'border-[var(--col-yellow)] bg-[var(--col-yellow)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Все персонажи</button>
-            <button onClick={() => setActiveGroupId('none')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'none' ? 'border-[var(--col-yellow)] bg-[var(--col-yellow)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Без группы</button>
-            {characterGroups.map((group) => (
-              <div key={group.id} className={`border-2 ${activeGroupId === group.id ? 'border-[var(--col-yellow)]' : 'border-[var(--border-color)]'}`}>
-                {renamingGroupId === group.id ? (
-                  <Input autoFocus value={renamingGroupName} onChange={(event) => setRenamingGroupName(event.target.value)} onBlur={() => void commitRenameGroup()} onKeyDown={(event) => { if (event.key === 'Enter') void commitRenameGroup(); if (event.key === 'Escape') setRenamingGroupId(null); }} accentColor={SECTION_ACCENT} />
-                ) : (
-                  <button onClick={() => setActiveGroupId(group.id)} className="w-full px-4 py-3 mono text-[10px] uppercase text-left font-black text-[var(--text-main)]">{group.name}</button>
-                )}
-                <div className="flex border-t border-[var(--border-color)]">
-                  <button onClick={() => startRenameGroup(group)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-yellow)]">Переименовать</button>
-                  <button onClick={() => void deleteGroup(group.id)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-red)]">Удалить</button>
-                </div>
+
+      <div className="min-h-0 flex-1 px-8 pb-8 pt-3">
+        <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3">
+          {moveBuffer.count > 0 && (
+            <div className="flex flex-wrap items-center gap-3 border border-[var(--col-yellow)]/50 bg-[var(--col-yellow)]/10 px-4 py-3">
+              <div className="mono text-[10px] font-black uppercase tracking-[0.12em] text-[var(--col-yellow)]">
+                Вырезано: {moveBuffer.count}
               </div>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-5">
-           <label className="mono text-[10px] text-[var(--col-yellow)] uppercase tracking-[0.3em] font-black">ФИЛЬТР</label>
-           <div className="flex flex-col gap-2">
-            {(['ВСЕ', 'Герой', 'NPC', 'Монстр'] as const).map(r => (
-              <button key={r} onClick={() => setActiveRole(r)} style={{ color: activeRole === r ? 'var(--text-inverted)' : ROLE_COLORS[r], borderColor: activeRole === r ? ROLE_COLORS[r] : `color-mix(in srgb, ${ROLE_COLORS[r]} 20%, transparent)`, backgroundColor: activeRole === r ? ROLE_COLORS[r] : 'transparent' }} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all`}>{r}</button>
-            ))}
-           </div>
+              <div className="flex-1" />
+              <button type="button" onClick={() => void pasteCharactersToGroup(currentGroupId)} className="mono flex items-center gap-2 text-[10px] font-black uppercase text-[var(--text-main)] hover:text-[var(--col-yellow)]">
+                <ClipboardPaste size={13} /> Вставить сюда
+              </button>
+              <button type="button" onClick={moveBuffer.cancel} className="mono flex items-center gap-2 text-[10px] font-black uppercase text-[var(--text-muted)] hover:text-[var(--col-red)]">
+                <X size={13} /> Отменить
+              </button>
+            </div>
+          )}
+          <EntityLibraryWorkspace<Character, CharacterGroup>
+            items={filteredCharacters}
+            groups={visibleCharacterGroups}
+            getItemId={(character) => character.id}
+            getGroupId={(group) => group.id}
+            selectedIds={librarySelection.selectedIds}
+            cutItemIds={moveBuffer.itemIds}
+            draggingItemIds={libraryDragDrop.draggingIds}
+            dragOverGroupId={libraryDragDrop.dragOverGroupId}
+            currentGroupId={currentGroupId}
+            draggableItems
+            surface="transparent"
+            framed
+            className="min-h-[420px] flex-1"
+            gridClassName=""
+            onSelectItem={(characterId, _character, event) => librarySelection.selectFromEvent(characterId, event, visibleCharacterIds)}
+            onOpenItem={(_characterId, character) => handleOpenEdit(character)}
+            onOpenGroup={(groupId) => {
+              openGroup(groupId);
+              librarySelection.clearSelection();
+            }}
+            onClearSelection={librarySelection.clearSelection}
+            onWorkspaceContextMenu={(context) => libraryContextMenu.setContextMenu(context)}
+            onItemContextMenu={(characterId, _character, event) => {
+              if (!librarySelection.isSelected(characterId)) librarySelection.replaceSelection(characterId);
+              libraryContextMenu.openItemMenu(event, characterId, currentGroupId);
+            }}
+            onGroupContextMenu={(groupId, _group, event) => {
+              librarySelection.clearSelection();
+              libraryContextMenu.openGroupMenu(event, groupId);
+            }}
+            onItemDragStart={(characterId, _character, event) => {
+              if (!librarySelection.isSelected(characterId)) librarySelection.replaceSelection(characterId);
+              libraryDragDrop.handleItemDragStart(characterId, event);
+            }}
+            onItemDragEnd={() => libraryDragDrop.handleItemDragEnd()}
+            onWorkspaceDragOver={(groupId, event) => libraryDragDrop.handleWorkspaceDragOver(groupId, event)}
+            onWorkspaceDragLeave={(groupId, event) => libraryDragDrop.handleWorkspaceDragLeave(groupId, event)}
+            onWorkspaceDrop={(groupId, event) => libraryDragDrop.handleWorkspaceDrop(groupId, event)}
+            onGroupDragOver={(groupId, _group, event) => libraryDragDrop.handleGroupDragOver(groupId, event)}
+            onGroupDragLeave={(groupId, _group, event) => libraryDragDrop.handleGroupDragLeave(groupId, event)}
+            onGroupDrop={(groupId, _group, event) => libraryDragDrop.handleGroupDrop(groupId, event)}
+            renderGroup={(group, state) => (
+              <EntityLibraryGroupCard
+                name={group.name}
+                nameContent={renamingGroupId === group.id ? (
+                  <Input
+                    autoFocus
+                    value={renamingGroupName}
+                    onChange={(event) => setRenamingGroupName(event.target.value)}
+                    onBlur={() => void commitRenameGroup()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void commitRenameGroup();
+                      if (event.key === 'Escape') cancelRenameGroup();
+                    }}
+                    accentColor={SECTION_ACCENT}
+                    className="h-9"
+                  />
+                ) : undefined}
+                count={characterGroupCountById.get(group.id) ?? 0}
+                countLabel={(characterGroupCountById.get(group.id) ?? 0) === 0 ? 'ПУСТО' : 'ПЕРСОНАЖЕЙ'}
+                accentColor={SECTION_ACCENT}
+                dragOver={state.dragOver}
+              />
+            )}
+            renderItem={(char, state) => {
+              const { effective: eff, bonus: bns } = calculateEffectiveStats(char);
+              const accent = ROLE_COLORS[char.role as keyof typeof ROLE_COLORS] || 'var(--col-blue)';
+              const portraitAsset = findAssetForUsage(linksForCharacter(char.id), assets, 'portrait');
+
+              return (
+                <EntityLibraryCard
+                  title={char.name}
+                  accentColor={accent}
+                  selected={state.selected}
+                  cut={state.cut}
+                  dragging={state.dragging}
+                  headerExtra={(
+                    <div className="flex items-center gap-2">
+                      {state.cut && <span className="mono text-[8px] font-black uppercase text-[var(--col-yellow)]">ВЫРЕЗАНО</span>}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDelete(char.id);
+                        }}
+                        className="text-[var(--text-muted)] transition-colors hover:text-[var(--col-red)]"
+                        title="Удалить"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                >
+                  <div className="space-y-4">
+                    <EntityLibraryMediaSlot
+                      src={portraitAsset?.url}
+                      alt={portraitAsset?.name ?? char.name}
+                      emptyLabel="ПОРТРЕТ НЕ ВЫБРАН"
+                      accentColor={accent}
+                    />
+                    <div className="flex justify-between gap-3">
+                      <span className="mono text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: accent }}>{char.role}</span>
+                      <span className="mono truncate text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">{char.groupId ? characterGroups.find((group) => group.id === char.groupId)?.name ?? 'ГРУППА' : 'БЕЗ ГРУППЫ'}</span>
+                    </div>
+                    <p className="line-clamp-3 border-l border-[var(--border-color)] py-1 pl-4 text-left mono text-[11px] leading-relaxed text-[var(--text-main)] opacity-70">{char.description || 'БИОГРАФИЯ НЕ ЗАПОЛНЕНА'}</p>
+                    <div className="flex flex-wrap gap-2 pt-1">{['АТК', 'ЗАЩ', 'СИЛ'].map(sk => (<StatBadge key={sk} stat={sk as StatKey} value={eff[sk as StatKey]} bonus={bns[sk as StatKey]} showBonus={false} accentColor={accent} />))}</div>
+                    <div className="flex justify-end border-t border-[var(--border-color)] pt-4">
+                      <div className="flex items-center justify-end gap-2"><Package size={14} className="text-[var(--col-yellow)]" /><span className="mono text-[10px] font-black uppercase text-[var(--col-yellow)]">{char.inventory.length} / {inventorySlots}</span></div>
+                    </div>
+                  </div>
+                </EntityLibraryCard>
+              );
+            }}
+            emptyTitle={characterLibraryEmptyTitle}
+            emptyDescription={characterLibraryEmptyDescription}
+            emptyAction={isCharacterLibraryFilteredEmpty ? null : <Button color="yellow" onClick={handleOpenCreate}><UserPlus size={16} /> НОВЫЙ ГЕРОЙ</Button>}
+          />
+          <EntityLibraryContextMenu
+            context={libraryContextMenu.contextMenu}
+            sections={getCharacterLibraryContextSections()}
+            accentColor={SECTION_ACCENT}
+            onClose={libraryContextMenu.closeContextMenu}
+          />
         </div>
       </div>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="ПРОФИЛЬ СУЩЕСТВА" accentColor={SECTION_ACCENT} maxWidth="max-w-5xl">
@@ -513,26 +781,6 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
               />
             )}
             {editingId && (
-              <EntityLinksPanel
-                sourceType="character"
-                sourceId={editingId}
-                links={linksForCharacter(editingId).filter((link) => !isAssetUsageLink(link))}
-                scenarios={scenarios}
-                maps={maps}
-                characters={data}
-                items={items}
-                assets={assets}
-                locations={locations}
-                factions={factions}
-                events={events}
-                accentColor={SECTION_ACCENT}
-                onCreateLink={onCreateMaterialLink}
-                onUpdateLink={onUpdateMaterialLink}
-                onDeleteLink={onDeleteMaterialLink}
-                onOpenLink={onOpenMaterialLink}
-              />
-            )}
-            {editingId && (
               <PublicationPanel
                 targetType="character"
                 targetId={editingId}
@@ -547,10 +795,6 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
           <div className="lg:col-span-5 space-y-6">
             <div className="space-y-4">
                <div className="flex justify-between items-end"><label className="mono text-[10px] uppercase font-black text-[var(--text-muted)] flex items-center gap-2"><Package size={14} /> Инвентарь</label><span className="mono text-[10px] font-black text-[var(--text-muted)]">{formData.inventory?.length} / {inventorySlots} СЛОТОВ</span></div>
-               <div className="space-y-1.5">
-                 <div className="flex justify-between mono text-[8px] font-black uppercase"><span className={currentWeight > maxWeight ? 'text-[var(--col-red)]' : 'text-[var(--text-muted)]'}>Вес: {currentWeight.toFixed(1)} КГ</span><span className="text-[var(--text-muted)]">Макс: {maxWeight.toFixed(1)} КГ</span></div>
-                 <div className="h-1 bg-[var(--border-color)] w-full"><div className={`h-full transition-all duration-500 ${currentWeight > maxWeight ? 'bg-[var(--col-red)]' : 'bg-[var(--col-yellow)]'}`} style={{ width: `${Math.min(100, (currentWeight / maxWeight) * 100)}%` }} /></div>
-               </div>
                <div className="grid grid-cols-1 gap-2 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
                   {formData.inventory?.map((id, idx) => { const item = items.find(i => i.id === id); if (!item) return null; return (
                       <div key={idx} className="flex items-center justify-between p-3 border border-[var(--border-color)] bg-[var(--bg-main)] animate-appear">
@@ -563,22 +807,16 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
             <div className="space-y-3 pt-4 border-t border-[var(--border-color)]">
               <label className="mono text-[9px] uppercase font-black text-[var(--text-muted)] flex items-center gap-2">Доступные предметы</label>
               <div className="space-y-2">
-                {items.filter(i => !formData.inventory?.includes(i.id)).slice(0, 3).map(item => {
-                  const wouldOverweight = currentWeight + item.weight > maxWeight;
-
-                  return (
+                {items.filter(i => !formData.inventory?.includes(i.id)).slice(0, 3).map(item => (
                   <button
                     key={item.id}
-                    disabled={wouldOverweight}
-                    title={wouldOverweight ? 'Предмет приведет к перевесу' : undefined}
                     onClick={() => toggleInventoryItem(item.id)}
-                    className="w-full flex items-center justify-between p-3 border border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--bg-main)] group transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--bg-surface)]"
+                    className="w-full flex items-center justify-between p-3 border border-[var(--border-color)] bg-[var(--bg-surface)] hover:bg-[var(--bg-main)] group transition-all"
                   >
                     <div className="flex flex-col items-start gap-1 truncate pr-2"><span className="mono text-[9px] font-black text-[var(--text-muted)] group-hover:text-[var(--text-main)] uppercase truncate">{item.name}</span></div>
-                    <Plus size={14} className="text-[var(--text-muted)] group-hover:text-[var(--col-yellow)] shrink-0 group-disabled:hover:text-[var(--text-muted)]" />
+                    <Plus size={14} className="text-[var(--text-muted)] group-hover:text-[var(--col-yellow)] shrink-0" />
                   </button>
-                  );
-                })}
+                ))}
               </div>
             </div>
           </div>

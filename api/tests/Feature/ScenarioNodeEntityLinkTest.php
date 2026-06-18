@@ -100,7 +100,6 @@ class ScenarioNodeEntityLinkTest extends TestCase
             'user_id' => $user->id,
             'name' => 'NPC',
             'role' => 'NPC',
-            'level' => 1,
         ]);
         $item = Item::create([
             'user_id' => $user->id,

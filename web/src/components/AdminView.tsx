@@ -433,7 +433,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onContentDele
   const tabs: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
     { id: 'DASHBOARD', label: 'ОБЗОР', icon: <Activity size={14} /> },
     { id: 'USERS', label: 'ПОЛЬЗОВАТЕЛИ', icon: <Users size={14} /> },
-    { id: 'REPORTS', label: 'ТРИБУНАЛ', icon: <AlertTriangle size={14} /> },
     { id: 'BROADCAST', label: 'ВЕЩАНИЕ', icon: <Radio size={14} /> },
     { id: 'CONTENT', label: 'РЕЕСТР', icon: <FileText size={14} /> },
   ];
@@ -509,7 +508,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onContentDele
 
           {activeTab === 'DASHBOARD' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-              <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-[var(--bg-surface)] border-2 border-[var(--col-teal)] p-4 flex items-center justify-between">
                   <div>
                     <div className="mono text-[9px] uppercase font-black text-[var(--col-teal)] mb-1">СТАТУС СЕРВЕРА</div>
@@ -523,13 +522,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onContentDele
                     <div className="text-xl font-black text-[var(--text-main)]">{overview?.stats.users_total ?? 0}</div>
                   </div>
                   <Users className="text-[var(--col-blue)]" />
-                </div>
-                <div className="bg-[var(--bg-surface)] border-2 border-[var(--col-red)] p-4 flex items-center justify-between">
-                  <div>
-                    <div className="mono text-[9px] uppercase font-black text-[var(--col-red)] mb-1">ЖАЛОБЫ</div>
-                    <div className="text-xl font-black text-[var(--text-main)]">{overview?.stats.reports_open ?? 0}</div>
-                  </div>
-                  <AlertTriangle className="text-[var(--col-red)]" />
                 </div>
                 <div className="bg-[var(--bg-surface)] border-2 border-[var(--col-purple)] p-4 flex items-center justify-between">
                   <div>

@@ -413,10 +413,6 @@ class ScenarioExportService
             'stats' => $this->characterStatsRows($character),
             'inventory' => $inventoryRows,
             'inventoryCount' => count(is_array($character->inventory) ? $character->inventory : []),
-            'inventoryWeight' => array_sum(array_map(
-                fn (array $row): float => (float) $row['weight'],
-                $inventoryRows
-            )),
             'portraitUrl' => $portraitAssetsByCharacterId[$character->id]->url ?? null,
         ];
     }

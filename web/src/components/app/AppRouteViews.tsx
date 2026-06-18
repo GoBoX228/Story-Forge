@@ -166,6 +166,10 @@ export const ScenariosRoute: React.FC<NavigationRouteProps> = ({ navigation }) =
     <ScenarioEditor
       data={data.scenarios}
       onUpdate={actions.setScenarios}
+      scenarioGroups={data.scenarioGroups}
+      onCreateScenarioGroup={actions.createScenarioGroup}
+      onUpdateScenarioGroup={actions.updateScenarioGroup}
+      onDeleteScenarioGroup={actions.deleteScenarioGroup}
       campaigns={data.campaigns}
       characters={data.characters}
       items={data.items}
@@ -251,15 +255,9 @@ export const ItemsRoute: React.FC<NavigationRouteProps> = ({ navigation }) => {
         onCreateItemGroup={actions.createItemGroup}
         onUpdateItemGroup={actions.updateItemGroup}
         onDeleteItemGroup={actions.deleteItemGroup}
-        scenarios={data.scenarios}
-        maps={data.maps}
-        characters={data.characters}
         assets={data.assets}
         assetCollections={data.assetCollections}
         assetCollectionAssignments={data.assetCollectionAssignments}
-        locations={data.locations}
-        factions={data.factions}
-        events={data.worldEvents}
         tags={data.tags}
         tagAssignments={data.tagAssignments}
         entityLinks={data.entityLinks}
@@ -268,12 +266,10 @@ export const ItemsRoute: React.FC<NavigationRouteProps> = ({ navigation }) => {
         onUpdateTag={actions.updateTag}
         onDeleteTag={actions.deleteTag}
         onCreateMaterialLink={actions.createMaterialLink}
-        onUpdateMaterialLink={actions.updateMaterialLink}
         onDeleteMaterialLink={actions.deleteMaterialLink}
         onUpsertPublication={actions.upsertPublication}
         onUpdatePublication={actions.updatePublication}
         onDeletePublication={actions.deletePublication}
-        onOpenMaterialLink={navigation.openMaterialLink}
         onReplaceAssetCollections={actions.replaceAssetCollections}
         initialItemId={navigation.itemEditorTargetId}
       />
@@ -295,14 +291,9 @@ export const CharactersRoute: React.FC<NavigationRouteProps> = ({ navigation }) 
         onUpdateCharacterGroup={actions.updateCharacterGroup}
         onDeleteCharacterGroup={actions.deleteCharacterGroup}
         items={data.items}
-        scenarios={data.scenarios}
-        maps={data.maps}
         assets={data.assets}
         assetCollections={data.assetCollections}
         assetCollectionAssignments={data.assetCollectionAssignments}
-        locations={data.locations}
-        factions={data.factions}
-        events={data.worldEvents}
         tags={data.tags}
         tagAssignments={data.tagAssignments}
         entityLinks={data.entityLinks}
@@ -311,12 +302,10 @@ export const CharactersRoute: React.FC<NavigationRouteProps> = ({ navigation }) 
         onUpdateTag={actions.updateTag}
         onDeleteTag={actions.deleteTag}
         onCreateMaterialLink={actions.createMaterialLink}
-        onUpdateMaterialLink={actions.updateMaterialLink}
         onDeleteMaterialLink={actions.deleteMaterialLink}
         onUpsertPublication={actions.upsertPublication}
         onUpdatePublication={actions.updatePublication}
         onDeletePublication={actions.deletePublication}
-        onOpenMaterialLink={navigation.openMaterialLink}
         onReplaceAssetCollections={actions.replaceAssetCollections}
         initialCharacterId={navigation.characterEditorTargetId}
       />

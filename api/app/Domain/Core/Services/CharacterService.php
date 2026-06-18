@@ -14,7 +14,7 @@ use App\Domain\Core\DTO\CharacterUpdateData;
 use App\Models\Campaign;
 use App\Models\Character;
 use App\Models\CharacterGroup;
-use App\Models\Scenario;
+use App\Models\EntityLink;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -37,7 +37,16 @@ class CharacterService
             $user->id,
             function ($query) use ($data): void {
                 if ($data->hasScenarioId) {
-                    $query->where('scenario_id', $data->scenarioId);
+                    $query->whereExists(function ($linkQuery) use ($data): void {
+                        $linkQuery
+                            ->selectRaw('1')
+                            ->from('entity_links')
+                            ->where('source_type', EntityLink::TARGET_SCENARIO)
+                            ->where('source_id', $data->scenarioId)
+                            ->where('target_type', EntityLink::TARGET_CHARACTER)
+                            ->where('relation_type', EntityLink::RELATION_USES)
+                            ->whereColumn('target_id', 'characters.id');
+                    });
                 }
 
                 if ($data->hasGroupId) {
@@ -65,10 +74,6 @@ class CharacterService
     {
         $payload = $data->data;
 
-        if (!empty($payload['scenario_id'])) {
-            $this->ensureOwnedModelExistsAction->execute(Scenario::class, $user->id, $payload['scenario_id']);
-        }
-
         if (!empty($payload['campaign_id'])) {
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $payload['campaign_id']);
         }
@@ -81,13 +86,11 @@ class CharacterService
         $character = $this->createModelAction->execute(Character::class, [
             'user_id' => $user->id,
             'campaign_id' => $payload['campaign_id'] ?? null,
-            'scenario_id' => $payload['scenario_id'] ?? null,
             'character_group_id' => $payload['group_id'] ?? null,
             'name' => $payload['name'],
             'role' => $payload['role'] ?? 'NPC',
             'race' => $payload['race'] ?? null,
             'description' => $payload['description'] ?? null,
-            'level' => $payload['level'] ?? 1,
             'stats' => $payload['stats'] ?? null,
             'inventory' => $payload['inventory'] ?? null,
         ]);
@@ -99,13 +102,6 @@ class CharacterService
     {
         /** @var Character $character */
         $character = $this->findOwnedModelAction->execute(Character::class, $user->id, $id);
-
-        if (
-            array_key_exists('scenario_id', $data->data) &&
-            $data->data['scenario_id'] !== null
-        ) {
-            $this->ensureOwnedModelExistsAction->execute(Scenario::class, $user->id, $data->data['scenario_id']);
-        }
 
         if (
             array_key_exists('campaign_id', $data->data) &&

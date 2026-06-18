@@ -12,8 +12,8 @@ use App\Domain\Core\DTO\MapIndexData;
 use App\Domain\Core\DTO\MapStoreData;
 use App\Domain\Core\DTO\MapUpdateData;
 use App\Models\Campaign;
+use App\Models\EntityLink;
 use App\Models\Map;
-use App\Models\Scenario;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -36,7 +36,16 @@ class MapService
             $user->id,
             function ($query) use ($data): void {
                 if ($data->hasScenarioId) {
-                    $query->where('scenario_id', $data->scenarioId);
+                    $query->whereExists(function ($linkQuery) use ($data): void {
+                        $linkQuery
+                            ->selectRaw('1')
+                            ->from('entity_links')
+                            ->where('source_type', EntityLink::TARGET_SCENARIO)
+                            ->where('source_id', $data->scenarioId)
+                            ->where('target_type', EntityLink::TARGET_MAP)
+                            ->where('relation_type', EntityLink::RELATION_USES)
+                            ->whereColumn('target_id', 'maps.id');
+                    });
                 }
             }
         );
@@ -46,10 +55,6 @@ class MapService
     {
         $payload = $data->data;
 
-        if (!empty($payload['scenario_id'])) {
-            $this->ensureOwnedModelExistsAction->execute(Scenario::class, $user->id, $payload['scenario_id']);
-        }
-
         if (!empty($payload['campaign_id'])) {
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $payload['campaign_id']);
         }
@@ -58,7 +63,6 @@ class MapService
         $map = $this->createModelAction->execute(Map::class, [
             'user_id' => $user->id,
             'campaign_id' => $payload['campaign_id'] ?? null,
-            'scenario_id' => $payload['scenario_id'] ?? null,
             'name' => $payload['name'],
             'width' => $payload['width'],
             'height' => $payload['height'],
@@ -83,13 +87,6 @@ class MapService
         $map = $this->findOwnedModelAction->execute(Map::class, $user->id, $id);
 
         if (
-            array_key_exists('scenario_id', $data->data) &&
-            $data->data['scenario_id'] !== null
-        ) {
-            $this->ensureOwnedModelExistsAction->execute(Scenario::class, $user->id, $data->data['scenario_id']);
-        }
-
-        if (
             array_key_exists('campaign_id', $data->data) &&
             $data->data['campaign_id'] !== null
         ) {
@@ -108,4 +105,3 @@ class MapService
         $this->deleteModelAction->execute($map);
     }
 }
-

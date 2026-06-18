@@ -33,6 +33,7 @@ export const Modal: React.FC<ModalProps> = ({
 
   return (
     <div 
+      data-testid="modal"
       className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4 overflow-y-auto"
       onClick={onClose}
     >

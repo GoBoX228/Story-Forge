@@ -6,6 +6,7 @@ use App\Models\AdminAuditLog;
 use App\Models\Announcement;
 use App\Models\Campaign;
 use App\Models\Character;
+use App\Models\EntityLink;
 use App\Models\Item;
 use App\Models\Map;
 use App\Models\Report;
@@ -38,13 +39,11 @@ class AdminModuleTest extends TestCase
         ]);
         Map::query()->create([
             'user_id' => $owner->id,
-            'scenario_id' => $scenario->id,
             'campaign_id' => $campaign->id,
             'name' => 'Map A',
         ]);
         Character::query()->create([
             'user_id' => $owner->id,
-            'scenario_id' => $scenario->id,
             'campaign_id' => $campaign->id,
             'name' => 'Character A',
         ]);
@@ -244,6 +243,27 @@ class AdminModuleTest extends TestCase
             'user_id' => $owner->id,
             'title' => 'Needle Scenario',
         ]);
+        $map = Map::query()->create([
+            'user_id' => $owner->id,
+            'name' => 'Needle Map',
+            'width' => 10,
+            'height' => 10,
+            'cell_size' => 32,
+        ]);
+        EntityLink::query()->create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenario->id,
+            'target_type' => EntityLink::TARGET_MAP,
+            'target_id' => $map->id,
+            'relation_type' => EntityLink::RELATION_USES,
+        ]);
+        EntityLink::query()->create([
+            'source_type' => EntityLink::TARGET_MAP,
+            'source_id' => $map->id,
+            'target_type' => EntityLink::TARGET_SCENARIO,
+            'target_id' => $scenario->id,
+            'relation_type' => EntityLink::RELATION_RELATED,
+        ]);
 
         Report::query()->create([
             'reporter_id' => $admin->id,
@@ -276,6 +296,8 @@ class AdminModuleTest extends TestCase
             ->assertJson(['message' => 'Deleted']);
 
         $this->assertDatabaseMissing('scenarios', ['id' => $scenario->id]);
+        $this->assertDatabaseCount('entity_links', 0);
+        $this->assertDatabaseHas('maps', ['id' => $map->id]);
         $this->assertDatabaseMissing('reports', [
             'target_type' => Report::TARGET_SCENARIO,
             'target_id' => $scenario->id,

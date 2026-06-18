@@ -18,6 +18,8 @@ class ScenarioUpdateRequest extends FormRequest
             'title' => ['sometimes', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'campaign_id' => ['nullable', 'integer'],
+            'group_id' => ['nullable', 'integer'],
+            'scenario_group_id' => ['nullable', 'integer'],
         ];
     }
 

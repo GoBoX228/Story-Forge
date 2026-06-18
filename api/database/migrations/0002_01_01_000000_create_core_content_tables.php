@@ -38,7 +38,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('campaign_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('scenario_id')->nullable()->constrained()->nullOnDelete();
             $table->string('name');
             $table->unsignedInteger('width')->default(20);
             $table->unsignedInteger('height')->default(20);
@@ -48,7 +47,6 @@ return new class extends Migration
 
             $table->index(['user_id', 'updated_at']);
             $table->index(['campaign_id', 'updated_at']);
-            $table->index(['scenario_id', 'updated_at']);
         });
 
         Schema::create('character_groups', function (Blueprint $table): void {
@@ -68,7 +66,6 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('campaign_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('scenario_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('character_group_id')->nullable()->constrained()->nullOnDelete();
             $table->string('name');
             $table->string('role')->default('NPC');
@@ -81,7 +78,6 @@ return new class extends Migration
 
             $table->index(['user_id', 'updated_at']);
             $table->index(['campaign_id', 'updated_at']);
-            $table->index(['scenario_id', 'updated_at']);
             $table->index(['character_group_id', 'updated_at']);
         });
 

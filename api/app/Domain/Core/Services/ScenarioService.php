@@ -13,6 +13,7 @@ use App\Domain\Core\DTO\ScenarioStoreData;
 use App\Domain\Core\DTO\ScenarioUpdateData;
 use App\Models\Campaign;
 use App\Models\Scenario;
+use App\Models\ScenarioGroup;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -30,9 +31,22 @@ class ScenarioService
 
     public function list(User $user, ScenarioIndexData $data): Collection
     {
-        unset($data);
+        $groupId = $data->data['group_id'] ?? $data->data['groupId'] ?? null;
 
-        return $this->listOwnedModelsAction->execute(Scenario::class, $user->id);
+        if ($groupId === null) {
+            return $this->listOwnedModelsAction->execute(Scenario::class, $user->id);
+        }
+
+        $query = Scenario::query()->where('user_id', $user->id);
+
+        if ($groupId === 'none') {
+            $query->whereNull('scenario_group_id');
+        } else {
+            $this->ensureOwnedModelExistsAction->execute(ScenarioGroup::class, $user->id, $groupId);
+            $query->where('scenario_group_id', $groupId);
+        }
+
+        return $query->orderByDesc('updated_at')->get();
     }
 
     public function create(User $user, ScenarioStoreData $data): Scenario
@@ -43,10 +57,16 @@ class ScenarioService
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $payload['campaign_id']);
         }
 
+        $groupId = $this->extractGroupId($payload);
+        if ($groupId !== null) {
+            $this->ensureOwnedModelExistsAction->execute(ScenarioGroup::class, $user->id, $groupId);
+        }
+
         /** @var Scenario $scenario */
         $scenario = $this->createModelAction->execute(Scenario::class, [
             'user_id' => $user->id,
             'campaign_id' => $payload['campaign_id'] ?? null,
+            'scenario_group_id' => $groupId,
             'title' => $payload['title'],
             'description' => $payload['description'] ?? null,
         ]);
@@ -74,7 +94,19 @@ class ScenarioService
             $this->ensureOwnedModelExistsAction->execute(Campaign::class, $user->id, $data->data['campaign_id']);
         }
 
-        $this->updateModelAction->execute($scenario, $data->data);
+        $payload = $data->data;
+
+        if (array_key_exists('group_id', $payload) || array_key_exists('scenario_group_id', $payload)) {
+            $groupId = $this->extractGroupId($payload);
+            if ($groupId !== null) {
+                $this->ensureOwnedModelExistsAction->execute(ScenarioGroup::class, $user->id, $groupId);
+            }
+
+            unset($payload['group_id']);
+            $payload['scenario_group_id'] = $groupId;
+        }
+
+        $this->updateModelAction->execute($scenario, $payload);
 
         return $scenario;
     }
@@ -84,5 +116,12 @@ class ScenarioService
         /** @var Scenario $scenario */
         $scenario = $this->findOwnedModelAction->execute(Scenario::class, $user->id, $id);
         $this->deleteModelAction->execute($scenario);
+    }
+
+    private function extractGroupId(array $payload): ?int
+    {
+        $groupId = $payload['scenario_group_id'] ?? $payload['group_id'] ?? null;
+
+        return $groupId === null ? null : (int) $groupId;
     }
 }

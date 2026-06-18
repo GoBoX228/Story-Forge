@@ -177,7 +177,6 @@ class PublicationModuleTest extends TestCase
             'role' => 'NPC',
             'race' => '',
             'description' => '',
-            'level' => 1,
             'stats' => [],
             'inventory' => [],
         ]);

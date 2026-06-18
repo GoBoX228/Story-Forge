@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Campaign;
 use App\Models\Character;
+use App\Models\EntityLink;
 use App\Models\Item;
 use App\Models\Map;
 use App\Models\Scenario;
@@ -42,7 +43,6 @@ class CoreCrudTest extends TestCase
             'height' => 20,
             'cell_size' => 32,
             'data' => ['tiles' => []],
-            'scenario_id' => (int) $scenarioId,
             'campaign_id' => (int) $campaignId,
         ]);
         $mapResponse->assertStatus(201);
@@ -51,13 +51,24 @@ class CoreCrudTest extends TestCase
         $characterResponse = $this->postJson('/api/characters', [
             'name' => 'Character One',
             'role' => 'NPC',
-            'scenario_id' => (int) $scenarioId,
             'campaign_id' => (int) $campaignId,
             'stats' => ['str' => 10],
             'inventory' => ['item' => 'rope'],
         ]);
         $characterResponse->assertStatus(201);
         $characterId = (string) $characterResponse->json('id');
+
+        $this->postJson("/api/entity-links/scenario/{$scenarioId}", [
+            'target_type' => EntityLink::TARGET_MAP,
+            'target_id' => (int) $mapId,
+            'relation_type' => EntityLink::RELATION_USES,
+        ])->assertStatus(201);
+
+        $this->postJson("/api/entity-links/scenario/{$scenarioId}", [
+            'target_type' => EntityLink::TARGET_CHARACTER,
+            'target_id' => (int) $characterId,
+            'relation_type' => EntityLink::RELATION_USES,
+        ])->assertStatus(201);
 
         $itemResponse = $this->postJson('/api/items', [
             'name' => 'Item One',
@@ -130,7 +141,6 @@ class CoreCrudTest extends TestCase
             'user_id' => $owner->id,
             'name' => 'Owner Character',
             'role' => 'NPC',
-            'level' => 1,
         ]);
 
         $item = Item::create([
@@ -170,12 +180,18 @@ class CoreCrudTest extends TestCase
             'campaign_id' => $foreignCampaign->id,
         ])->assertStatus(404);
 
-        $this->postJson('/api/maps', [
+        $ownMap = Map::create([
+            'user_id' => $owner->id,
             'name' => 'My Map',
             'width' => 10,
             'height' => 10,
             'cell_size' => 32,
-            'scenario_id' => $foreignScenario->id,
+        ]);
+
+        $this->postJson("/api/entity-links/scenario/{$foreignScenario->id}", [
+            'target_type' => EntityLink::TARGET_MAP,
+            'target_id' => $ownMap->id,
+            'relation_type' => EntityLink::RELATION_USES,
         ])->assertStatus(404);
 
         $this->postJson('/api/characters', [
@@ -210,49 +226,80 @@ class CoreCrudTest extends TestCase
             ->assertStatus(200)
             ->assertJsonPath('0.id', $scenarioB->id);
 
-        Map::create([
+        $mapA = Map::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenarioA->id,
             'name' => 'Map A',
             'width' => 10,
             'height' => 10,
             'cell_size' => 32,
         ]);
 
-        Map::create([
+        $mapB = Map::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenarioB->id,
             'name' => 'Map B',
             'width' => 10,
             'height' => 10,
             'cell_size' => 32,
         ]);
 
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenarioA->id,
+            'target_type' => EntityLink::TARGET_MAP,
+            'target_id' => $mapA->id,
+            'relation_type' => EntityLink::RELATION_USES,
+        ]);
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenarioB->id,
+            'target_type' => EntityLink::TARGET_MAP,
+            'target_id' => $mapB->id,
+            'relation_type' => EntityLink::RELATION_USES,
+        ]);
+
         $this->getJson('/api/maps?scenarioId=' . $scenarioA->id)
             ->assertStatus(200)
             ->assertJsonCount(1)
-            ->assertJsonPath('0.scenario_id', $scenarioA->id);
+            ->assertJsonPath('0.id', $mapA->id)
+            ->assertJsonMissingPath('0.scenario_id');
 
-        Character::create([
+        $characterA = Character::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenarioA->id,
             'name' => 'Goblin Shaman',
             'role' => 'NPC',
-            'level' => 1,
         ]);
 
-        Character::create([
+        $characterB = Character::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenarioB->id,
             'name' => 'Knight',
             'role' => 'NPC',
-            'level' => 1,
+        ]);
+
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenarioA->id,
+            'target_type' => EntityLink::TARGET_CHARACTER,
+            'target_id' => $characterA->id,
+            'relation_type' => EntityLink::RELATION_USES,
+        ]);
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenarioB->id,
+            'target_type' => EntityLink::TARGET_CHARACTER,
+            'target_id' => $characterB->id,
+            'relation_type' => EntityLink::RELATION_USES,
         ]);
 
         $this->getJson('/api/characters?scenarioId=' . $scenarioA->id . '&q=gob')
             ->assertStatus(200)
             ->assertJsonCount(1)
             ->assertJsonPath('0.name', 'Goblin Shaman');
+
+        $this->getJson('/api/characters?scenario_id=' . $scenarioA->id . '&q=gob')
+            ->assertStatus(200)
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.id', $characterA->id)
+            ->assertJsonMissingPath('0.scenario_id');
 
         Item::create([
             'user_id' => $user->id,
@@ -286,7 +333,6 @@ class CoreCrudTest extends TestCase
 
         $map = Map::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenario->id,
             'name' => 'Map',
             'width' => 10,
             'height' => 10,
@@ -295,10 +341,8 @@ class CoreCrudTest extends TestCase
 
         $character = Character::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenario->id,
             'name' => 'Character',
             'role' => 'NPC',
-            'level' => 1,
         ]);
 
         $campaignResponse = $this->postJson('/api/campaigns', [

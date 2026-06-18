@@ -153,7 +153,6 @@ class ReportBroadcastExportTest extends TestCase
 
         Map::create([
             'user_id' => $owner->id,
-            'scenario_id' => $scenario->id,
             'name' => 'Map One',
             'width' => 10,
             'height' => 10,
@@ -306,7 +305,6 @@ class ReportBroadcastExportTest extends TestCase
 
         $map = Map::create([
             'user_id' => $owner->id,
-            'scenario_id' => $scenario->id,
             'name' => 'Temple Map',
             'width' => 8,
             'height' => 8,
@@ -316,12 +314,10 @@ class ReportBroadcastExportTest extends TestCase
 
         $character = Character::create([
             'user_id' => $owner->id,
-            'scenario_id' => $scenario->id,
             'name' => 'Torstein',
             'role' => 'ally',
             'race' => 'human',
             'description' => 'Clan guide',
-            'level' => 2,
             'stats' => [],
             'inventory' => [],
         ]);
@@ -441,7 +437,6 @@ class ReportBroadcastExportTest extends TestCase
             'role' => 'NPC',
             'race' => 'Human',
             'description' => 'A watcher of the frozen lighthouse.',
-            'level' => 3,
             'stats' => ['STR' => 10, 'WIS' => 14],
             'inventory' => [$item->id],
         ]);
@@ -536,7 +531,6 @@ class ReportBroadcastExportTest extends TestCase
                 'role' => 'NPC',
                 'race' => 'Human',
                 'description' => 'Character ' . $index . ' description.',
-                'level' => $index,
                 'stats' => ['STR' => 10 + $index],
                 'inventory' => [],
             ]);
@@ -911,6 +905,15 @@ class ReportBroadcastExportTest extends TestCase
                                 'color' => '#4361EE',
                                 'assetId' => (string) $tileAsset->id,
                             ],
+                            [
+                                'id' => 'tile-system',
+                                'x' => 2,
+                                'y' => 1,
+                                'type' => 'floor',
+                                'label' => 'System Water',
+                                'color' => '#229BD0',
+                                'assetId' => 'system:tile:core:v1:water',
+                            ],
                         ],
                     ],
                     [
@@ -963,8 +966,10 @@ class ReportBroadcastExportTest extends TestCase
                         && str_contains($html, '4 × 3')
                         && str_contains($html, 'Visible Tile')
                         && str_contains($html, 'Fallback Token')
+                        && str_contains($html, 'System Water')
                         && str_contains($html, 'https://example.test/storage/background.png')
                         && str_contains($html, 'https://example.test/storage/tile.png')
+                        && str_contains($html, rtrim((string) config('app.url'), '/') . '/system/tiles/core/v1/water.png')
                         && !str_contains($html, 'Hidden Tile')
                         && !str_contains($html, 'https://example.test/storage/foreign.png');
                 }), \Mockery::type('string'), \Mockery::type('string'))

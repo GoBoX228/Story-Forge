@@ -33,6 +33,7 @@ import {
   PublicationUpdatePayload,
   PublicationUpsertPayload,
   Scenario,
+  ScenarioGroup,
   Tag,
   TagAssignmentMap,
   TaggableTargetType,
@@ -51,6 +52,7 @@ export interface AppViewData {
   currentUser: UserProfile | null;
   campaigns: Campaign[];
   scenarios: Scenario[];
+  scenarioGroups: ScenarioGroup[];
   maps: MapData[];
   characters: Character[];
   characterGroups: CharacterGroup[];
@@ -80,6 +82,9 @@ export interface AppViewActions {
   openCampaignFromDashboard: (campaignId?: string) => void;
   openCampaignEditor: (campaign?: Campaign) => void;
   deleteCampaign: (id: string) => Promise<void>;
+  createScenarioGroup: () => Promise<ScenarioGroup>;
+  updateScenarioGroup: (id: string, payload: Partial<ScenarioGroup>) => Promise<ScenarioGroup>;
+  deleteScenarioGroup: (id: string) => Promise<void>;
   createItem: (payload: Omit<Item, 'id'>) => Promise<Item>;
   updateItem: (id: string, payload: Omit<Item, 'id'>) => Promise<Item>;
   deleteItem: (id: string) => Promise<void>;

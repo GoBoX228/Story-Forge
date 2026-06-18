@@ -20,9 +20,6 @@ const ENTITY_TARGET_TYPE_OPTIONS: { value: ScenarioNodeEntityTargetType; label: 
   { value: 'character', label: 'ПЕРСОНАЖ' },
   { value: 'item', label: 'ПРЕДМЕТ' },
   { value: 'asset', label: 'АССЕТ' },
-  { value: 'location', label: 'МЕСТО' },
-  { value: 'faction', label: 'ОРГАНИЗАЦИЯ' },
-  { value: 'event', label: 'ХРОНИКА' },
 ];
 
 const ENTITY_TARGET_LABELS: Record<ScenarioNodeEntityTargetType, string> = {

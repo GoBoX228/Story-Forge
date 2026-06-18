@@ -25,6 +25,7 @@ import {
   PublicationUpdatePayload,
   PublicationUpsertPayload,
   TaggableTargetType,
+  ScenarioGroup,
   UserProfile,
   WorldEntityPayload,
   WorldEntityUpdatePayload,
@@ -70,8 +71,11 @@ import { deleteTag, replaceTargetTags, updateTag } from '../lib/tagApi';
 import { createEntityLink, deleteEntityLink, updateEntityLink } from '../lib/entityLinkApi';
 import { deletePublication, publishTarget, updatePublication } from '../lib/publicationApi';
 import {
+  createScenarioGroup,
+  deleteScenarioGroup,
   createCharacterGroup,
   createItemGroup,
+  updateScenarioGroup,
   deleteCharacterGroup,
   deleteItemGroup,
   updateCharacterGroup,
@@ -84,6 +88,7 @@ import {
   addEntityLinkAssignment,
   appendSortedCharacterGroup,
   appendSortedItemGroup,
+  appendSortedScenarioGroup,
   clearCampaignFromCharacters,
   clearCampaignFromMaps,
   clearCampaignFromScenarios,
@@ -91,8 +96,7 @@ import {
   clearCharacterGroupFromCharacters,
   clearChronicleFromEvents,
   clearItemGroupFromItems,
-  clearScenarioFromCharacters,
-  clearScenarioFromMaps,
+  clearScenarioGroupFromScenarios,
   mergeTagsById,
   removeAssetCollectionAssignment,
   removeAssetCollectionFromAssets,
@@ -265,6 +269,41 @@ const useAccountActions = (
     confirmDisableTwoFactor,
     resendTwoFactorCode,
     changePassword,
+  };
+};
+
+const useScenarioGroupActions = (data: AppDataLoadingState) => {
+  const {
+    setScenarioGroups,
+    setScenarios,
+  } = data;
+
+  const createScenarioGroupAction = useCallback(async () => {
+    const created = await createScenarioGroup({ name: 'Новая группа', description: '' });
+    setScenarioGroups((prev) => appendSortedScenarioGroup(prev, created));
+    return created;
+  }, [setScenarioGroups]);
+
+  const updateScenarioGroupAction = useCallback(async (id: string, payload: Partial<ScenarioGroup>) => {
+    const updated = await updateScenarioGroup(id, {
+      ...(payload.name !== undefined ? { name: payload.name } : {}),
+      ...(payload.description !== undefined ? { description: payload.description } : {}),
+      ...(payload.orderIndex !== undefined ? { orderIndex: payload.orderIndex } : {})
+    });
+    setScenarioGroups((prev) => replaceById(prev, id, updated));
+    return updated;
+  }, [setScenarioGroups]);
+
+  const deleteScenarioGroupAction = useCallback(async (id: string) => {
+    await deleteScenarioGroup(id);
+    setScenarioGroups((prev) => removeById(prev, id));
+    setScenarios((prev) => clearScenarioGroupFromScenarios(prev, id));
+  }, [setScenarioGroups, setScenarios]);
+
+  return {
+    createScenarioGroup: createScenarioGroupAction,
+    updateScenarioGroup: updateScenarioGroupAction,
+    deleteScenarioGroup: deleteScenarioGroupAction,
   };
 };
 
@@ -804,8 +843,6 @@ const useAdminActions = (data: AppDataLoadingState) => {
     if (type === 'scenario') {
       setScenarios((prev) => removeById(prev, contentId));
       setCampaigns((prev) => removeScenarioFromCampaigns(prev, contentId));
-      setMaps((prev) => clearScenarioFromMaps(prev, contentId));
-      setCharacters((prev) => clearScenarioFromCharacters(prev, contentId));
     }
 
     if (type === 'map') {
@@ -846,6 +883,7 @@ export function useAppDomainActions({
   closeCampaignEditor,
 }: UseAppDomainActionsOptions) {
   const accountActions = useAccountActions(fetchCurrentUser, setCurrentUser);
+  const scenarioGroupActions = useScenarioGroupActions(data);
   const itemActions = useItemAndGroupActions(data);
   const assetActions = useAssetActions(data);
   const atlasActions = useAtlasActions(data);
@@ -863,6 +901,9 @@ export function useAppDomainActions({
     openCampaignFromDashboard: campaignActions.openCampaignFromDashboard,
     openCampaignEditor,
     deleteCampaign: campaignActions.deleteCampaign,
+    createScenarioGroup: scenarioGroupActions.createScenarioGroup,
+    updateScenarioGroup: scenarioGroupActions.updateScenarioGroup,
+    deleteScenarioGroup: scenarioGroupActions.deleteScenarioGroup,
     createItem: itemActions.createItem,
     updateItem: itemActions.updateItem,
     deleteItem: itemActions.deleteItem,
@@ -923,6 +964,7 @@ export function useAppDomainActions({
     data.setScenarios,
     itemActions,
     openCampaignEditor,
+    scenarioGroupActions,
     taxonomyActions,
   ]);
 

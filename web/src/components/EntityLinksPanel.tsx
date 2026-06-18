@@ -38,7 +38,7 @@ const RELATION_LABELS: Record<EntityLinkRelationType, string> = {
 };
 
 const RELATIONS: EntityLinkRelationType[] = ['related', 'uses', 'located_in', 'member_of', 'rewards', 'mentions'];
-const TARGET_TYPES: EntityLinkTargetType[] = ['scenario', 'map', 'character', 'item', 'asset', 'location', 'faction', 'event'];
+const TARGET_TYPES: EntityLinkTargetType[] = ['scenario', 'map', 'character', 'item', 'asset'];
 
 interface EntityLinkTargetOption {
   type: EntityLinkTargetType;
@@ -119,6 +119,10 @@ export const EntityLinksPanel: React.FC<EntityLinksPanelProps> = ({
   const targetOptions = useMemo(
     () => allOptions.filter((option) => option.type === targetType && !(option.type === sourceType && option.id === sourceId)),
     [allOptions, sourceId, sourceType, targetType]
+  );
+  const visibleLinks = useMemo(
+    () => links.filter((link) => targetTypes.includes(link.targetType)),
+    [links, targetTypes]
   );
 
   useEffect(() => {
@@ -229,13 +233,13 @@ export const EntityLinksPanel: React.FC<EntityLinksPanelProps> = ({
         </div>
       </div>
 
-      {links.length === 0 ? (
+      {visibleLinks.length === 0 ? (
         <div className="border border-dashed border-[var(--border-color)] p-3 mono text-[9px] uppercase text-[var(--text-muted)]">
           У материала пока нет связей
         </div>
       ) : (
         <div className="space-y-2">
-          {links.map((link) => (
+          {visibleLinks.map((link) => (
             <div key={link.id} className="border border-[var(--border-color)] bg-[var(--bg-main)] p-3 space-y-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">

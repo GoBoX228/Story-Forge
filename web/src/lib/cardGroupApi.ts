@@ -1,11 +1,50 @@
-import { CharacterGroup, CharacterGroupPayload, ItemGroup, ItemGroupPayload } from '../types';
+import {
+  CharacterGroup,
+  CharacterGroupPayload,
+  ItemGroup,
+  ItemGroupPayload,
+  ScenarioGroup,
+  ScenarioGroupPayload
+} from '../types';
 import { apiRequest } from './api';
 import {
   mapCharacterGroupFromApi,
   mapCharacterGroupToApiPayload,
   mapItemGroupFromApi,
-  mapItemGroupToApiPayload
+  mapItemGroupToApiPayload,
+  mapScenarioGroupFromApi,
+  mapScenarioGroupToApiPayload
 } from './mappers';
+
+export const listScenarioGroups = async (): Promise<ScenarioGroup[]> => {
+  const response = await apiRequest<unknown[]>('/scenario-groups');
+  return response.map(mapScenarioGroupFromApi);
+};
+
+export const createScenarioGroup = async (payload: ScenarioGroupPayload = {}): Promise<ScenarioGroup> => {
+  const response = await apiRequest('/scenario-groups', {
+    method: 'POST',
+    body: JSON.stringify(mapScenarioGroupToApiPayload(payload))
+  });
+
+  return mapScenarioGroupFromApi(response);
+};
+
+export const updateScenarioGroup = async (
+  id: string,
+  payload: ScenarioGroupPayload
+): Promise<ScenarioGroup> => {
+  const response = await apiRequest(`/scenario-groups/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(mapScenarioGroupToApiPayload(payload))
+  });
+
+  return mapScenarioGroupFromApi(response);
+};
+
+export const deleteScenarioGroup = async (id: string): Promise<void> => {
+  await apiRequest(`/scenario-groups/${id}`, { method: 'DELETE' });
+};
 
 export const listCharacterGroups = async (): Promise<CharacterGroup[]> => {
   const response = await apiRequest<unknown[]>('/character-groups');

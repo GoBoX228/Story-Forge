@@ -49,7 +49,6 @@ const Sidebar = React.memo<SidebarProps>(({
     { id: 'maps', label: 'Карты', icon: ICONS.Map },
     { id: 'items', label: 'Предметы', icon: ICONS.Items },
     { id: 'assets', label: 'Ассеты', icon: ICONS.Assets },
-    { id: 'world', label: 'Атлас', icon: ICONS.World },
     { id: 'campaigns', label: 'Кампании', icon: ICONS.Campaigns },
   ];
 
@@ -70,6 +69,7 @@ const Sidebar = React.memo<SidebarProps>(({
     return (
       <button
         key={item.id}
+        data-testid={`app-nav-${item.id}`}
         onClick={() => setActiveView(item.id)}
         onMouseEnter={() => setHoveredItem(item.id)}
         onMouseLeave={() => setHoveredItem(null)}
@@ -164,6 +164,7 @@ const Sidebar = React.memo<SidebarProps>(({
 
         {isAdmin && (
           <button
+            data-testid="app-nav-admin"
             onClick={() => setActiveView('admin')}
             className={`w-full py-3 flex items-center transition-all duration-200 group border border-[var(--border-color)] mt-4
               ${activeView === 'admin'
@@ -184,6 +185,7 @@ const Sidebar = React.memo<SidebarProps>(({
 
         {/* LOGOUT BUTTON */}
         <button
+          data-testid="app-logout"
           onClick={onLogout}
           className={`w-full py-4 flex items-center transition-all duration-200 group text-[var(--text-muted)] hover:text-[var(--col-red)] hover:bg-[var(--col-red)]/5
             ${isCollapsed ? 'justify-center px-0' : 'px-8 gap-4'}

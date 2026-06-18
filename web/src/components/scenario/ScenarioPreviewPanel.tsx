@@ -58,6 +58,7 @@ const ENTITY_TARGET_LABELS: Record<ScenarioNodeEntityTargetType, string> = {
   faction: 'ОРГАНИЗАЦИЯ',
   event: 'ХРОНИКА'
 };
+const VISIBLE_ENTITY_TARGET_TYPES: ScenarioNodeEntityTargetType[] = ['map', 'character', 'item', 'asset'];
 
 const NODE_TYPE_META: Record<ScenarioNode['type'], { label: string; accent: string; icon: React.ReactNode }> = {
   description: { label: 'Описание', accent: 'var(--text-muted)', icon: <ScrollText size={18} /> },
@@ -217,6 +218,7 @@ export const ScenarioPreviewPanel: React.FC<ScenarioPreviewPanelProps> = ({
     items: effectiveItems
   })
     .filter((entry) => entry.value.trim().length > 0);
+  const visibleEntityLinks = entityLinks.filter((link) => VISIBLE_ENTITY_TARGET_TYPES.includes(link.targetType));
   const nodeMeta = NODE_TYPE_META[currentNode.type];
   const routeNodes = history
     .map((nodeId) => nodeById.get(nodeId))
@@ -409,13 +411,13 @@ export const ScenarioPreviewPanel: React.FC<ScenarioPreviewPanelProps> = ({
             )}
           </div>
 
-          {entityLinks.length === 0 ? (
+          {visibleEntityLinks.length === 0 ? (
             <div className="border border-dashed border-[var(--border-color)] p-4 mono text-[9px] uppercase text-[var(--text-muted)]">
               У текущего узла нет связанных материалов
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {entityLinks.map((link) => (
+              {visibleEntityLinks.map((link) => (
                 <div key={link.id} className="border border-[var(--border-color)] bg-[var(--input-bg)] p-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="mono text-[8px] uppercase text-[var(--text-muted)]">

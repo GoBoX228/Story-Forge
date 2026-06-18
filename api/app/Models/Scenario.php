@@ -11,6 +11,7 @@ class Scenario extends Model
     protected $fillable = [
         'user_id',
         'campaign_id',
+        'scenario_group_id',
         'title',
         'description',
     ];
@@ -25,6 +26,11 @@ class Scenario extends Model
         return $this->belongsTo(Campaign::class);
     }
 
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(ScenarioGroup::class, 'scenario_group_id');
+    }
+
     public function nodes(): HasMany
     {
         return $this->hasMany(ScenarioNode::class)->orderBy('order_index');
@@ -35,13 +41,4 @@ class Scenario extends Model
         return $this->hasMany(ScenarioTransition::class)->orderBy('order_index');
     }
 
-    public function maps(): HasMany
-    {
-        return $this->hasMany(Map::class);
-    }
-
-    public function characters(): HasMany
-    {
-        return $this->hasMany(Character::class);
-    }
 }

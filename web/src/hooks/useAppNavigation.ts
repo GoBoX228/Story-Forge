@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppView, WorldEditorTarget } from '../appTypes';
 import { EntityLinkTargetType, ScenarioNodeEntityTargetType } from '../types';
 
-const GRAPH_RETURN_VIEWS: AppView[] = ['maps', 'characters', 'items', 'assets', 'world'];
+const GRAPH_RETURN_VIEWS: AppView[] = ['maps', 'characters', 'items', 'assets'];
 
 export const useAppNavigation = () => {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
@@ -49,9 +49,8 @@ export const useAppNavigation = () => {
     setActiveView('assets');
   }, []);
 
-  const openWorldTarget = useCallback((target: WorldEditorTarget) => {
-    setWorldEditorTarget(target);
-    setActiveView('world');
+  const openWorldTarget = useCallback((_target: WorldEditorTarget) => {
+    setWorldEditorTarget(null);
   }, []);
 
   const returnToGraphScenario = useCallback(() => {
@@ -66,32 +65,34 @@ export const useAppNavigation = () => {
     targetId: string,
     sourceScenarioId: string
   ) => {
-    setGraphReturnScenarioId(sourceScenarioId);
-
     if (targetType === 'map') {
+      setGraphReturnScenarioId(sourceScenarioId);
       openMap(targetId);
       return;
     }
 
     if (targetType === 'character') {
+      setGraphReturnScenarioId(sourceScenarioId);
       openCharacter(targetId);
       return;
     }
 
     if (targetType === 'item') {
+      setGraphReturnScenarioId(sourceScenarioId);
       openItem(targetId);
       return;
     }
 
     if (targetType === 'asset') {
+      setGraphReturnScenarioId(sourceScenarioId);
       openAsset(targetId);
       return;
     }
 
     if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
-      openWorldTarget({ type: targetType, id: targetId });
+      return;
     }
-  }, [openAsset, openCharacter, openItem, openMap, openWorldTarget]);
+  }, [openAsset, openCharacter, openItem, openMap]);
 
   const openMaterialLink = useCallback((targetType: EntityLinkTargetType, targetId: string) => {
     if (targetType === 'scenario') {
@@ -120,9 +121,9 @@ export const useAppNavigation = () => {
     }
 
     if (targetType === 'location' || targetType === 'faction' || targetType === 'event') {
-      openWorldTarget({ type: targetType, id: targetId });
+      return;
     }
-  }, [openAsset, openCharacter, openItem, openMap, openScenario, openWorldTarget]);
+  }, [openAsset, openCharacter, openItem, openMap, openScenario]);
 
   return {
     activeView,

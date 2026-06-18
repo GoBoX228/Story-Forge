@@ -1,48 +1,52 @@
 
-import Image from 'next/image';
 import React, { useEffect, useRef, useState } from 'react';
-import { BaseCard } from './BaseCard';
-import { Button, Input, SearchInput, Select, TextArea, AddTile, SectionHeader, StatBadge } from './UI';
+import { Button, Input, SearchInput, Select, TextArea, SectionHeader, StatBadge } from './UI';
 import { Modal } from './Modal';
 import {
   Asset,
   AssetCollection,
   AssetCollectionAssignmentMap,
   AssetCollectionTargetType,
-  Character,
   EntityLink,
   EntityLinkAssignmentMap,
   EntityLinkCreatePayload,
   EntityLinkTargetType,
-  EntityLinkUpdatePayload,
-  Faction,
   Item,
   ItemGroup,
   ItemRarity,
   ItemType,
-  MapData,
   PublishedContent,
   PublicationAssignmentMap,
   PublicationTargetType,
   PublicationUpdatePayload,
   PublicationUpsertPayload,
-  Scenario,
   StatModifier,
   StatKey,
   Tag,
   TagAssignmentMap,
-  TaggableTargetType,
-  WorldEvent,
-  WorldLocation
+  TaggableTargetType
 } from '../types';
 import { assetCollectionAssignmentKey, entityLinkAssignmentKey, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
-import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
+import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink } from '../lib/assetUsage';
 import { TagFilter, TagPicker } from './TagPicker';
-import { EntityLinksPanel } from './EntityLinksPanel';
 import { AssetUsagePicker } from './AssetUsagePicker';
 import { AssetCollectionTargetPicker } from './AssetCollectionTargetPicker';
 import { PublicationPanel } from './PublicationPanel';
-import { Scale, Coins, Edit3, Trash2, Zap, Plus } from 'lucide-react';
+import { ClipboardPaste, Coins, Edit3, FolderOpen, FolderPlus, Pencil, Scale, Scissors, Trash2, X, Zap, Plus } from 'lucide-react';
+import {
+  EntityLibraryCard,
+  EntityLibraryContextMenu,
+  EntityLibraryGroupCard,
+  EntityLibraryMediaSlot,
+  EntityLibraryWorkspace,
+  type EntityLibraryActionSection,
+  useEntityLibraryContextMenu,
+  useEntityLibraryDragDrop,
+  useEntityLibraryKeyboard,
+  useEntityLibraryMoveBuffer,
+  useEntityLibraryNavigation,
+  useEntityLibrarySelection
+} from './entityLibrary';
 
 interface ItemsEditorProps {
   data: Item[];
@@ -50,15 +54,9 @@ interface ItemsEditorProps {
   onCreateItem?: (payload: Omit<Item, 'id'>) => Promise<Item>;
   onUpdateItem?: (id: string, payload: Omit<Item, 'id'>) => Promise<Item>;
   onDeleteItem?: (id: string) => Promise<void>;
-  scenarios: Scenario[];
-  maps: MapData[];
-  characters: Character[];
   assets: Asset[];
   assetCollections: AssetCollection[];
   assetCollectionAssignments: AssetCollectionAssignmentMap;
-  locations: WorldLocation[];
-  factions: Faction[];
-  events: WorldEvent[];
   tags: Tag[];
   tagAssignments: TagAssignmentMap;
   entityLinks: EntityLinkAssignmentMap;
@@ -67,12 +65,10 @@ interface ItemsEditorProps {
   onUpdateTag: (id: string, name: string) => Promise<Tag>;
   onDeleteTag: (id: string) => Promise<void>;
   onCreateMaterialLink: (sourceType: EntityLinkTargetType, sourceId: string, payload: EntityLinkCreatePayload) => Promise<EntityLink>;
-  onUpdateMaterialLink: (id: string, payload: EntityLinkUpdatePayload) => Promise<EntityLink>;
   onDeleteMaterialLink: (id: string) => Promise<void>;
   onUpsertPublication: (type: PublicationTargetType, id: string, payload: PublicationUpsertPayload) => Promise<PublishedContent>;
   onUpdatePublication: (id: string, payload: PublicationUpdatePayload) => Promise<PublishedContent>;
   onDeletePublication: (id: string) => Promise<void>;
-  onOpenMaterialLink?: (targetType: EntityLinkTargetType, targetId: string) => void;
   onReplaceAssetCollections: (type: AssetCollectionTargetType, id: string, collectionIds: string[]) => Promise<AssetCollection[]>;
   initialItemId?: string | null;
   itemGroups: ItemGroup[];
@@ -95,15 +91,9 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   onCreateItem,
   onUpdateItem,
   onDeleteItem,
-  scenarios,
-  maps,
-  characters,
   assets,
   assetCollections,
   assetCollectionAssignments,
-  locations,
-  factions,
-  events,
   tags,
   tagAssignments,
   entityLinks,
@@ -112,12 +102,10 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   onUpdateTag,
   onDeleteTag,
   onCreateMaterialLink,
-  onUpdateMaterialLink,
   onDeleteMaterialLink,
   onUpsertPublication,
   onUpdatePublication,
   onDeletePublication,
-  onOpenMaterialLink,
   onReplaceAssetCollections,
   initialItemId,
   itemGroups,
@@ -127,10 +115,9 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [activeGroupId, setActiveGroupId] = useState<'all' | 'none' | string>('all');
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [renamingGroupName, setRenamingGroupName] = useState('');
-  const [activeFilter, setActiveFilter] = useState<ItemRarity | 'ВСЕ'>('ВСЕ');
+  const [activeFilter, setActiveFilter] = useState<ItemRarity | 'all'>('all');
   const [selectedTagFilter, setSelectedTagFilter] = useState('');
   const [sortOrder, setSortOrder] = useState<string>('NAME_ASC');
   const [searchQuery, setSearchQuery] = useState('');
@@ -138,6 +125,11 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const initialItemAppliedRef = useRef<string | null>(null);
+  const librarySelection = useEntityLibrarySelection({ mode: 'multi' });
+  const libraryNavigation = useEntityLibraryNavigation();
+  const libraryContextMenu = useEntityLibraryContextMenu();
+  const moveBuffer = useEntityLibraryMoveBuffer();
+  const { currentGroupId, isRoot: libraryIsRoot, openGroup, returnToRoot } = libraryNavigation;
   const currentRarityAccent = RARITY_COLORS[formData.rarity as ItemRarity || 'Обычный'];
 
   const linksForItem = (itemId: string) =>
@@ -191,7 +183,7 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
     setEditingId(null);
     setFormData({
       ...EMPTY_ITEM,
-      groupId: activeGroupId !== 'all' && activeGroupId !== 'none' ? activeGroupId : null
+      groupId: currentGroupId
     });
     setIsModalOpen(true);
   };
@@ -233,6 +225,8 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
       } else {
         onUpdate(data.filter(item => item.id !== id));
       }
+      librarySelection.clearSelection();
+      moveBuffer.removeIds([id]);
     } catch {
       setError('Не удалось удалить предмет');
     } finally {
@@ -281,12 +275,20 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   const removeModifier = (index: number) => { const modifiers = [...(formData.modifiers || [])]; modifiers.splice(index, 1); setFormData({ ...formData, modifiers }); };
   const updateModifier = (index: number, key: keyof StatModifier, value: any) => { const modifiers = [...(formData.modifiers || [])]; modifiers[index] = { ...modifiers[index], [key]: value }; setFormData({ ...formData, modifiers }); };
 
+  const hasLibraryFilters = searchQuery.trim().length > 0 || Boolean(selectedTagFilter) || activeFilter !== 'all';
+  const currentItemGroup = currentGroupId ? itemGroups.find((group) => group.id === currentGroupId) : null;
+  const visibleItemGroups = libraryIsRoot && !hasLibraryFilters ? itemGroups : [];
+  const itemGroupCountById = new Map(itemGroups.map((group) => [
+    group.id,
+    data.filter((item) => item.groupId === group.id).length
+  ]));
+
   const filteredItems = data
     .filter(item => {
       const assignedTags = tagAssignments[tagAssignmentKey('item', item.id)] ?? [];
-      return (activeFilter === 'ВСЕ' || item.rarity === activeFilter) &&
+      return (activeFilter === 'all' || item.rarity === activeFilter) &&
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        (activeGroupId === 'all' || (activeGroupId === 'none' ? !item.groupId : item.groupId === activeGroupId)) &&
+        (libraryIsRoot ? !item.groupId : item.groupId === currentGroupId) &&
         (!selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter));
     })
     .sort((a, b) => {
@@ -295,6 +297,23 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
       if (sortOrder === 'WEIGHT_DESC') return b.weight - a.weight;
       return 0;
     });
+  const visibleItemIds = filteredItems.map((item) => item.id);
+  const visibleItemIdKey = visibleItemIds.join('|');
+  const isItemLibraryFilteredEmpty = data.length > 0 && filteredItems.length === 0 && hasLibraryFilters;
+  const itemLibraryEmptyTitle = isItemLibraryFilteredEmpty
+    ? 'Ничего не найдено'
+    : libraryIsRoot
+      ? 'Предметов пока нет'
+      : 'В группе пока нет предметов';
+  const itemLibraryEmptyDescription = isItemLibraryFilteredEmpty
+    ? 'Попробуйте изменить поиск, тег или фильтр редкости.'
+    : libraryIsRoot
+      ? 'Чтобы создать предмет или группу, нажмите правой кнопкой мыши по этой области.'
+      : 'Чтобы создать предмет в текущей группе, нажмите правой кнопкой мыши по этой области.';
+
+  useEffect(() => {
+    librarySelection.pruneSelection(visibleItemIds);
+  }, [librarySelection, visibleItemIdKey, visibleItemIds]);
 
   const getButtonColor = (rarity: ItemRarity = 'Обычный'): "blue" | "yellow" | "purple" | "red" | "white" | "grey" => {
     if (rarity === 'Легендарный') return 'yellow'; if (rarity === 'Эпический') return 'purple'; if (rarity === 'Редкий') return 'red'; if (rarity === 'Необычный') return 'blue'; return 'grey';
@@ -302,7 +321,9 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
 
   const createGroup = async () => {
     const created = await onCreateItemGroup();
-    setActiveGroupId(created.id);
+    openGroup(created.id);
+    librarySelection.clearSelection();
+    startRenameGroup(created);
   };
 
   const startRenameGroup = (group: ItemGroup) => {
@@ -310,91 +331,344 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
     setRenamingGroupName(group.name);
   };
 
+  const cancelRenameGroup = () => {
+    setRenamingGroupId(null);
+    setRenamingGroupName('');
+  };
+
   const commitRenameGroup = async () => {
     if (!renamingGroupId) return;
     const groupId = renamingGroupId;
     const name = renamingGroupName.trim();
-    setRenamingGroupId(null);
+    cancelRenameGroup();
     if (name) await onUpdateItemGroup(groupId, { name });
   };
 
   const deleteGroup = async (groupId: string) => {
     if (!confirm('Удалить группу? Предметы останутся без группы.')) return;
     await onDeleteItemGroup(groupId);
-    if (activeGroupId === groupId) setActiveGroupId('all');
+    if (currentGroupId === groupId) returnToRoot();
+    if (renamingGroupId === groupId) cancelRenameGroup();
+    librarySelection.clearSelection();
   };
 
+  const itemPayloadWithGroup = (item: Item, groupId: string | null): Omit<Item, 'id'> => ({
+    name: item.name,
+    type: item.type,
+    rarity: item.rarity,
+    description: item.description,
+    modifiers: item.modifiers ?? [],
+    weight: item.weight,
+    value: item.value,
+    groupId,
+  });
+
+  const cutItemsToClipboard = (itemId?: string | null) => {
+    const targetIds = librarySelection.getActionTargetIds(itemId);
+    if (targetIds.length === 0) return;
+    moveBuffer.cut(targetIds);
+    librarySelection.replaceSelection(targetIds);
+  };
+
+  const moveItemsToGroup = async (itemIds: readonly string[], targetGroupId: string | null) => {
+    const targetIds = Array.from(new Set(itemIds)).filter(Boolean);
+    if (targetIds.length === 0) return;
+
+    if (onUpdateItem) {
+      const updatedItems = await Promise.all(targetIds.map(async (id) => {
+        const item = data.find((candidate) => candidate.id === id);
+        if (!item) return null;
+        return onUpdateItem(id, itemPayloadWithGroup(item, targetGroupId));
+      }));
+      const byId = new Map(updatedItems.filter(Boolean).map((item) => [item!.id, item!]));
+      if (byId.size > 0) onUpdate(data.map((item) => byId.get(item.id) ?? item));
+    } else {
+      onUpdate(data.map((item) => targetIds.includes(item.id) ? { ...item, groupId: targetGroupId } : item));
+    }
+
+    librarySelection.clearSelection();
+  };
+
+  const pasteItemsToGroup = async (targetGroupId: string | null) => {
+    await moveBuffer.paste(async (bufferedIds) => {
+      await moveItemsToGroup(bufferedIds, targetGroupId);
+    });
+  };
+
+  const libraryDragDrop = useEntityLibraryDragDrop({
+    getDragItemIds: (itemId) => librarySelection.getActionTargetIds(itemId),
+    onDropItems: async ({ itemIds, targetGroupId }) => {
+      await moveItemsToGroup(itemIds, targetGroupId);
+      moveBuffer.removeIds(itemIds);
+    }
+  });
+
+  const getItemLibraryContextSections = (): EntityLibraryActionSection[] => {
+    const context = libraryContextMenu.contextMenu;
+    if (!context) return [];
+
+    if (context.kind === 'workspace') {
+      return [
+        {
+          actions: [
+            { id: 'create-item', label: 'Создать предмет', icon: <Plus size={13} />, onSelect: openCreateModal },
+            { id: 'create-group', label: 'Создать группу', icon: <FolderPlus size={13} />, disabled: !libraryIsRoot, onSelect: () => void createGroup() },
+            { id: 'paste-items', label: context.groupId ? 'Вставить сюда' : 'Вставить в корень', icon: <ClipboardPaste size={13} />, disabled: moveBuffer.count === 0, onSelect: () => void pasteItemsToGroup(context.groupId) }
+          ]
+        }
+      ];
+    }
+
+    if (context.kind === 'group') {
+      const group = itemGroups.find((candidate) => candidate.id === context.groupId);
+      return [
+        {
+          actions: [
+            { id: 'open-group', label: 'Открыть группу', icon: <FolderOpen size={13} />, onSelect: () => { openGroup(context.groupId); librarySelection.clearSelection(); } },
+            { id: 'rename-group', label: 'Переименовать', icon: <Pencil size={13} />, onSelect: () => { if (group) startRenameGroup(group); } },
+            { id: 'paste-to-group', label: 'Вставить в группу', icon: <ClipboardPaste size={13} />, disabled: moveBuffer.count === 0, onSelect: () => void pasteItemsToGroup(context.groupId) }
+          ]
+        },
+        {
+          actions: [
+            { id: 'delete-group', label: 'Удалить группу', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void deleteGroup(context.groupId) }
+          ]
+        }
+      ];
+    }
+
+    const targetIds = librarySelection.getActionTargetIds(context.itemId);
+    return [
+      {
+        actions: [
+          { id: 'open-item', label: 'Редактировать', icon: <Edit3 size={13} />, onSelect: () => { const item = data.find((candidate) => candidate.id === context.itemId); if (item) openEditModal(item); } },
+          { id: 'cut-item', label: targetIds.length > 1 ? 'Вырезать выбранное' : 'Вырезать', icon: <Scissors size={13} />, onSelect: () => cutItemsToClipboard(context.itemId) }
+        ]
+      },
+      {
+        actions: [
+          { id: 'delete-item', label: 'Удалить', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void handleDelete(context.itemId) }
+        ]
+      }
+    ];
+  };
+
+  useEntityLibraryKeyboard({
+    contextMenuOpen: Boolean(libraryContextMenu.contextMenu),
+    onCloseContextMenu: libraryContextMenu.closeContextMenu,
+    renameActive: Boolean(renamingGroupId),
+    onCancelRename: cancelRenameGroup,
+    selectedIds: librarySelection.selectedIds,
+    onClearSelection: librarySelection.clearSelection,
+    moveBufferCount: moveBuffer.count,
+    onCancelMoveBuffer: moveBuffer.cancel,
+    onOpenSelected: (itemId) => {
+      const item = data.find((candidate) => candidate.id === itemId);
+      if (item) openEditModal(item);
+    },
+    onDeleteSelected: (itemId) => void handleDelete(itemId)
+  });
+
   return (
-    <div className="flex h-full w-full">
-      <div className="flex-1 bg-[var(--bg-main)] overflow-auto p-12 bauhaus-bg relative">
-        <div className="max-w-6xl mx-auto">
-          <SectionHeader title="СКЛАД ТВОРЦА" subtitle="РЕЕСТР СНАРЯЖЕНИЯ" accentColor={SECTION_ACCENT} actions={<Button color="blue" size="lg" onClick={openCreateModal}><Plus size={18} /> СОЗДАТЬ ПРЕДМЕТ</Button>} />
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10">
-            {filteredItems.map(item => {
-              const itemImage = findAssetForUsage(linksForItem(item.id), assets, 'item_image');
-              return (
-              <BaseCard key={item.id} title={item.name} accentColor={RARITY_COLORS[item.rarity]}>
-                <div className="space-y-4 flex flex-col h-full">
-                  {itemImage?.url && (
-                    <div className="relative h-32 border border-[var(--border-color)] bg-black overflow-hidden">
-                      <Image
-                        src={itemImage.url}
-                        alt={itemImage.name}
-                        fill
-                        sizes="360px"
-                        unoptimized
-                        className="object-cover"
-                      />
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center"><span className="mono text-[11px] font-black uppercase tracking-[0.1em]" style={{ color: RARITY_COLORS[item.rarity] }}>{item.rarity}</span><span className="mono text-[9px] text-[var(--text-muted)] uppercase font-bold tracking-widest">{item.type}</span></div>
-                  <div className="relative pl-6 py-1 border-l border-[var(--border-color)]"><p className="text-[11px] text-[var(--text-main)] opacity-60 mono leading-relaxed text-left">{item.description || 'ОПИСАНИЕ ОТСУТСТВУЕТ'}</p></div>
-                  {item.modifiers?.length > 0 && (<div className="flex flex-wrap gap-2 pt-1">{item.modifiers.map((mod, idx) => (<StatBadge key={idx} stat={mod.stat} value={mod.value} accentColor={RARITY_COLORS[item.rarity]} />))}</div>)}
-                  <div className="flex-1 min-h-[10px]" />
-                  <div className="grid grid-cols-2 gap-4 border-t border-[var(--border-color)] pt-4"><div className="flex items-center gap-2"><Scale size={14} className="text-[var(--text-muted)]" /><span className="mono text-[10px] uppercase font-black text-[var(--text-main)] opacity-80">{item.weight} КГ</span></div><div className="flex items-center gap-2 justify-end"><Coins size={14} className="text-[var(--col-yellow)]" /><span className="mono text-[10px] uppercase font-black text-[var(--col-yellow)]">{item.value} GP</span></div></div>
-                  <div className="flex flex-col gap-2"><Button inverted color={getButtonColor(item.rarity)} className="w-full h-12" onClick={() => openEditModal(item)}><Edit3 size={14} /> РЕДАКТИРОВАТЬ</Button><button onClick={() => handleDelete(item.id)} className="py-2 mono text-[8px] uppercase font-black text-[var(--text-muted)] hover:text-[var(--col-red)] transition-colors self-center">УДАЛИТЬ ПРЕДМЕТ</button></div>
-                </div>
-              </BaseCard>
-              );
-            })}
-            <AddTile label="ДОБАВИТЬ ПРЕДМЕТ" accentColor={SECTION_ACCENT} onClick={openCreateModal} />
+    <div className="flex h-full w-full flex-col bg-[var(--bg-main)] bauhaus-bg">
+      <div className="shrink-0 px-8 pb-5 pt-7">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+          <div className="flex flex-col gap-4">
+            <SectionHeader title="СКЛАД ТВОРЦА" subtitle="РЕЕСТР СНАРЯЖЕНИЯ" accentColor={SECTION_ACCENT} />
+            {!libraryIsRoot && currentItemGroup && (
+              <div className="mono flex flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-[0.28em] text-[var(--text-muted)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    returnToRoot();
+                    librarySelection.clearSelection();
+                  }}
+                  className="transition-colors hover:text-[var(--col-blue)]"
+                >
+                  Предметы
+                </button>
+                <span>/</span>
+                <span className="text-[var(--text-main)]">{currentItemGroup.name}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="min-w-[250px] flex-1">
+              <SearchInput value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="ВВЕДИТЕ НАЗВАНИЕ..." accentColor={SECTION_ACCENT} />
+            </div>
+            <div className="min-w-[190px]">
+              <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
+            </div>
+            <div className="min-w-[170px]">
+              <Select value={sortOrder} onChange={val => setSortOrder(val)} options={[{value:'NAME_ASC', label:'ИМЯ'}, {value:'VALUE_DESC', label:'ЦЕНА'}, {value:'WEIGHT_DESC', label:'ВЕС'}]} accentColor={SECTION_ACCENT} />
+            </div>
+            <div className="min-w-[180px]">
+              <Select
+                value={activeFilter}
+                onChange={(value) => setActiveFilter(value as ItemRarity | 'all')}
+                options={[{ value: 'all', label: 'ВСЕ' }, ...RARITY_OPTIONS]}
+                accentColor={SECTION_ACCENT}
+              />
+            </div>
+            {!libraryIsRoot && (
+              <button
+                type="button"
+                onClick={() => {
+                  returnToRoot();
+                  librarySelection.clearSelection();
+                }}
+                className="h-11 border-2 border-[var(--border-color)] px-4 mono text-[10px] font-black uppercase text-[var(--text-muted)] transition-colors hover:border-[var(--col-blue)] hover:text-[var(--col-blue)]"
+              >
+                Все предметы
+              </button>
+            )}
+            <div className="flex-1" />
+            <Button color="blue" onClick={openCreateModal}><Plus size={18} /> СОЗДАТЬ ПРЕДМЕТ</Button>
           </div>
         </div>
       </div>
-      <div className="w-80 bg-[var(--bg-surface)] border-l-4 border-[var(--col-blue)] flex flex-col p-8 space-y-10 z-10 overflow-y-auto">
-        <h2 className="text-4xl font-black uppercase tracking-tighter text-[var(--col-blue)] glitch-text leading-none">АРСЕНАЛ</h2>
-        <SearchInput value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="ВВЕДИТЕ НАЗВАНИЕ..." accentColor={SECTION_ACCENT} />
-        <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
-        <Select value={sortOrder} onChange={val => setSortOrder(val)} options={[{value:'NAME_ASC', label:'ИМЯ'}, {value:'VALUE_DESC', label:'ЦЕНА'}, {value:'WEIGHT_DESC', label:'ВЕС'}]} accentColor={SECTION_ACCENT} />
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <label className="mono text-[10px] text-[var(--col-blue)] uppercase tracking-[0.3em] font-black">Группы</label>
-            <button onClick={() => void createGroup()} className="mono text-[9px] uppercase font-black text-[var(--col-blue)] hover:text-[var(--text-main)]">+ группа</button>
-          </div>
-          <div className="flex flex-col gap-2">
-            <button onClick={() => setActiveGroupId('all')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'all' ? 'border-[var(--col-blue)] bg-[var(--col-blue)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Все предметы</button>
-            <button onClick={() => setActiveGroupId('none')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeGroupId === 'none' ? 'border-[var(--col-blue)] bg-[var(--col-blue)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)]'}`}>Без группы</button>
-            {itemGroups.map((group) => (
-              <div key={group.id} className={`border-2 ${activeGroupId === group.id ? 'border-[var(--col-blue)]' : 'border-[var(--border-color)]'}`}>
-                {renamingGroupId === group.id ? (
-                  <Input autoFocus value={renamingGroupName} onChange={(event) => setRenamingGroupName(event.target.value)} onBlur={() => void commitRenameGroup()} onKeyDown={(event) => { if (event.key === 'Enter') void commitRenameGroup(); if (event.key === 'Escape') setRenamingGroupId(null); }} accentColor={SECTION_ACCENT} />
-                ) : (
-                  <button onClick={() => setActiveGroupId(group.id)} className="w-full px-4 py-3 mono text-[10px] uppercase text-left font-black text-[var(--text-main)]">{group.name}</button>
-                )}
-                <div className="flex border-t border-[var(--border-color)]">
-                  <button onClick={() => startRenameGroup(group)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-blue)]">Переименовать</button>
-                  <button onClick={() => void deleteGroup(group.id)} className="flex-1 py-2 mono text-[8px] uppercase text-[var(--text-muted)] hover:text-[var(--col-red)]">Удалить</button>
-                </div>
+
+      <div className="min-h-0 flex-1 px-8 pb-8 pt-3">
+        <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-3">
+          {moveBuffer.count > 0 && (
+            <div className="flex flex-wrap items-center gap-3 border border-[var(--col-blue)]/50 bg-[var(--col-blue)]/10 px-4 py-3">
+              <div className="mono text-[10px] font-black uppercase tracking-[0.12em] text-[var(--col-blue)]">
+                Вырезано: {moveBuffer.count}
               </div>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-5">
-          <label className="mono text-[10px] text-[var(--col-blue)] uppercase tracking-[0.3em] font-black">ФИЛЬТР РЕДКОСТИ</label>
-          <div className="flex flex-col gap-2">
-            <button onClick={() => setActiveFilter('ВСЕ')} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all ${activeFilter === 'ВСЕ' ? 'border-[var(--text-main)] bg-[var(--text-main)] text-[var(--bg-main)]' : 'border-[var(--border-color)] text-[var(--text-muted)] hover:border-[var(--border-color-hover)]'}`}>ВСЕ КАТЕГОРИИ</button>
-            {(Object.keys(RARITY_COLORS) as ItemRarity[]).map(r => (<button key={r} onClick={() => setActiveFilter(r)} style={{ color: activeFilter === r ? 'var(--text-inverted)' : RARITY_COLORS[r], borderColor: activeFilter === r ? RARITY_COLORS[r] : `color-mix(in srgb, ${RARITY_COLORS[r]} 20%, transparent)`, backgroundColor: activeFilter === r ? RARITY_COLORS[r] : 'transparent' }} className={`px-4 py-3 border-2 mono text-[10px] uppercase text-left font-black transition-all`}>{r}</button>))}
-          </div>
+              <div className="flex-1" />
+              <button type="button" onClick={() => void pasteItemsToGroup(currentGroupId)} className="mono flex items-center gap-2 text-[10px] font-black uppercase text-[var(--text-main)] hover:text-[var(--col-blue)]">
+                <ClipboardPaste size={13} /> Вставить сюда
+              </button>
+              <button type="button" onClick={moveBuffer.cancel} className="mono flex items-center gap-2 text-[10px] font-black uppercase text-[var(--text-muted)] hover:text-[var(--col-red)]">
+                <X size={13} /> Отменить
+              </button>
+            </div>
+          )}
+          <EntityLibraryWorkspace<Item, ItemGroup>
+            items={filteredItems}
+            groups={visibleItemGroups}
+            getItemId={(item) => item.id}
+            getGroupId={(group) => group.id}
+            selectedIds={librarySelection.selectedIds}
+            cutItemIds={moveBuffer.itemIds}
+            draggingItemIds={libraryDragDrop.draggingIds}
+            dragOverGroupId={libraryDragDrop.dragOverGroupId}
+            currentGroupId={currentGroupId}
+            draggableItems
+            surface="transparent"
+            framed
+            className="min-h-[420px] flex-1"
+            gridClassName=""
+            onSelectItem={(itemId, _item, event) => librarySelection.selectFromEvent(itemId, event, visibleItemIds)}
+            onOpenItem={(_itemId, item) => openEditModal(item)}
+            onOpenGroup={(groupId) => {
+              openGroup(groupId);
+              librarySelection.clearSelection();
+            }}
+            onClearSelection={librarySelection.clearSelection}
+            onWorkspaceContextMenu={(context) => libraryContextMenu.setContextMenu(context)}
+            onItemContextMenu={(itemId, _item, event) => {
+              if (!librarySelection.isSelected(itemId)) librarySelection.replaceSelection(itemId);
+              libraryContextMenu.openItemMenu(event, itemId, currentGroupId);
+            }}
+            onGroupContextMenu={(groupId, _group, event) => {
+              librarySelection.clearSelection();
+              libraryContextMenu.openGroupMenu(event, groupId);
+            }}
+            onItemDragStart={(itemId, _item, event) => {
+              if (!librarySelection.isSelected(itemId)) librarySelection.replaceSelection(itemId);
+              libraryDragDrop.handleItemDragStart(itemId, event);
+            }}
+            onItemDragEnd={() => libraryDragDrop.handleItemDragEnd()}
+            onWorkspaceDragOver={(groupId, event) => libraryDragDrop.handleWorkspaceDragOver(groupId, event)}
+            onWorkspaceDragLeave={(groupId, event) => libraryDragDrop.handleWorkspaceDragLeave(groupId, event)}
+            onWorkspaceDrop={(groupId, event) => libraryDragDrop.handleWorkspaceDrop(groupId, event)}
+            onGroupDragOver={(groupId, _group, event) => libraryDragDrop.handleGroupDragOver(groupId, event)}
+            onGroupDragLeave={(groupId, _group, event) => libraryDragDrop.handleGroupDragLeave(groupId, event)}
+            onGroupDrop={(groupId, _group, event) => libraryDragDrop.handleGroupDrop(groupId, event)}
+            renderGroup={(group, state) => (
+              <EntityLibraryGroupCard
+                name={group.name}
+                nameContent={renamingGroupId === group.id ? (
+                  <Input
+                    autoFocus
+                    value={renamingGroupName}
+                    onChange={(event) => setRenamingGroupName(event.target.value)}
+                    onBlur={() => void commitRenameGroup()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') void commitRenameGroup();
+                      if (event.key === 'Escape') cancelRenameGroup();
+                    }}
+                    accentColor={SECTION_ACCENT}
+                    className="h-9"
+                  />
+                ) : undefined}
+                count={itemGroupCountById.get(group.id) ?? 0}
+                countLabel={(itemGroupCountById.get(group.id) ?? 0) === 0 ? 'ПУСТО' : 'ПРЕДМЕТОВ'}
+                accentColor={SECTION_ACCENT}
+                dragOver={state.dragOver}
+              />
+            )}
+            renderItem={(item, state) => {
+              const itemImage = findAssetForUsage(linksForItem(item.id), assets, 'item_image');
+              const accent = RARITY_COLORS[item.rarity];
+
+              return (
+                <EntityLibraryCard
+                  title={item.name}
+                  accentColor={accent}
+                  selected={state.selected}
+                  cut={state.cut}
+                  dragging={state.dragging}
+                  headerExtra={(
+                    <div className="flex items-center gap-2">
+                      {state.cut && <span className="mono text-[8px] font-black uppercase text-[var(--col-blue)]">ВЫРЕЗАНО</span>}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDelete(item.id);
+                        }}
+                        className="text-[var(--text-muted)] transition-colors hover:text-[var(--col-red)]"
+                        title="Удалить"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                >
+                  <div className="space-y-4">
+                    <EntityLibraryMediaSlot
+                      src={itemImage?.url}
+                      alt={itemImage?.name ?? item.name}
+                      emptyLabel="ИЗОБРАЖЕНИЕ НЕ ВЫБРАНО"
+                      accentColor={accent}
+                    />
+                    <div className="flex justify-between gap-3">
+                      <span className="mono text-[10px] font-black uppercase tracking-[0.12em]" style={{ color: accent }}>{item.rarity}</span>
+                      <span className="mono truncate text-[9px] font-bold uppercase tracking-widest text-[var(--text-muted)]">{item.type}</span>
+                    </div>
+                    <p className="line-clamp-3 border-l border-[var(--border-color)] py-1 pl-4 text-left mono text-[11px] leading-relaxed text-[var(--text-main)] opacity-70">{item.description || 'ОПИСАНИЕ ОТСУТСТВУЕТ'}</p>
+                    {item.modifiers?.length > 0 && (<div className="flex flex-wrap gap-2 pt-1">{item.modifiers.slice(0, 4).map((mod, idx) => (<StatBadge key={idx} stat={mod.stat} value={mod.value} accentColor={accent} />))}</div>)}
+                    <div className="grid grid-cols-2 gap-3 border-t border-[var(--border-color)] pt-4">
+                      <div className="flex items-center gap-2"><Scale size={14} className="text-[var(--text-muted)]" /><span className="mono text-[10px] font-black uppercase text-[var(--text-main)] opacity-80">{item.weight} КГ</span></div>
+                      <div className="flex items-center justify-end gap-2"><Coins size={14} className="text-[var(--col-yellow)]" /><span className="mono text-[10px] font-black uppercase text-[var(--col-yellow)]">{item.value} GP</span></div>
+                    </div>
+                  </div>
+                </EntityLibraryCard>
+              );
+            }}
+            emptyTitle={itemLibraryEmptyTitle}
+            emptyDescription={itemLibraryEmptyDescription}
+            emptyAction={isItemLibraryFilteredEmpty ? null : <Button color="blue" onClick={openCreateModal}><Plus size={16} /> СОЗДАТЬ ПРЕДМЕТ</Button>}
+          />
+          <EntityLibraryContextMenu
+            context={libraryContextMenu.contextMenu}
+            sections={getItemLibraryContextSections()}
+            accentColor={SECTION_ACCENT}
+            onClose={libraryContextMenu.closeContextMenu}
+          />
         </div>
       </div>
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "РЕДАКТИРОВАТЬ ПРЕДМЕТ" : "НОВЫЙ ПРЕДМЕТ"} accentColor={currentRarityAccent} shadowColor={RARITY_SHADOWS[formData.rarity as ItemRarity || 'Обычный']} maxWidth="max-w-3xl">
@@ -457,26 +731,6 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
               onReplaceTags={(tagIds, newTags) => onReplaceTargetTags('item', editingId, tagIds, newTags)}
               onUpdateTag={onUpdateTag}
               onDeleteTag={onDeleteTag}
-            />
-          )}
-          {editingId && (
-            <EntityLinksPanel
-              sourceType="item"
-              sourceId={editingId}
-              links={linksForItem(editingId).filter((link) => !isAssetUsageLink(link))}
-              scenarios={scenarios}
-              maps={maps}
-              characters={characters}
-              items={data}
-              assets={assets}
-              locations={locations}
-              factions={factions}
-              events={events}
-              accentColor={currentRarityAccent}
-              onCreateLink={onCreateMaterialLink}
-              onUpdateLink={onUpdateMaterialLink}
-              onDeleteLink={onDeleteMaterialLink}
-              onOpenLink={onOpenMaterialLink}
             />
           )}
           {editingId && (

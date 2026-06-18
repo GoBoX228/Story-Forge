@@ -54,9 +54,6 @@ const ENTITY_TARGET_TYPE_OPTIONS: { value: ScenarioNodeEntityTargetType; label: 
   { value: 'character', label: 'ПЕРСОНАЖ' },
   { value: 'item', label: 'ПРЕДМЕТ' },
   { value: 'asset', label: 'АССЕТ' },
-  { value: 'location', label: 'МЕСТО' },
-  { value: 'faction', label: 'ОРГАНИЗАЦИЯ' },
-  { value: 'event', label: 'ХРОНИКА' },
 ];
 
 const ENTITY_TARGET_LABELS: Record<ScenarioNodeEntityTargetType, string> = {
@@ -355,6 +352,10 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
   useEffect(() => {
     setTargetId(targetOptions[0]?.value ?? '');
   }, [targetOptions]);
+  const visibleEntityLinks = useMemo(
+    () => entityLinks.filter((link) => ENTITY_TARGET_TYPE_OPTIONS.some((option) => option.value === link.targetType)),
+    [entityLinks]
+  );
 
   const getEntityTitle = (link: ScenarioNodeEntityLink): string => {
     if (link.targetType === 'map') {
@@ -510,13 +511,13 @@ export const GraphNodeDetails: React.FC<GraphNodeDetailsProps> = ({
           </Button>
         </div>
 
-        {entityLinks.length === 0 ? (
+        {visibleEntityLinks.length === 0 ? (
           <div className="border border-dashed border-[var(--border-color)] p-5 text-center mono text-[9px] uppercase text-[var(--text-muted)]">
             У узла пока нет связанных материалов
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
-            {entityLinks.map((link) => (
+            {visibleEntityLinks.map((link) => (
               <div key={link.id} className="border border-[var(--border-color)] bg-[var(--input-bg)] p-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="mono text-[8px] uppercase text-[var(--text-muted)]">

@@ -99,9 +99,6 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
   characters,
   items,
   assets,
-  locations,
-  factions,
-  events,
   links,
   scenarioMapLinks,
   tags,
@@ -146,30 +143,12 @@ export const MapSettingsPanel: React.FC<MapSettingsPanelProps> = ({
       options: toOptions(items, (item) => item.name)
     },
     {
-      id: 'locations',
-      label: 'Места',
-      targetType: 'location',
-      options: toOptions(locations, (location) => location.name)
-    },
-    {
-      id: 'factions',
-      label: 'Организации',
-      targetType: 'faction',
-      options: toOptions(factions, (faction) => faction.name)
-    },
-    {
-      id: 'events',
-      label: 'Хроника',
-      targetType: 'event',
-      options: toOptions(events, (event) => event.title)
-    },
-    {
       id: 'assets',
       label: 'Ассеты',
       targetType: 'asset',
       options: toOptions(assets, (asset) => asset.name)
     }
-  ], [assets, characters, events, factions, items, locations, scenarios]);
+  ], [assets, characters, items, scenarios]);
 
   const selectedForScenarioField = (field: MaterialFieldConfig): TypedMaterialOption[] => {
     const optionById = new Map(field.options.map((option) => [option.id, option]));

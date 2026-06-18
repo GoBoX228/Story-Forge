@@ -16,6 +16,7 @@ import {
   PublishedContent,
   PublicationAssignmentMap,
   Scenario,
+  ScenarioGroup,
   Tag,
   TagAssignmentMap,
   TaggableTargetType,
@@ -68,6 +69,11 @@ export const clearCharacterGroupFromCharacters = (characters: Character[], group
 
 export const clearItemGroupFromItems = (items: Item[], groupId: string): Item[] =>
   items.map((item) => (item.groupId === groupId ? { ...item, groupId: null } : item));
+
+export const clearScenarioGroupFromScenarios = (scenarios: Scenario[], groupId: string): Scenario[] =>
+  scenarios.map((scenario) =>
+    scenario.scenarioGroupId === groupId ? { ...scenario, scenarioGroupId: null } : scenario
+  );
 
 export const addAssetToFolderMembership = (folders: AssetFolder[], asset: Asset): AssetFolder[] =>
   folders.map((folder) => asset.folderId === folder.id
@@ -274,14 +280,6 @@ export const removeScenarioFromCampaigns = (campaigns: Campaign[], scenarioId: s
     scenarioIds: campaign.scenarioIds.filter((currentId) => currentId !== scenarioId)
   }));
 
-export const clearScenarioFromMaps = (maps: MapData[], scenarioId: string): MapData[] =>
-  maps.map((map) => (map.scenarioId === scenarioId ? { ...map, scenarioId: null } : map));
-
-export const clearScenarioFromCharacters = (characters: Character[], scenarioId: string): Character[] =>
-  characters.map((character) =>
-    character.scenarioId === scenarioId ? { ...character, scenarioId: null } : character
-  );
-
 export const removeMapFromCampaigns = (campaigns: Campaign[], mapId: string): Campaign[] =>
   campaigns.map((campaign) => ({
     ...campaign,
@@ -335,4 +333,7 @@ export const appendSortedCharacterGroup = (groups: CharacterGroup[], group: Char
   sortByOrderThenName([...groups, group]);
 
 export const appendSortedItemGroup = (groups: ItemGroup[], group: ItemGroup): ItemGroup[] =>
+  sortByOrderThenName([...groups, group]);
+
+export const appendSortedScenarioGroup = (groups: ScenarioGroup[], group: ScenarioGroup): ScenarioGroup[] =>
   sortByOrderThenName([...groups, group]);

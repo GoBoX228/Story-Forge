@@ -365,14 +365,14 @@
                                 <h2 class="card-title">{{ $card['name'] }}</h2>
                                 <div class="card-meta">
                                     <span>{{ $card['role'] }}</span>
-                                    <span>{{ $card['inventoryCount'] }} сл. · {{ number_format($card['inventoryWeight'], 1, ',', ' ') }} кг</span>
+                                    <span>{{ $card['inventoryCount'] }} сл.</span>
                                 </div>
                                 <h3 class="section-title">Описание</h3>
                                 <div class="back-description">
                                     {{ $card['description'] ?: 'Описание пока не добавлено.' }}
                                 </div>
                                 <div class="inventory-summary">
-                                    Инвентарь · {{ $card['inventoryCount'] }} слотов · {{ number_format($card['inventoryWeight'], 1, ',', ' ') }} кг
+                                    Инвентарь · {{ $card['inventoryCount'] }} слотов
                                 </div>
                                 <ul class="inventory-list">
                                     @forelse (array_slice($card['inventory'], 0, 7) as $item)

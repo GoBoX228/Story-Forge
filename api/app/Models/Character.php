@@ -10,13 +10,11 @@ class Character extends Model
     protected $fillable = [
         'user_id',
         'campaign_id',
-        'scenario_id',
         'character_group_id',
         'name',
         'role',
         'race',
         'description',
-        'level',
         'stats',
         'inventory',
     ];
@@ -29,11 +27,6 @@ class Character extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    public function scenario(): BelongsTo
-    {
-        return $this->belongsTo(Scenario::class);
     }
 
     public function campaign(): BelongsTo

@@ -421,7 +421,6 @@ class GoBoxContentSeeder extends Seeder
                 ],
                 [
                     'campaign_id' => $campaigns[$payload['campaign_key']]->id ?? null,
-                    'scenario_id' => null,
                     'width' => $payload['width'],
                     'height' => $payload['height'],
                     'cell_size' => $payload['cell_size'],
@@ -450,7 +449,6 @@ class GoBoxContentSeeder extends Seeder
                 'role' => 'Герой',
                 'race' => 'Дварф',
                 'description' => 'Воин дозора, который знает старые тропы к маяку и не доверяет смотрителю.',
-                'level' => 6,
                 'stats' => ['АТК' => 14, 'ЗАЩ' => 15, 'СИЛ' => 14, 'ЛОВ' => 9, 'ВЫН' => 15, 'ИНТ' => 10, 'МДР' => 11, 'ХАР' => 10, 'УДЧ' => 8],
                 'inventory_keys' => ['ice_totem', 'mercenary_kit'],
                 'campaign_key' => 'frost',
@@ -461,7 +459,6 @@ class GoBoxContentSeeder extends Seeder
                 'role' => 'NPC',
                 'race' => 'Человек',
                 'description' => 'Смотритель маяка. Скрывает вину за прошлый провал ритуала.',
-                'level' => 4,
                 'stats' => ['АТК' => 7, 'ЗАЩ' => 9, 'СИЛ' => 8, 'ЛОВ' => 10, 'ВЫН' => 11, 'ИНТ' => 15, 'МДР' => 14, 'ХАР' => 13, 'УДЧ' => 11],
                 'inventory_keys' => ['lens_key', 'warm_potion'],
                 'campaign_key' => 'frost',
@@ -472,7 +469,6 @@ class GoBoxContentSeeder extends Seeder
                 'role' => 'Монстр',
                 'race' => 'Теневая сущность',
                 'description' => 'Культист, который питается страхом дозорных и открывает путь ледяному зверю.',
-                'level' => 7,
                 'stats' => ['АТК' => 16, 'ЗАЩ' => 13, 'СИЛ' => 15, 'ЛОВ' => 12, 'ВЫН' => 14, 'ИНТ' => 9, 'МДР' => 8, 'ХАР' => 6, 'УДЧ' => 10],
                 'inventory_keys' => [],
                 'campaign_key' => 'frost',
@@ -483,7 +479,6 @@ class GoBoxContentSeeder extends Seeder
                 'role' => 'Герой',
                 'race' => 'Человек',
                 'description' => 'Следопыт караванов. В демо используется как пример персонажа из другой кампании.',
-                'level' => 5,
                 'stats' => ['АТК' => 13, 'ЗАЩ' => 11, 'СИЛ' => 10, 'ЛОВ' => 14, 'ВЫН' => 12, 'ИНТ' => 11, 'МДР' => 12, 'ХАР' => 10, 'УДЧ' => 9],
                 'inventory_keys' => ['sun_blade', 'mercenary_kit'],
                 'campaign_key' => 'dunes',
@@ -509,11 +504,9 @@ class GoBoxContentSeeder extends Seeder
                     'role' => $payload['role'],
                     'race' => $payload['race'],
                     'description' => $payload['description'],
-                    'level' => $payload['level'],
                     'stats' => $payload['stats'],
                     'inventory' => $inventory,
                     'campaign_id' => $campaigns[$payload['campaign_key']]->id ?? null,
-                    'scenario_id' => null,
                 ]
             );
 

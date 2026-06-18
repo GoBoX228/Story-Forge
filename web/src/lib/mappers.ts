@@ -37,6 +37,8 @@ import {
   PublicationUpsertPayload,
   PublicationVisibility,
   Scenario,
+  ScenarioGroup,
+  ScenarioGroupPayload,
   ScenarioNode,
   ScenarioNodeConfig,
   ScenarioNodeEntityLink,
@@ -340,7 +342,8 @@ export const mapScenarioSummary = (api: any): Scenario => ({
   description: api.description ?? '',
   createdAt: api.created_at ?? new Date().toISOString(),
   updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString(),
-  campaignId: api.campaign_id ? String(api.campaign_id) : undefined
+  campaignId: api.campaign_id ? String(api.campaign_id) : undefined,
+  scenarioGroupId: api.scenario_group_id || api.group_id ? String(api.scenario_group_id ?? api.group_id) : null
 });
 
 export const mapScenarioDetail = (api: any): Scenario => ({
@@ -349,7 +352,32 @@ export const mapScenarioDetail = (api: any): Scenario => ({
   description: api.description ?? '',
   createdAt: api.created_at ?? new Date().toISOString(),
   updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString(),
-  campaignId: api.campaign_id ? String(api.campaign_id) : undefined
+  campaignId: api.campaign_id ? String(api.campaign_id) : undefined,
+  scenarioGroupId: api.scenario_group_id || api.group_id ? String(api.scenario_group_id ?? api.group_id) : null
+});
+
+export const mapScenarioGroupFromApi = (api: any): ScenarioGroup => ({
+  id: String(api.id),
+  userId: String(api.user_id),
+  name: api.name ?? '',
+  slug: api.slug ?? '',
+  description: api.description ?? null,
+  orderIndex: Number(api.order_index ?? 0),
+  createdAt: api.created_at ?? undefined,
+  updatedAt: api.updated_at ?? undefined
+});
+
+export const mapScenarioGroupToApiPayload = (payload: ScenarioGroupPayload) => ({
+  ...(payload.name !== undefined ? { name: payload.name } : {}),
+  ...(payload.description !== undefined ? { description: payload.description } : {}),
+  ...(payload.orderIndex !== undefined ? { order_index: payload.orderIndex } : {})
+});
+
+export const mapScenarioToApiUpdate = (scenario: Scenario) => ({
+  title: scenario.title,
+  description: scenario.description,
+  campaign_id: scenario.campaignId ?? null,
+  scenario_group_id: scenario.scenarioGroupId ?? null
 });
 
 export const mapScenarioNodeFromApi = (api: any): ScenarioNode => ({
@@ -494,7 +522,6 @@ export const mapMapFromApi = (api: any): MapData => {
     backgroundAssetId: backgroundAssetId as string | null,
     createdAt: api.created_at ?? new Date().toISOString(),
     updatedAt: api.updated_at ?? api.created_at ?? new Date().toISOString(),
-    scenarioId: api.scenario_id ? String(api.scenario_id) : null,
     campaignId: api.campaign_id ? String(api.campaign_id) : null
   };
 };
@@ -505,10 +532,8 @@ export const mapCharacterFromApi = (api: any): Character => ({
   role: api.role ?? 'NPC',
   race: api.race ?? '',
   description: api.description ?? '',
-  level: api.level ?? 1,
   baseStats: api.stats ?? { ...DEFAULT_STATS },
   inventory: api.inventory ?? [],
-  scenarioId: api.scenario_id ? String(api.scenario_id) : null,
   campaignId: api.campaign_id ? String(api.campaign_id) : null,
   groupId: api.character_group_id || api.group_id ? String(api.character_group_id ?? api.group_id) : null
 });
@@ -762,10 +787,4 @@ export const mapTagToApiPayload = (payload: TagCreatePayload | TagUpdatePayload)
 export const mapTagAssignmentToApiPayload = (payload: TagAssignmentPayload) => ({
   tag_ids: payload.tagIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)),
   new_tags: payload.newTags ?? []
-});
-
-export const mapScenarioToApiUpdate = (scenario: Scenario) => ({
-  title: scenario.title,
-  description: scenario.description,
-  campaign_id: scenario.campaignId ?? null
 });

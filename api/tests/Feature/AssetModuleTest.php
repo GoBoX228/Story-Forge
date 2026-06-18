@@ -380,7 +380,6 @@ class AssetModuleTest extends TestCase
             'name' => 'Hero',
             'role' => 'NPC',
             'race' => 'Human',
-            'level' => 1,
         ]);
         $item = Item::create([
             'user_id' => $user->id,

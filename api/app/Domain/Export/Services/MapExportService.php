@@ -3,6 +3,7 @@
 namespace App\Domain\Export\Services;
 
 use App\Domain\Core\Actions\FindOwnedModelAction;
+use App\Domain\Core\Services\SystemTileCatalog;
 use App\Domain\Export\Actions\GenerateMapPdfAction;
 use App\Domain\Export\Actions\RenderMapExportHtmlAction;
 use App\Domain\Export\DTO\ExportMapPdfData;
@@ -24,6 +25,7 @@ class MapExportService
 
     public function __construct(
         private readonly FindOwnedModelAction $findOwnedModelAction,
+        private readonly SystemTileCatalog $systemTileCatalog,
         private readonly RenderMapExportHtmlAction $renderMapExportHtmlAction,
         private readonly GenerateMapPdfAction $generateMapPdfAction,
     ) {
@@ -142,14 +144,14 @@ class MapExportService
 
     /**
      * @param array<int, array<string, mixed>> $layers
-     * @return array<int, int>
+     * @return array<int, string>
      */
     private function collectVisibleAssetIds(array $layers, array $data): array
     {
         $assetIds = [];
 
         if ($this->backgroundVisible($layers) && !empty($data['backgroundAssetId'])) {
-            $assetIds[] = (int) $data['backgroundAssetId'];
+            $assetIds[] = (string) $data['backgroundAssetId'];
         }
 
         foreach ($layers as $layer) {
@@ -159,31 +161,38 @@ class MapExportService
 
             foreach ($layer['objects'] as $object) {
                 if (is_array($object) && !empty($object['assetId'])) {
-                    $assetIds[] = (int) $object['assetId'];
+                    $assetIds[] = (string) $object['assetId'];
                 }
             }
         }
 
         return collect($assetIds)
-            ->filter(fn (int $id): bool => $id > 0)
+            ->filter(fn (string $id): bool => $id !== '')
             ->unique()
             ->values()
             ->all();
     }
 
     /**
-     * @param array<int, int> $assetIds
+     * @param array<int, string> $assetIds
      * @return array<int, Asset>
      */
     private function fetchOwnedAssetsById(int $userId, array $assetIds): array
     {
-        if ($assetIds === []) {
+        $ownedAssetIds = collect($assetIds)
+            ->filter(fn (string $id): bool => ctype_digit($id) && (int) $id > 0)
+            ->map(fn (string $id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ownedAssetIds === []) {
             return [];
         }
 
         return Asset::query()
             ->where('user_id', $userId)
-            ->whereIn('id', $assetIds)
+            ->whereIn('id', $ownedAssetIds)
             ->get()
             ->keyBy('id')
             ->all();
@@ -197,12 +206,11 @@ class MapExportService
     private function backgroundExportData(array $layers, array $data, array $assetsById): array
     {
         $visible = $this->backgroundVisible($layers);
-        $assetId = (int) ($data['backgroundAssetId'] ?? 0);
-        $asset = $assetId > 0 ? ($assetsById[$assetId] ?? null) : null;
+        $assetId = (string) ($data['backgroundAssetId'] ?? '');
 
         return [
             'visible' => $visible,
-            'url' => $visible ? ($asset?->url) : null,
+            'url' => $visible ? $this->resolveAssetUrl($assetId, $assetsById) : null,
         ];
     }
 
@@ -271,15 +279,14 @@ class MapExportService
 
         $width = min($width, (int) $map->width - $x);
         $height = min($height, (int) $map->height - $y);
-        $assetId = (int) ($object['assetId'] ?? 0);
-        $asset = $assetId > 0 ? ($assetsById[$assetId] ?? null) : null;
+        $assetId = (string) ($object['assetId'] ?? '');
 
         return [
             'id' => (string) ($object['id'] ?? ''),
             'type' => (string) ($object['type'] ?? 'tile'),
             'label' => (string) ($object['label'] ?? ''),
             'color' => $this->safeColor((string) ($object['color'] ?? '#9AA0A6')),
-            'assetUrl' => $asset?->url,
+            'assetUrl' => $this->resolveAssetUrl($assetId, $assetsById),
             'x' => $x * (int) $map->cell_size + 1,
             'y' => $y * (int) $map->cell_size + 1,
             'width' => $width * (int) $map->cell_size - 2,
@@ -292,6 +299,26 @@ class MapExportService
     private function safeColor(string $color): string
     {
         return preg_match('/^#[0-9a-fA-F]{3,8}$/', $color) === 1 ? $color : '#9AA0A6';
+    }
+
+    /**
+     * @param array<int, Asset> $assetsById
+     */
+    private function resolveAssetUrl(string $assetId, array $assetsById): ?string
+    {
+        if ($assetId === '') {
+            return null;
+        }
+
+        if (str_starts_with($assetId, 'system:tile:')) {
+            return $this->systemTileCatalog->resolveUrl($assetId, (string) config('app.url'));
+        }
+
+        if (!ctype_digit($assetId)) {
+            return null;
+        }
+
+        return $assetsById[(int) $assetId]->url ?? null;
     }
 
     /**

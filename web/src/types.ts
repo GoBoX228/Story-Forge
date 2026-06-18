@@ -5,9 +5,27 @@ export interface Scenario {
   createdAt: string;
   updatedAt?: string;
   campaignId?: string;
+  scenarioGroupId?: string | null;
   relatedMapIds?: string[];
   relatedCharacterIds?: string[];
   relatedItemIds?: string[];
+}
+
+export interface ScenarioGroup {
+  id: string;
+  userId: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  orderIndex: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScenarioGroupPayload {
+  name?: string;
+  description?: string | null;
+  orderIndex?: number;
 }
 
 export type ScenarioNodeType = 'description' | 'dialog' | 'location' | 'check' | 'loot' | 'combat';
@@ -147,7 +165,6 @@ export interface MapData {
   backgroundAssetId?: string | null;
   createdAt?: string;
   updatedAt?: string;
-  scenarioId?: string | null;
   campaignId?: string | null;
 }
 
@@ -267,10 +284,8 @@ export interface Character {
   role: string;
   race: string;
   description: string;
-  level: number;
   baseStats: Record<StatKey, number>;
   inventory: string[];
-  scenarioId?: string | null;
   campaignId?: string | null;
   groupId?: string | null;
 }
@@ -414,6 +429,17 @@ export interface Asset {
   metadata: Record<string, unknown>;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface SystemTile {
+  id: string;
+  slug: string;
+  name: string;
+  category: 'floor' | 'wall';
+  color: string;
+  url: string;
+  setName: string;
+  readonly: true;
 }
 
 export interface AssetUploadPayload {

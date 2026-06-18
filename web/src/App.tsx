@@ -35,6 +35,7 @@ const App: React.FC = () => {
   const {
     campaigns,
     scenarios,
+    scenarioGroups,
     maps,
     characters,
     characterGroups,
@@ -204,6 +205,7 @@ const App: React.FC = () => {
     currentUser,
     campaigns,
     scenarios,
+    scenarioGroups,
     maps,
     characters,
     characterGroups,

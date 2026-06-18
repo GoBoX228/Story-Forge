@@ -8,9 +8,11 @@ class CharacterIndexRequest extends CoreReadRequest
 {
     public function toDto(): CharacterIndexData
     {
+        $scenarioKey = $this->has('scenario_id') ? 'scenario_id' : 'scenarioId';
+
         return new CharacterIndexData(
-            $this->filled('scenarioId'),
-            $this->input('scenarioId'),
+            $this->filled($scenarioKey),
+            $this->input($scenarioKey),
             $this->has('groupId'),
             $this->input('groupId'),
             $this->filled('q'),

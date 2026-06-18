@@ -27,7 +27,6 @@ class CampaignTest extends TestCase
 
         $map = Map::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenario->id,
             'name' => 'Map A',
             'width' => 20,
             'height' => 20,
@@ -37,10 +36,8 @@ class CampaignTest extends TestCase
 
         $character = Character::create([
             'user_id' => $user->id,
-            'scenario_id' => $scenario->id,
             'name' => 'NPC A',
             'role' => 'NPC',
-            'level' => 1,
             'stats' => [],
             'inventory' => [],
         ]);
@@ -97,4 +94,3 @@ class CampaignTest extends TestCase
             ->assertJsonValidationErrors('scenario_ids');
     }
 }
-

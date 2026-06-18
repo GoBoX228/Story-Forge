@@ -48,13 +48,25 @@ import {
   WorldEvent,
   WorldLocation
 } from '../types';
-import { BaseCard } from './BaseCard';
 import { Button, Input, SearchInput, SectionHeader, Select } from './UI';
 import { Modal } from './Modal';
 import { entityLinkAssignmentKey, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
 import { TagFilter, TagPicker } from './TagPicker';
 import { EntityLinksPanel } from './EntityLinksPanel';
 import { PublicationPanel } from './PublicationPanel';
+import {
+  EntityLibraryCard,
+  EntityLibraryContextMenu,
+  EntityLibraryGroupCard,
+  EntityLibraryWorkspace,
+  type EntityLibraryActionSection,
+  type EntityLibraryContext,
+  useEntityLibraryContextMenu,
+  useEntityLibraryDragDrop,
+  useEntityLibraryKeyboard,
+  useEntityLibraryMoveBuffer,
+  useEntityLibrarySelection
+} from './entityLibrary';
 
 interface AssetsEditorProps {
   data: Asset[];
@@ -96,13 +108,6 @@ interface AssetsEditorProps {
 const SECTION_ACCENT = 'var(--col-teal)';
 type AssetFolderId = 'all' | string;
 type AssetLibraryMode = 'files' | 'sets';
-type AssetClipboard = { assetIds: string[] } | null;
-type AssetContextMenu =
-  | { x: number; y: number; type: 'workspace' }
-  | { x: number; y: number; type: 'asset'; assetId: string }
-  | { x: number; y: number; type: 'folder'; folderId: AssetFolderId }
-  | { x: number; y: number; type: 'set'; setId: string }
-  | { x: number; y: number; type: 'set-asset'; setId: string; assetId: string };
 
 const ASSET_TYPE_OPTIONS: { value: AssetType | 'all'; label: string }[] = [
   { value: 'all', label: 'ВСЕ' },
@@ -193,8 +198,6 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   const [activeType, setActiveType] = useState<AssetType | 'all'>('all');
   const [activeKind, setActiveKind] = useState<AssetKind | 'all'>('all');
   const [activeCollectionId, setActiveCollectionId] = useState<AssetFolderId>('all');
-  const [draggedAssetId, setDraggedAssetId] = useState<string | null>(null);
-  const [dragOverFolderId, setDragOverFolderId] = useState<AssetFolderId | null>(null);
   const [selectedTagFilter, setSelectedTagFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -209,12 +212,8 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   const [editCollectionIds, setEditCollectionIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
-  const [assetClipboard, setAssetClipboard] = useState<AssetClipboard>(null);
-  const [contextMenu, setContextMenu] = useState<AssetContextMenu | null>(null);
   const [libraryMode, setLibraryMode] = useState<AssetLibraryMode>('files');
   const [activeSetId, setActiveSetId] = useState<string | null>(null);
-  const [dragOverSetId, setDragOverSetId] = useState<string | null>(null);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renamingFolderName, setRenamingFolderName] = useState('');
   const [renamingAssetId, setRenamingAssetId] = useState<string | null>(null);
@@ -222,6 +221,16 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   const [renamingSetId, setRenamingSetId] = useState<string | null>(null);
   const [renamingSetName, setRenamingSetName] = useState('');
   const [setDescriptionDraft, setSetDescriptionDraft] = useState('');
+  const librarySelection = useEntityLibrarySelection({ mode: 'multi' });
+  const moveBuffer = useEntityLibraryMoveBuffer();
+  const libraryContextMenu = useEntityLibraryContextMenu();
+  const selectedAssetIds = librarySelection.selectedIds;
+  const setSelectedAssetIds = librarySelection.setSelectedIds;
+  const assetClipboard = moveBuffer.count > 0 ? { assetIds: moveBuffer.itemIds } : null;
+  const setAssetClipboard = (clipboard: { assetIds: string[] } | null) => {
+    if (clipboard) moveBuffer.cut(clipboard.assetIds);
+    else moveBuffer.cancel();
+  };
 
   useEffect(() => {
     if (!initialAssetId) return;
@@ -237,7 +246,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
 
   useEffect(() => {
     setSelectedAssetIds((prev) => prev.filter((assetId) => data.some((asset) => asset.id === assetId)));
-  }, [data]);
+  }, [data, setSelectedAssetIds]);
 
   useEffect(() => {
     const activeSet = collections.find((collection) => collection.id === activeSetId);
@@ -280,13 +289,11 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
     return matchesType && matchesKind && matchesCollection && matchesSearch && matchesTag;
   });
 
-  const visibleFolders = activeCollectionId === 'all'
-    ? folders.map((folder) => ({
-        id: folder.id,
-        name: folder.name,
-        count: getFolderAssetCount(folder.id)
-      }))
+  const hasActiveFilters = Boolean(searchQuery.trim() || selectedTagFilter || activeType !== 'all' || activeKind !== 'all');
+  const visibleFolders = activeCollectionId === 'all' && !hasActiveFilters
+    ? folders.map((folder) => ({ ...folder, count: getFolderAssetCount(folder.id) }))
     : [];
+  const filteredAssetIds = filteredAssets.map((asset) => asset.id);
 
   const selectedAssets = selectedAssetIds
     .map((assetId) => data.find((asset) => asset.id === assetId))
@@ -298,7 +305,6 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
     : [];
 
   const activeFolderAssetCount = getFolderAssetCount(activeCollectionId);
-  const hasActiveFilters = Boolean(searchQuery.trim() || selectedTagFilter || activeType !== 'all' || activeKind !== 'all');
 
   const resetExplorerFilters = () => {
     setActiveType('all');
@@ -309,12 +315,11 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
 
   const switchLibraryMode = (mode: AssetLibraryMode) => {
     setLibraryMode(mode);
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
     cancelAssetRename();
     cancelFolderRename();
     if (mode === 'files') {
       setActiveSetId(null);
-      setDragOverSetId(null);
     }
   };
 
@@ -377,7 +382,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   };
 
   const handleDelete = async (asset: Asset) => {
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
     if (!confirm(`Удалить ассет "${asset.name}"?`)) return;
     setError('');
     setIsSubmitting(true);
@@ -396,7 +401,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
     const message = assets.length === 1
       ? `Удалить ассет "${assets[0].name}"?`
       : `Удалить выбранные ассеты (${assets.length})?`;
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
     if (!confirm(message)) return;
     setError('');
     setIsSubmitting(true);
@@ -408,7 +413,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(deleteError instanceof Error ? deleteError.message : 'Не удалось удалить ассеты');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
@@ -438,15 +443,6 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
     }
   };
 
-  const handleDropAssetToFolder = async (folderId: AssetFolderId, assetId?: string) => {
-    setDragOverFolderId(null);
-    const targetAsset = data.find((asset) => asset.id === (assetId ?? draggedAssetId));
-    setDraggedAssetId(null);
-    if (!targetAsset) return;
-    const draggedSelection = selectedAssetIds.includes(targetAsset.id) ? selectedAssets : [targetAsset];
-    await applyFolderToAssets(draggedSelection, folderId);
-  };
-
   const applySetToAssets = async (assets: Asset[], collectionId: string) => {
     if (isSubmitting || assets.length === 0) return;
     setError('');
@@ -468,8 +464,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(collectionError instanceof Error ? collectionError.message : 'Не удалось добавить ассеты в набор');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
-      setDragOverSetId(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
@@ -489,18 +484,28 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(collectionError instanceof Error ? collectionError.message : 'Не удалось удалить ассет из набора');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
-  const handleDropAssetsToSet = async (collectionId: string, assetId?: string) => {
-    const targetAsset = data.find((asset) => asset.id === (assetId ?? draggedAssetId));
-    const assets = targetAsset
-      ? selectedAssetIds.includes(targetAsset.id) ? selectedAssets : [targetAsset]
-      : selectedAssets;
-    setDraggedAssetId(null);
-    await applySetToAssets(assets, collectionId);
-  };
+  const libraryDragDrop = useEntityLibraryDragDrop({
+    getDragItemIds: (assetId) => librarySelection.getActionTargetIds(assetId),
+    onDropItems: async ({ itemIds, targetGroupId }) => {
+      const assets = itemIds
+        .map((assetId) => data.find((asset) => asset.id === assetId))
+        .filter((asset): asset is Asset => Boolean(asset));
+
+      if (assets.length === 0) return;
+
+      if (libraryMode === 'sets' && !activeSetId && targetGroupId) {
+        await applySetToAssets(assets, targetGroupId);
+        return;
+      }
+
+      await applyFolderToAssets(assets, targetGroupId ?? 'all');
+      moveBuffer.removeIds(itemIds);
+    }
+  });
 
   const getCollectionById = (collectionId: string): AssetCollection | undefined => (
     collections.find((collection) => collection.id === collectionId)
@@ -509,7 +514,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   const openFolder = (folderId: AssetFolderId) => {
     setActiveCollectionId(folderId);
     setSelectedAssetIds([]);
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const getActionAssets = (assetId?: string): Asset[] => {
@@ -522,7 +527,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   const openAsset = (asset?: Asset) => {
     if (!asset?.url) return;
     window.open(asset.url, '_blank', 'noopener,noreferrer');
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const downloadAsset = (asset?: Asset) => {
@@ -534,14 +539,14 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const moveAssetsClipboard = (assetId?: string) => {
     const assets = getActionAssets(assetId);
     if (assets.length === 0) return;
     setAssetClipboard({ assetIds: assets.map((asset) => asset.id) });
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const pasteAssetsToFolder = async (folderId: AssetFolderId = activeCollectionId) => {
@@ -550,7 +555,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       .map((assetId) => data.find((asset) => asset.id === assetId))
       .filter((asset): asset is Asset => Boolean(asset));
     await applyFolderToAssets(assets, folderId);
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const removeAssetsFromCurrentFolder = async (assetId?: string) => {
@@ -574,28 +579,17 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(collectionError instanceof Error ? collectionError.message : 'Не удалось убрать ассет из папки');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
   const selectAsset = (assetId: string, event: React.MouseEvent) => {
-    if (event.ctrlKey || event.metaKey || event.shiftKey) {
-      setSelectedAssetIds((prev) => (
-        prev.includes(assetId) ? prev.filter((id) => id !== assetId) : [...prev, assetId]
-      ));
-      return;
-    }
-    setSelectedAssetIds([assetId]);
+    librarySelection.selectFromEvent(assetId, event, filteredAssetIds);
   };
 
   const selectAllVisibleAssets = () => {
     setSelectedAssetIds(filteredAssets.map((asset) => asset.id));
-    setContextMenu(null);
-  };
-
-  const handleWorkspaceContextMenu = (event: React.MouseEvent) => {
-    event.preventDefault();
-    setContextMenu({ x: event.clientX, y: event.clientY, type: 'workspace' });
+    libraryContextMenu.closeContextMenu();
   };
 
   const handleCreateFolderFromContext = async () => {
@@ -607,14 +601,14 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(collectionError instanceof Error ? collectionError.message : 'Не удалось создать папку');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
   const startRenameFolder = (folder: AssetFolder) => {
     setRenamingFolderId(folder.id);
     setRenamingFolderName(folder.name);
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const submitFolderRename = async () => {
@@ -642,7 +636,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   const handleRenameAsset = async (asset: Asset) => {
     setRenamingAssetId(asset.id);
     setRenamingAssetName(asset.name);
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const submitAssetRename = async () => {
@@ -663,7 +657,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(renameError instanceof Error ? renameError.message : 'Не удалось переименовать ассет');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
@@ -684,14 +678,14 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(collectionError instanceof Error ? collectionError.message : 'Не удалось создать набор');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
   const startRenameSet = (collection: AssetCollection) => {
     setRenamingSetId(collection.id);
     setRenamingSetName(collection.name);
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
   };
 
   const submitSetRename = async () => {
@@ -732,7 +726,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
   };
 
   const handleDeleteSet = async (collection: AssetCollection) => {
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
     if (!confirm(`Удалить набор "${collection.name}"? Ассеты останутся в библиотеке и папках.`)) return;
     setError('');
     setIsSubmitting(true);
@@ -744,12 +738,12 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(collectionError instanceof Error ? collectionError.message : 'Не удалось удалить набор');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
   const handleDeleteFolder = async (folder: AssetFolder) => {
-    setContextMenu(null);
+    libraryContextMenu.closeContextMenu();
     if (!confirm(`Удалить папку "${folder.name}"? Ассеты будут перенесены в библиотеку.`)) return;
     setError('');
     setIsSubmitting(true);
@@ -760,32 +754,141 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       setError(collectionError instanceof Error ? collectionError.message : 'Не удалось удалить папку');
     } finally {
       setIsSubmitting(false);
-      setContextMenu(null);
+      libraryContextMenu.closeContextMenu();
     }
   };
 
-  const renderAddToSetActions = (assets: Asset[]) => {
-    if (assets.length === 0 || collections.length === 0) return null;
 
-    return (
-      <div className="border-t border-[var(--border-color)] py-1">
-        <div className="px-3 py-2 mono text-[8px] uppercase font-black text-[var(--text-muted)]">
-          Добавить в набор
-        </div>
-        {collections.map((collection) => (
-          <button
-            key={collection.id}
-            type="button"
-            onClick={() => void applySetToAssets(assets, collection.id)}
-            className="w-full px-3 py-2 flex items-center justify-between gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-          >
-            <span className="truncate">{collection.name}</span>
-            <span className="text-[8px] text-[var(--text-muted)]">{collection.assetIds.length}</span>
-          </button>
-        ))}
-      </div>
-    );
+  const buildAddToSetActions = (assets: Asset[]) => (
+    collections.map((collection) => ({
+      id: `add-to-set-${collection.id}`,
+      label: `В набор: ${collection.name}`,
+      icon: <Plus size={13} />,
+      disabled: assets.length === 0,
+      onSelect: () => void applySetToAssets(assets, collection.id)
+    }))
+  );
+
+  const getAssetLibraryContextSections = (): EntityLibraryActionSection[] => {
+    const context = libraryContextMenu.contextMenu;
+    if (!context) return [];
+
+    if (context.kind === 'workspace') {
+      if (libraryMode === 'sets') {
+        return [
+          {
+            actions: [
+              { id: 'create-set', label: 'Создать набор', icon: <Plus size={13} />, onSelect: () => void handleCreateSet() },
+              ...(activeSet ? [
+                { id: 'rename-active-set', label: 'Переименовать набор', icon: <Edit3 size={13} />, onSelect: () => startRenameSet(activeSet) },
+                { id: 'delete-active-set', label: 'Удалить набор', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void handleDeleteSet(activeSet) }
+              ] : [])
+            ]
+          }
+        ];
+      }
+
+      return [
+        {
+          label: selectedAssetIds.length > 0 ? `Выбрано: ${selectedAssetIds.length}` : undefined,
+          actions: [
+            { id: 'create-folder', label: 'Создать папку', icon: <Plus size={13} />, onSelect: () => void handleCreateFolderFromContext() },
+            { id: 'paste-assets', label: 'Вставить сюда', icon: <ClipboardPaste size={13} />, disabled: !assetClipboard, onSelect: () => void pasteAssetsToFolder(activeCollectionId) },
+            { id: 'cut-selected-assets', label: 'Вырезать выбранное', icon: <Scissors size={13} />, hidden: selectedAssetIds.length === 0, onSelect: () => moveAssetsClipboard() },
+            { id: 'move-selected-root', label: 'Переместить выбранное в библиотеку', icon: <Folder size={13} />, hidden: selectedAssetIds.length === 0 || activeCollectionId === 'all', destructive: true, onSelect: () => void removeAssetsFromCurrentFolder() },
+            { id: 'delete-selected-assets', label: 'Удалить выбранное из библиотеки', icon: <Trash2 size={13} />, hidden: selectedAssetIds.length === 0, destructive: true, onSelect: () => void handleDeleteAssets(selectedAssets) }
+          ]
+        },
+        {
+          actions: [
+            ...buildAddToSetActions(selectedAssets),
+            { id: 'select-visible-assets', label: 'Выделить все', icon: <CheckSquare size={13} />, disabled: filteredAssets.length === 0, onSelect: selectAllVisibleAssets },
+            { id: 'clear-selection', label: 'Снять выделение', icon: <Square size={13} />, disabled: selectedAssetIds.length === 0, onSelect: () => setSelectedAssetIds([]) }
+          ]
+        }
+      ];
+    }
+
+    if (context.kind === 'group') {
+      if (libraryMode === 'sets') {
+        const collection = getCollectionById(context.groupId);
+        if (!collection) return [];
+        return [
+          {
+            label: 'Набор',
+            actions: [
+              { id: 'open-set', label: 'Открыть', icon: <FolderOpen size={13} />, onSelect: () => setActiveSetId(collection.id) },
+              { id: 'add-selected-to-set', label: 'Добавить выбранные', icon: <Plus size={13} />, disabled: selectedAssets.length === 0, onSelect: () => void applySetToAssets(selectedAssets, collection.id) },
+              { id: 'rename-set', label: 'Переименовать', icon: <Edit3 size={13} />, onSelect: () => startRenameSet(collection) },
+              { id: 'delete-set', label: 'Удалить набор', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void handleDeleteSet(collection) }
+            ]
+          }
+        ];
+      }
+
+      const folder = folders.find((item) => item.id === context.groupId);
+      return [
+        {
+          actions: [
+            { id: 'open-folder', label: 'Открыть', icon: <FolderOpen size={13} />, onSelect: () => openFolder(context.groupId) },
+            { id: 'paste-to-folder', label: 'Вставить в папку', icon: <ClipboardPaste size={13} />, disabled: !assetClipboard, onSelect: () => void pasteAssetsToFolder(context.groupId) },
+            { id: 'rename-folder', label: 'Переименовать', icon: <Edit3 size={13} />, disabled: !folder, onSelect: () => { if (folder) startRenameFolder(folder); } },
+            { id: 'delete-folder', label: 'Удалить папку', icon: <Trash2 size={13} />, destructive: true, disabled: !folder, onSelect: () => { if (folder) void handleDeleteFolder(folder); } }
+          ]
+        }
+      ];
+    }
+
+    const asset = data.find((item) => item.id === context.itemId);
+    if (!asset) return [];
+
+    if (libraryMode === 'sets' && activeSet) {
+      return [
+        {
+          label: 'Ассет в наборе',
+          actions: [
+            { id: 'edit-set-asset', label: 'Правка', icon: <Edit3 size={13} />, onSelect: () => openEditModal(asset) },
+            { id: 'open-set-asset', label: 'Открыть', icon: <ExternalLink size={13} />, disabled: !asset.url, onSelect: () => openAsset(asset) },
+            { id: 'remove-from-set', label: 'Убрать из набора', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void removeAssetFromSet(asset, activeSet.id) }
+          ]
+        }
+      ];
+    }
+
+    const actionAssets = getActionAssets(asset.id);
+    return [
+      {
+        label: actionAssets.length > 1 ? `Выбрано: ${actionAssets.length}` : 'Файл',
+        actions: [
+          { id: 'edit-asset', label: 'Правка', icon: <Edit3 size={13} />, onSelect: () => openEditModal(asset) },
+          { id: 'rename-asset', label: 'Переименовать', icon: <Edit3 size={13} />, onSelect: () => void handleRenameAsset(asset) },
+          { id: 'open-asset', label: 'Открыть', icon: <ExternalLink size={13} />, disabled: !asset.url, onSelect: () => openAsset(asset) },
+          { id: 'download-asset', label: 'Скачать', icon: <Download size={13} />, disabled: !asset.url, onSelect: () => downloadAsset(asset) },
+          ...buildAddToSetActions(actionAssets),
+          { id: 'cut-asset', label: 'Вырезать', icon: <Scissors size={13} />, onSelect: () => moveAssetsClipboard(asset.id) },
+          { id: 'move-asset-root', label: 'Переместить в библиотеку', icon: <Folder size={13} />, hidden: activeCollectionId === 'all', destructive: true, onSelect: () => void removeAssetsFromCurrentFolder(asset.id) },
+          { id: 'delete-asset', label: 'Удалить из библиотеки', icon: <Trash2 size={13} />, destructive: true, onSelect: () => void handleDeleteAssets(actionAssets) }
+        ]
+      }
+    ];
   };
+
+  useEntityLibraryKeyboard({
+    contextMenuOpen: Boolean(libraryContextMenu.contextMenu),
+    onCloseContextMenu: libraryContextMenu.closeContextMenu,
+    renameActive: Boolean(renamingFolderId || renamingAssetId || renamingSetId),
+    onCancelRename: () => {
+      cancelAssetRename();
+      cancelFolderRename();
+      cancelSetRename();
+    },
+    selectedIds: selectedAssetIds,
+    onClearSelection: () => setSelectedAssetIds([]),
+    moveBufferCount: moveBuffer.count,
+    onCancelMoveBuffer: () => setAssetClipboard(null),
+    onOpenSelected: (assetId) => openAsset(data.find((asset) => asset.id === assetId)),
+    onDeleteSelected: (assetId) => void handleDeleteAssets(getActionAssets(assetId))
+  });
 
   return (
     <div className="flex h-full w-full">
@@ -867,6 +970,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
               <div className="flex flex-wrap gap-2 border-b border-[var(--border-color)] pb-3">
                 <button
                   type="button"
+                  data-testid="assets-mode-files"
                   onClick={() => switchLibraryMode('files')}
                   className={`border px-4 py-2 mono text-[10px] uppercase font-black transition-colors ${
                     libraryMode === 'files'
@@ -878,6 +982,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                 </button>
                 <button
                   type="button"
+                  data-testid="assets-mode-sets"
                   onClick={() => switchLibraryMode('sets')}
                   className={`border px-4 py-2 mono text-[10px] uppercase font-black transition-colors ${
                     libraryMode === 'sets'
@@ -931,129 +1036,87 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                 <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={SECTION_ACCENT} />
               </div>
 
-              <div
-                className="relative min-h-[420px] border border-dashed border-[var(--border-color)] p-4"
-                onContextMenu={handleWorkspaceContextMenu}
-                onDragOver={(event) => {
-                  if (!draggedAssetId) return;
-                  event.preventDefault();
-                  setDragOverFolderId(activeCollectionId);
-                }}
-                onDragLeave={() => setDragOverFolderId(null)}
-                onDrop={(event) => {
-                  if (!draggedAssetId) return;
-                  event.preventDefault();
-                  void handleDropAssetToFolder(activeCollectionId, event.dataTransfer.getData('text/plain') || undefined);
-                }}
-                onClick={() => {
-                  setContextMenu(null);
+              <EntityLibraryWorkspace<Asset, (AssetFolder & { count: number })>
+                items={filteredAssets}
+                groups={visibleFolders}
+                getItemId={(asset) => asset.id}
+                getGroupId={(folder) => folder.id}
+                selectedIds={selectedAssetIds}
+                cutItemIds={moveBuffer.itemIds}
+                draggingItemIds={libraryDragDrop.draggingIds}
+                dragOverGroupId={libraryDragDrop.dragOverGroupId}
+                currentGroupId={activeCollectionId === 'all' ? null : activeCollectionId}
+                draggableItems
+                surface="transparent"
+                framed
+                className="min-h-[420px]"
+                gridClassName=""
+                onClearSelection={() => {
                   setSelectedAssetIds([]);
                   cancelAssetRename();
                   cancelFolderRename();
                 }}
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
-                {visibleFolders.map((folder) => {
-                  const activeDrop = dragOverFolderId === folder.id;
-                  return (
-                    <div
-                      key={folder.id}
-                      onDoubleClick={() => {
-                        if (renamingFolderId === folder.id) return;
-                        openFolder(folder.id);
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setContextMenu({ x: event.clientX, y: event.clientY, type: 'folder', folderId: folder.id });
-                      }}
-                      onDragOver={(event) => {
-                        if (folder.id === 'all') return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        setDragOverFolderId(folder.id);
-                      }}
-                      onDragLeave={(event) => {
-                        event.stopPropagation();
-                        setDragOverFolderId(null);
-                      }}
-                      onDrop={(event) => {
-                        if (folder.id === 'all') return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void handleDropAssetToFolder(folder.id, event.dataTransfer.getData('text/plain') || undefined);
-                      }}
-                      className={`border-2 p-5 min-h-[180px] bg-[var(--bg-card)] flex flex-col justify-between transition-colors cursor-pointer ${
-                        activeDrop ? 'border-[var(--col-teal)] bg-[var(--col-teal)]/10' : 'border-[var(--border-color)] hover:border-[var(--col-teal)]'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <FolderOpen size={36} className="text-[var(--col-teal)]" />
-                        <span className="mono text-[9px] uppercase text-[var(--text-muted)]">{folder.count}</span>
-                      </div>
-                      <div>
-                        {renamingFolderId === folder.id ? (
-                          <input
-                            autoFocus
-                            value={renamingFolderName}
-                            onChange={(event) => setRenamingFolderName(event.target.value)}
-                            onClick={(event) => event.stopPropagation()}
-                            onDoubleClick={(event) => event.stopPropagation()}
-                            onBlur={() => void submitFolderRename()}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                void submitFolderRename();
-                              }
-                              if (event.key === 'Escape') {
-                                event.preventDefault();
-                                cancelFolderRename();
-                              }
-                            }}
-                            className="w-full border border-[var(--col-teal)] bg-[var(--bg-main)] px-2 py-1 mono text-[13px] uppercase font-black text-[var(--text-main)] outline-none"
-                          />
-                        ) : (
-                          <div className="mono text-[14px] uppercase font-black text-[var(--text-main)] truncate">{folder.name}</div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {filteredAssets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    draggable
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      selectAsset(asset.id, event);
-                    }}
-                    onDoubleClick={(event) => {
-                      event.stopPropagation();
-                      if (renamingAssetId === asset.id) return;
-                      openAsset(asset);
-                    }}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      if (!selectedAssetIds.includes(asset.id)) setSelectedAssetIds([asset.id]);
-                      setContextMenu({ x: event.clientX, y: event.clientY, type: 'asset', assetId: asset.id });
-                    }}
-                    onDragStart={(event) => {
-                      if (!selectedAssetIds.includes(asset.id)) setSelectedAssetIds([asset.id]);
-                      setDraggedAssetId(asset.id);
-                      event.dataTransfer.setData('text/plain', asset.id);
-                      event.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onDragEnd={() => {
-                      setDraggedAssetId(null);
-                      setDragOverFolderId(null);
-                    }}
-                    className={`${
-                      draggedAssetId === asset.id || assetClipboard?.assetIds.includes(asset.id) ? 'opacity-50' : ''
-                    } ${selectedAssetIds.includes(asset.id) ? 'ring-2 ring-[var(--col-teal)]' : ''}`}
-                  >
-                  <BaseCard
+                onWorkspaceContextMenu={(context) => libraryContextMenu.setContextMenu(context)}
+                onSelectItem={(assetId, _asset, event) => selectAsset(assetId, event)}
+                onOpenItem={(assetId, asset) => {
+                  if (renamingAssetId === assetId) return;
+                  openAsset(asset);
+                }}
+                onOpenGroup={(folderId) => {
+                  if (renamingFolderId === folderId) return;
+                  openFolder(folderId);
+                }}
+                onItemContextMenu={(assetId, _asset, event) => {
+                  if (!selectedAssetIds.includes(assetId)) setSelectedAssetIds([assetId]);
+                  libraryContextMenu.openItemMenu(event, assetId, activeCollectionId === 'all' ? null : activeCollectionId);
+                }}
+                onGroupContextMenu={(folderId, _folder, event) => {
+                  libraryContextMenu.openGroupMenu(event, folderId);
+                }}
+                onItemDragStart={(assetId, _asset, event) => {
+                  if (!selectedAssetIds.includes(assetId)) setSelectedAssetIds([assetId]);
+                  libraryDragDrop.handleItemDragStart(assetId, event);
+                }}
+                onItemDragEnd={() => libraryDragDrop.handleItemDragEnd()}
+                onWorkspaceDragOver={(groupId, event) => libraryDragDrop.handleWorkspaceDragOver(groupId, event)}
+                onWorkspaceDragLeave={(groupId, event) => libraryDragDrop.handleWorkspaceDragLeave(groupId, event)}
+                onWorkspaceDrop={(groupId, event) => libraryDragDrop.handleWorkspaceDrop(groupId, event)}
+                onGroupDragOver={(folderId, _folder, event) => libraryDragDrop.handleGroupDragOver(folderId, event)}
+                onGroupDragLeave={(folderId, _folder, event) => libraryDragDrop.handleGroupDragLeave(folderId, event)}
+                onGroupDrop={(folderId, _folder, event) => libraryDragDrop.handleGroupDrop(folderId, event)}
+                renderGroup={(folder, state) => (
+                  <EntityLibraryGroupCard
+                    name={folder.name}
+                    nameContent={renamingFolderId === folder.id ? (
+                      <input
+                        autoFocus
+                        value={renamingFolderName}
+                        onChange={(event) => setRenamingFolderName(event.target.value)}
+                        onClick={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onBlur={() => void submitFolderRename()}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            void submitFolderRename();
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            cancelFolderRename();
+                          }
+                        }}
+                        className="w-full border border-[var(--col-teal)] bg-[var(--bg-main)] px-2 py-1 mono text-[13px] uppercase font-black text-[var(--text-main)] outline-none"
+                      />
+                    ) : undefined}
+                    typeLabel="ПАПКА"
+                    count={folder.count}
+                    countLabel={folder.count === 0 ? 'ПУСТО' : 'ФАЙЛОВ'}
+                    accentColor={SECTION_ACCENT}
+                    dragOver={state.dragOver}
+                  />
+                )}
+                renderItem={(asset, state) => (
+                  <EntityLibraryCard
                     title={renamingAssetId === asset.id ? (
                       <input
                         autoFocus
@@ -1076,13 +1139,13 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                       />
                     ) : asset.name}
                     accentColor={SECTION_ACCENT}
-                    className="[&>div:last-child]:px-5 [&>div:last-child]:py-4"
+                    selected={state.selected}
+                    cut={state.cut}
+                    dragging={state.dragging}
+                    className="[&>div>div:last-child]:px-5 [&>div>div:last-child]:py-4"
+                    headerExtra={state.selected ? <CheckSquare size={16} className="text-[var(--col-teal)]" /> : <Square size={16} className="text-[var(--text-muted)]" />}
                   >
                     <div className="h-full flex flex-col gap-3">
-                      <div className="flex items-center justify-between">
-                        <span className="mono text-[9px] uppercase text-[var(--text-muted)]">Выбор</span>
-                        {selectedAssetIds.includes(asset.id) ? <CheckSquare size={16} className="text-[var(--col-teal)]" /> : <Square size={16} className="text-[var(--text-muted)]" />}
-                      </div>
                       <div className="h-40 border border-[var(--border-color)] bg-[var(--bg-main)] overflow-hidden flex items-center justify-center">
                         {asset.type === 'image' && asset.url ? (
                           <div
@@ -1107,18 +1170,12 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                       </div>
                       <div className="mt-auto border-t border-[var(--border-color)] pt-3" />
                     </div>
-                  </BaseCard>
-                  </div>
-                ))}
-              </div>
-              {visibleFolders.length === 0 && filteredAssets.length === 0 && (
-                <div className="border border-dashed border-[var(--border-color)] p-10 text-center mono text-[10px] uppercase text-[var(--text-muted)]">
-                  {activeFolderAssetCount > 0 && hasActiveFilters
-                    ? 'Ничего не найдено'
-                    : activeCollectionId === 'all' ? 'Библиотека пуста' : 'Папка пуста'}
-                </div>
-              )}
-            </div>
+                  </EntityLibraryCard>
+                )}
+                emptyTitle={activeFolderAssetCount > 0 && hasActiveFilters ? 'Ничего не найдено' : activeCollectionId === 'all' ? 'Библиотека пуста' : 'Папка пуста'}
+                emptyDescription="Используйте загрузку слева или контекстное меню для действий с библиотекой."
+              />
+
                 </>
               )}
 
@@ -1131,7 +1188,7 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                           onContextMenu={(event) => {
                             event.preventDefault();
                             event.stopPropagation();
-                            setContextMenu({ x: event.clientX, y: event.clientY, type: 'set', setId: activeSet.id });
+                            libraryContextMenu.openGroupMenu(event, activeSet.id);
                           }}
                         >
                           <div className="mono text-[9px] uppercase font-black tracking-[0.25em] text-[var(--text-muted)]">
@@ -1183,67 +1240,69 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                         />
                       </div>
 
-                      <div
-                        className="relative min-h-[420px] border border-dashed border-[var(--border-color)] p-4"
-                        onClick={() => setContextMenu(null)}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          setContextMenu(null);
+                      <EntityLibraryWorkspace<Asset>
+                        items={activeSetAssets}
+                        getItemId={(asset) => asset.id}
+                        selectedIds={selectedAssetIds}
+                        currentGroupId={activeSet.id}
+                        surface="transparent"
+                        framed
+                        className="min-h-[420px]"
+                        gridClassName=""
+                        onClearSelection={() => {
+                          setSelectedAssetIds([]);
+                          cancelAssetRename();
                         }}
-                      >
-                        {activeSetAssets.length > 0 ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
-                            {activeSetAssets.map((asset) => (
-                              <div
-                                key={asset.id}
-                                onDoubleClick={(event) => {
-                                  event.stopPropagation();
-                                  openAsset(asset);
-                                }}
-                                onContextMenu={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  setContextMenu({ x: event.clientX, y: event.clientY, type: 'set-asset', setId: activeSet.id, assetId: asset.id });
-                                }}
-                              >
-                              <BaseCard title={asset.name} accentColor={SECTION_ACCENT} className="[&>div:last-child]:px-5 [&>div:last-child]:py-4">
-                                <div className="h-full flex flex-col gap-3">
-                                  <div className="h-40 border border-[var(--border-color)] bg-[var(--bg-main)] overflow-hidden flex items-center justify-center">
-                                    {asset.type === 'image' && asset.url ? (
-                                      <div className="h-full w-full bg-center bg-cover" style={{ backgroundImage: `url(${asset.url})` }} title={asset.name} />
-                                    ) : (
-                                      <div className="flex flex-col items-center gap-3 text-[var(--text-muted)]">
-                                        {getAssetIcon(asset.type)}
-                                        <span className="mono text-[9px] uppercase font-black">{asset.mimeType ?? 'ФАЙЛ'}</span>
-                                      </div>
-                                    )}
+                        onWorkspaceContextMenu={(workspaceContext) => {
+                          libraryContextMenu.setContextMenu(workspaceContext);
+                        }}
+                        onSelectItem={(assetId, _asset, event) => selectAsset(assetId, event)}
+                        onOpenItem={(_assetId, asset) => openAsset(asset)}
+                        onItemContextMenu={(assetId, _asset, event) => {
+                          if (!selectedAssetIds.includes(assetId)) setSelectedAssetIds([assetId]);
+                          libraryContextMenu.openItemMenu(event, assetId, activeSet.id);
+                        }}
+                        renderItem={(asset, state) => (
+                          <EntityLibraryCard
+                            title={asset.name}
+                            accentColor={SECTION_ACCENT}
+                            selected={state.selected}
+                            className="[&>div>div:last-child]:px-5 [&>div>div:last-child]:py-4"
+                            headerExtra={state.selected ? <CheckSquare size={16} className="text-[var(--col-teal)]" /> : <Square size={16} className="text-[var(--text-muted)]" />}
+                          >
+                            <div className="h-full flex flex-col gap-3">
+                              <div className="h-40 border border-[var(--border-color)] bg-[var(--bg-main)] overflow-hidden flex items-center justify-center">
+                                {asset.type === 'image' && asset.url ? (
+                                  <div className="h-full w-full bg-center bg-cover" style={{ backgroundImage: `url(${asset.url})` }} title={asset.name} />
+                                ) : (
+                                  <div className="flex flex-col items-center gap-3 text-[var(--text-muted)]">
+                                    {getAssetIcon(asset.type)}
+                                    <span className="mono text-[9px] uppercase font-black">{asset.mimeType ?? 'ФАЙЛ'}</span>
                                   </div>
-                                  <div className="flex items-center justify-between gap-3">
-                                    <span className="mono text-[10px] uppercase font-black text-[var(--col-teal)]">{ASSET_TYPE_LABELS[asset.type]}</span>
-                                    <span className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">{ASSET_KIND_LABELS[asset.kind]}</span>
-                                  </div>
-                                  <div className="mt-auto border-t border-[var(--border-color)] pt-3 space-y-2 mono text-[8px] uppercase text-[var(--text-muted)]">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span>Папка</span>
-                                      <span className="truncate">
-                                        {getPrimaryFolderId(asset)
-                                          ? folders.find((folder) => folder.id === getPrimaryFolderId(asset))?.name
-                                          : 'Библиотека'}
-                                      </span>
-                                    </div>
-                                    <div>ПКМ по файлу для действий</div>
-                                  </div>
-                                </div>
-                              </BaseCard>
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="border border-dashed border-[var(--border-color)] p-10 text-center mono text-[10px] uppercase text-[var(--text-muted)]">
-                            Набор пуст
-                          </div>
+                              <div className="flex items-center justify-between gap-3">
+                                <span className="mono text-[10px] uppercase font-black text-[var(--col-teal)]">{ASSET_TYPE_LABELS[asset.type]}</span>
+                                <span className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">{ASSET_KIND_LABELS[asset.kind]}</span>
+                              </div>
+                              <div className="mt-auto border-t border-[var(--border-color)] pt-3 space-y-2 mono text-[8px] uppercase text-[var(--text-muted)]">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span>Папка</span>
+                                  <span className="truncate">
+                                    {getPrimaryFolderId(asset)
+                                      ? folders.find((folder) => folder.id === getPrimaryFolderId(asset))?.name
+                                      : 'Библиотека'}
+                                  </span>
+                                </div>
+                                <div>ПКМ по файлу для действий</div>
+                              </div>
+                            </div>
+                          </EntityLibraryCard>
                         )}
-                      </div>
+                        emptyTitle="Набор пуст"
+                        emptyDescription="Добавьте выбранные ассеты через контекстное меню или перетаскивание."
+                      />
+
                     </>
                   ) : (
                     <>
@@ -1263,13 +1322,10 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                         <div
                           draggable
                           onDragStart={(event) => {
-                            setDraggedAssetId(selectedAssets[0].id);
-                            event.dataTransfer.setData('text/plain', selectedAssets[0].id);
-                            event.dataTransfer.effectAllowed = 'copy';
+                            libraryDragDrop.handleItemDragStart(selectedAssets[0].id, event);
                           }}
                           onDragEnd={() => {
-                            setDraggedAssetId(null);
-                            setDragOverSetId(null);
+                            libraryDragDrop.handleItemDragEnd();
                           }}
                           className="inline-flex border border-[var(--col-teal)] bg-[var(--col-teal)]/10 px-3 py-2 mono text-[10px] uppercase font-black text-[var(--col-teal)] cursor-grab"
                         >
@@ -1277,84 +1333,66 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
                         </div>
                       )}
 
-                      <div
-                        className="relative min-h-[420px] border border-dashed border-[var(--border-color)] p-4"
-                        onClick={() => setContextMenu(null)}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          setContextMenu({ x: event.clientX, y: event.clientY, type: 'workspace' });
+                      <EntityLibraryWorkspace<Asset, AssetCollection>
+                        items={[]}
+                        groups={collections}
+                        getItemId={(asset) => asset.id}
+                        getGroupId={(collection) => collection.id}
+                        dragOverGroupId={libraryDragDrop.dragOverGroupId}
+                        surface="transparent"
+                        framed
+                        className="min-h-[420px]"
+                        gridClassName=""
+                        onClearSelection={() => {
+                          setSelectedAssetIds([]);
+                          cancelSetRename();
                         }}
-                      >
-                        {collections.length > 0 ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
-                            {collections.map((collection) => {
-                              const activeDrop = dragOverSetId === collection.id;
-                              return (
-                                <div
-                                  key={collection.id}
-                                  onDoubleClick={() => setActiveSetId(collection.id)}
-                                  onContextMenu={(event) => {
+                        onWorkspaceContextMenu={(workspaceContext) => {
+                          libraryContextMenu.setContextMenu(workspaceContext);
+                        }}
+                        onOpenGroup={(collectionId) => setActiveSetId(collectionId)}
+                        onGroupContextMenu={(collectionId, _collection, event) => {
+                          libraryContextMenu.openGroupMenu(event, collectionId);
+                        }}
+                        onGroupDragOver={(collectionId, _collection, event) => libraryDragDrop.handleGroupDragOver(collectionId, event)}
+                        onGroupDragLeave={(collectionId, _collection, event) => libraryDragDrop.handleGroupDragLeave(collectionId, event)}
+                        onGroupDrop={(collectionId, _collection, event) => libraryDragDrop.handleGroupDrop(collectionId, event)}
+                        renderGroup={(collection, state) => (
+                          <EntityLibraryGroupCard
+                            name={collection.name}
+                            nameContent={renamingSetId === collection.id ? (
+                              <input
+                                autoFocus
+                                value={renamingSetName}
+                                onChange={(event) => setRenamingSetName(event.target.value)}
+                                onClick={(event) => event.stopPropagation()}
+                                onDoubleClick={(event) => event.stopPropagation()}
+                                onBlur={() => void submitSetRename()}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
                                     event.preventDefault();
-                                    event.stopPropagation();
-                                    setContextMenu({ x: event.clientX, y: event.clientY, type: 'set', setId: collection.id });
-                                  }}
-                                  onDragOver={(event) => {
-                                    if (!draggedAssetId) return;
+                                    void submitSetRename();
+                                  }
+                                  if (event.key === 'Escape') {
                                     event.preventDefault();
-                                    setDragOverSetId(collection.id);
-                                  }}
-                                  onDragLeave={() => setDragOverSetId(null)}
-                                  onDrop={(event) => {
-                                    event.preventDefault();
-                                    void handleDropAssetsToSet(collection.id, event.dataTransfer.getData('text/plain') || undefined);
-                                  }}
-                                  className={`border-2 p-5 min-h-[220px] bg-[var(--bg-card)] flex flex-col justify-between transition-colors ${
-                                    activeDrop ? 'border-[var(--col-teal)] bg-[var(--col-teal)]/10' : 'border-[var(--border-color)] hover:border-[var(--col-teal)]'
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <Folder size={36} className="text-[var(--col-teal)]" />
-                                    <span className="mono text-[9px] uppercase text-[var(--text-muted)]">{collection.assetIds.length}</span>
-                                  </div>
-                                  <div className="space-y-3">
-                                    {renamingSetId === collection.id ? (
-                                      <input
-                                        autoFocus
-                                        value={renamingSetName}
-                                        onChange={(event) => setRenamingSetName(event.target.value)}
-                                        onBlur={() => void submitSetRename()}
-                                        onKeyDown={(event) => {
-                                          if (event.key === 'Enter') {
-                                            event.preventDefault();
-                                            void submitSetRename();
-                                          }
-                                          if (event.key === 'Escape') {
-                                            event.preventDefault();
-                                            cancelSetRename();
-                                          }
-                                        }}
-                                        className="w-full border border-[var(--col-teal)] bg-[var(--bg-main)] px-2 py-1 mono text-[13px] uppercase font-black text-[var(--text-main)] outline-none"
-                                      />
-                                    ) : (
-                                      <div className="mono text-[14px] uppercase font-black text-[var(--text-main)] truncate">{collection.name}</div>
-                                    )}
-                                    <div className="mono text-[9px] uppercase text-[var(--text-muted)] line-clamp-2">
-                                      {collection.description || 'Переиспользуемый набор ассетов'}
-                                    </div>
-                                  </div>
-                                  <div className="pt-4 mono text-[8px] uppercase text-[var(--text-muted)]">
-                                    Двойной клик открыть / ПКМ для действий
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="border border-dashed border-[var(--border-color)] p-10 text-center mono text-[10px] uppercase text-[var(--text-muted)]">
-                            Наборы еще не созданы
-                          </div>
+                                    cancelSetRename();
+                                  }
+                                }}
+                                className="w-full border border-[var(--col-teal)] bg-[var(--bg-main)] px-2 py-1 mono text-[13px] uppercase font-black text-[var(--text-main)] outline-none"
+                              />
+                            ) : undefined}
+                            typeLabel={collection.description || 'НАБОР'}
+                            count={collection.assetIds.length}
+                            countLabel={collection.assetIds.length === 0 ? 'ПУСТО' : 'АССЕТОВ'}
+                            accentColor={SECTION_ACCENT}
+                            dragOver={state.dragOver}
+                          />
                         )}
-                      </div>
+                        renderItem={() => null}
+                        emptyTitle="Наборы еще не созданы"
+                        emptyDescription="Нажмите ПКМ по этой области, чтобы создать новый набор."
+                      />
+
                     </>
                   )}
                 </div>
@@ -1364,310 +1402,13 @@ const AssetsEditor: React.FC<AssetsEditorProps> = ({
       </div>
       </div>
 
-      {contextMenu && (
-        <div
-          className="fixed z-50 w-56 border border-[var(--border-color)] bg-[#050505] text-[var(--text-main)] shadow-2xl"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {contextMenu.type === 'workspace' && (
-            <>
-              {selectedAssetIds.length > 0 && (
-                <div className="border-b border-[var(--border-color)] px-3 py-2 mono text-[9px] uppercase font-black text-[var(--text-muted)]">
-                  Выбрано: {selectedAssetIds.length}
-                </div>
-              )}
-              {libraryMode === 'sets' ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void handleCreateSet()}
-                    className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-                  >
-                    <Plus size={13} /> Создать набор
-                  </button>
-                  {activeSet && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => startRenameSet(activeSet)}
-                        className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-                      >
-                        <Edit3 size={13} /> Переименовать набор
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteSet(activeSet)}
-                        className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-                      >
-                        <Trash2 size={13} /> Удалить набор
-                      </button>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-              <button
-                type="button"
-                onClick={() => void handleCreateFolderFromContext()}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-              >
-                <Plus size={13} /> Создать папку
-              </button>
-              <button
-                type="button"
-                disabled={!assetClipboard}
-                onClick={() => void pasteAssetsToFolder(activeCollectionId)}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-              >
-                <ClipboardPaste size={13} /> Вставить сюда
-              </button>
-              {selectedAssetIds.length > 0 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => moveAssetsClipboard()}
-                    className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-                  >
-                    <Scissors size={13} /> Вырезать выбранное
-                  </button>
-                  {activeCollectionId !== 'all' && (
-                    <button
-                      type="button"
-                      onClick={() => void removeAssetsFromCurrentFolder()}
-                      className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-                    >
-                      <Folder size={13} /> Переместить выбранное в библиотеку
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteAssets(selectedAssets)}
-                    className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-                  >
-                    <Trash2 size={13} /> Удалить выбранное из библиотеки
-                  </button>
-                </>
-              )}
-              {selectedAssetIds.length > 0 && renderAddToSetActions(selectedAssets)}
-              <button
-                type="button"
-                disabled={filteredAssets.length === 0}
-                onClick={selectAllVisibleAssets}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-              >
-                <CheckSquare size={13} /> Выделить все
-              </button>
-              <button
-                type="button"
-                disabled={selectedAssetIds.length === 0}
-                onClick={() => { setSelectedAssetIds([]); setContextMenu(null); }}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-              >
-                <Square size={13} /> Снять выделение
-              </button>
-                </>
-              )}
-            </>
-          )}
+      <EntityLibraryContextMenu
+        context={libraryContextMenu.contextMenu}
+        sections={getAssetLibraryContextSections()}
+        accentColor={SECTION_ACCENT}
+        onClose={libraryContextMenu.closeContextMenu}
+      />
 
-          {contextMenu.type === 'asset' && (
-            <>
-              <div className="border-b border-[var(--border-color)] px-3 py-2 mono text-[9px] uppercase font-black text-[var(--text-muted)]">
-                {getActionAssets(contextMenu.assetId).length > 1 ? `Выбрано: ${getActionAssets(contextMenu.assetId).length}` : 'Файл'}
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const asset = data.find((item) => item.id === contextMenu.assetId);
-                  if (asset) openEditModal(asset);
-                  setContextMenu(null);
-                }}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-              >
-                <Edit3 size={13} /> Правка
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const asset = data.find((item) => item.id === contextMenu.assetId);
-                  if (asset) void handleRenameAsset(asset);
-                }}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-              >
-                <Edit3 size={13} /> Переименовать
-              </button>
-              <button
-                type="button"
-                disabled={!data.find((item) => item.id === contextMenu.assetId)?.url}
-                onClick={() => openAsset(data.find((item) => item.id === contextMenu.assetId))}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-              >
-                <ExternalLink size={13} /> Открыть
-              </button>
-              <button
-                type="button"
-                disabled={!data.find((item) => item.id === contextMenu.assetId)?.url}
-                onClick={() => downloadAsset(data.find((item) => item.id === contextMenu.assetId))}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-              >
-                <Download size={13} /> Скачать
-              </button>
-              {renderAddToSetActions(getActionAssets(contextMenu.assetId))}
-              <button
-                type="button"
-                onClick={() => moveAssetsClipboard(contextMenu.assetId)}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-              >
-                <Scissors size={13} /> Вырезать
-              </button>
-              {activeCollectionId !== 'all' && (
-                <button
-                  type="button"
-                  onClick={() => void removeAssetsFromCurrentFolder(contextMenu.assetId)}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-                >
-                  <Folder size={13} /> Переместить в библиотеку
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void handleDeleteAssets(getActionAssets(contextMenu.assetId))}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-              >
-                <Trash2 size={13} /> Удалить из библиотеки
-              </button>
-            </>
-          )}
-
-          {contextMenu.type === 'set' && (() => {
-            const collection = getCollectionById(contextMenu.setId);
-            if (!collection) return null;
-
-            return (
-              <>
-                <div className="border-b border-[var(--border-color)] px-3 py-2 mono text-[9px] uppercase font-black text-[var(--text-muted)]">
-                  Набор
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveSetId(collection.id);
-                    setContextMenu(null);
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-                >
-                  <FolderOpen size={13} /> Открыть
-                </button>
-                <button
-                  type="button"
-                  disabled={selectedAssets.length === 0}
-                  onClick={() => void applySetToAssets(selectedAssets, collection.id)}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-                >
-                  <Plus size={13} /> Добавить выбранные
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startRenameSet(collection)}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-                >
-                  <Edit3 size={13} /> Переименовать
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteSet(collection)}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-                >
-                  <Trash2 size={13} /> Удалить набор
-                </button>
-              </>
-            );
-          })()}
-
-          {contextMenu.type === 'set-asset' && (() => {
-            const asset = data.find((item) => item.id === contextMenu.assetId);
-            if (!asset) return null;
-
-            return (
-              <>
-                <div className="border-b border-[var(--border-color)] px-3 py-2 mono text-[9px] uppercase font-black text-[var(--text-muted)]">
-                  Ассет в наборе
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    openEditModal(asset);
-                    setContextMenu(null);
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-                >
-                  <Edit3 size={13} /> Правка
-                </button>
-                <button
-                  type="button"
-                  disabled={!asset.url}
-                  onClick={() => openAsset(asset)}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-                >
-                  <ExternalLink size={13} /> Открыть
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void removeAssetFromSet(asset, contextMenu.setId)}
-                  className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-                >
-                  <Trash2 size={13} /> Убрать из набора
-                </button>
-              </>
-            );
-          })()}
-
-          {contextMenu.type === 'folder' && (
-            <>
-              <button
-                type="button"
-                onClick={() => openFolder(contextMenu.folderId)}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-              >
-                <FolderOpen size={13} /> Открыть
-              </button>
-              <button
-                type="button"
-                disabled={!assetClipboard}
-                onClick={() => void pasteAssetsToFolder(contextMenu.folderId)}
-                className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)] disabled:opacity-40"
-              >
-                <ClipboardPaste size={13} /> Вставить в папку
-              </button>
-              {contextMenu.folderId !== 'all' && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const folder = folders.find((item) => item.id === contextMenu.folderId);
-                      if (folder) startRenameFolder(folder);
-                    }}
-                    className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-teal)]/10 hover:text-[var(--col-teal)]"
-                  >
-                    <Edit3 size={13} /> Переименовать
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const folder = folders.find((item) => item.id === contextMenu.folderId);
-                      if (folder) void handleDeleteFolder(folder);
-                    }}
-                    className="w-full px-3 py-2 flex items-center gap-2 mono text-[10px] uppercase font-black text-left hover:bg-[var(--col-red)]/10 hover:text-[var(--col-red)]"
-                  >
-                    <Trash2 size={13} /> Удалить папку
-                  </button>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      )}
 
       <Modal
         isOpen={Boolean(editingAsset)}

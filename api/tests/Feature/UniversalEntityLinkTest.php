@@ -10,6 +10,7 @@ use App\Models\Item;
 use App\Models\Location;
 use App\Models\Map;
 use App\Models\Scenario;
+use App\Models\ScenarioNode;
 use App\Models\User;
 use App\Models\WorldEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -263,6 +264,76 @@ class UniversalEntityLinkTest extends TestCase
         ])->assertStatus(422);
     }
 
+    public function test_deleting_materials_cleans_incoming_outgoing_and_scenario_node_links(): void
+    {
+        $user = User::factory()->create();
+        $scenario = $this->createScenario($user);
+        $map = $this->createMap($user);
+        $character = $this->createCharacter($user);
+        $item = $this->createItem($user);
+        $node = ScenarioNode::create([
+            'scenario_id' => $scenario->id,
+            'type' => 'description',
+            'order_index' => 0,
+        ]);
+
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenario->id,
+            'target_type' => EntityLink::TARGET_MAP,
+            'target_id' => $map->id,
+            'relation_type' => EntityLink::RELATION_USES,
+        ]);
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_MAP,
+            'source_id' => $map->id,
+            'target_type' => EntityLink::TARGET_CHARACTER,
+            'target_id' => $character->id,
+            'relation_type' => EntityLink::RELATION_RELATED,
+        ]);
+        EntityLink::create([
+            'source_type' => EntityLink::TARGET_CHARACTER,
+            'source_id' => $character->id,
+            'target_type' => EntityLink::TARGET_ITEM,
+            'target_id' => $item->id,
+            'relation_type' => EntityLink::RELATION_USES,
+        ]);
+        EntityLink::create([
+            'source_type' => EntityLink::SOURCE_SCENARIO_NODE,
+            'source_id' => $node->id,
+            'target_type' => EntityLink::TARGET_ITEM,
+            'target_id' => $item->id,
+            'relation_type' => EntityLink::RELATION_RELATED,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->deleteJson("/api/scenarios/{$scenario->id}")->assertStatus(200);
+        $this->assertDatabaseMissing('entity_links', [
+            'source_type' => EntityLink::TARGET_SCENARIO,
+            'source_id' => $scenario->id,
+        ]);
+        $this->assertDatabaseMissing('entity_links', [
+            'source_type' => EntityLink::SOURCE_SCENARIO_NODE,
+            'source_id' => $node->id,
+        ]);
+
+        $this->deleteJson("/api/maps/{$map->id}")->assertStatus(200);
+        $this->assertDatabaseMissing('entity_links', [
+            'source_type' => EntityLink::TARGET_MAP,
+            'source_id' => $map->id,
+        ]);
+
+        $this->deleteJson("/api/items/{$item->id}")->assertStatus(200);
+        $this->assertDatabaseMissing('entity_links', [
+            'target_type' => EntityLink::TARGET_ITEM,
+            'target_id' => $item->id,
+        ]);
+
+        $this->deleteJson("/api/characters/{$character->id}")->assertStatus(200);
+        $this->assertDatabaseCount('entity_links', 0);
+    }
+
     private function createScenario(User $user): Scenario
     {
         return Scenario::create([
@@ -292,7 +363,6 @@ class UniversalEntityLinkTest extends TestCase
             'role' => 'NPC',
             'race' => '',
             'description' => '',
-            'level' => 1,
             'stats' => [],
             'inventory' => [],
         ]);

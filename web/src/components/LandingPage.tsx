@@ -7,7 +7,6 @@ import {
   FileDown,
   Map as MapIcon,
   Users,
-  Globe,
   PenTool,
   Box
 } from 'lucide-react';
@@ -41,7 +40,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
     {
       icon: <Users size={24} />,
       title: "ПЕРСОНАЖИ И ГРУППЫ",
-      desc: "Ведите персонажей, NPC и группы, связывайте их со сценариями, картами, хрониками и ассетами.",
+      desc: "Ведите персонажей, NPC и группы, связывайте их со сценариями, картами и ассетами.",
       color: "var(--col-yellow)"
     },
     {
@@ -49,12 +48,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
       title: "ПРЕДМЕТЫ И АССЕТЫ",
       desc: "Храните предметы, изображения, документы, папки и наборы ассетов для быстрого повторного использования.",
       color: "var(--col-blue)"
-    },
-    {
-      icon: <Globe size={24} />,
-      title: "АТЛАС И ХРОНИКИ",
-      desc: "Структурируйте мир через хроники, события, места и организации, не ломая самостоятельность материалов.",
-      color: "var(--col-teal)"
     },
     {
       icon: <FileDown size={24} />,
@@ -80,7 +73,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
           </div>
           
           <div className="flex items-center gap-6">
-            <Button color="white" inverted onClick={() => openAuth('login')} className="hidden md:flex">
+            <Button color="white" inverted onClick={() => openAuth('login')} className="hidden md:flex" data-testid="landing-login">
               ВОЙТИ
             </Button>
             <Button color="red" onClick={() => openAuth('register')}>
@@ -110,7 +103,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               
               <p className="text-lg md:text-xl text-[var(--text-muted)] max-w-xl leading-relaxed mono">
                 Рабочее пространство мастера для подготовки настольных RPG:
-                сценарии, карты, хроники, материалы и кампании в одном интерфейсе.
+                сценарии, карты, материалы и кампании в одном интерфейсе.
               </p>
               
               <div className="flex flex-wrap gap-4 pt-4">
@@ -143,7 +136,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 mono text-[10px] font-black uppercase text-[var(--text-main)]">
                         <span>Сценарии</span>
                         <span>Карты</span>
-                        <span>Атлас</span>
+                        <span>Кампании</span>
                         <span>Ассеты</span>
                       </div>
                   </div>
@@ -203,8 +196,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLogin }) => {
               ТВОЙ МИР <br/> ЖДЕТ СОЗДАТЕЛЯ
             </h2>
             <p className="text-xl mono text-[var(--text-muted)]">
-              Соберите кампанию, подготовьте сценарии, разложите события по хронике
-              и держите все материалы под рукой.
+              Соберите кампанию, подготовьте сценарии, карты и карточки,
+              чтобы держать игровые материалы под рукой.
             </p>
             <Button size="lg" color="red" className="h-20 px-12 text-xl" onClick={() => openAuth('register')}>
                СОЗДАТЬ АККАУНТ

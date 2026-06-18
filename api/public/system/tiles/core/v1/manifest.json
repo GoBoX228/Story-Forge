@@ -1,0 +1,79 @@
+{
+  "id": "core",
+  "version": "v1",
+  "name": "Основной набор",
+  "tiles": [
+    {
+      "id": "system:tile:core:v1:stone-floor",
+      "slug": "stone-floor",
+      "name": "Каменный пол",
+      "file": "stone-floor.png",
+      "category": "floor",
+      "color": "#77736d"
+    },
+    {
+      "id": "system:tile:core:v1:stone-wall",
+      "slug": "stone-wall",
+      "name": "Каменная стена",
+      "file": "stone-wall.png",
+      "category": "wall",
+      "color": "#625b55"
+    },
+    {
+      "id": "system:tile:core:v1:frozen-stone-floor",
+      "slug": "frozen-stone-floor",
+      "name": "Каменный пол во льду",
+      "file": "frozen-stone-floor.png",
+      "category": "floor",
+      "color": "#829cad"
+    },
+    {
+      "id": "system:tile:core:v1:frozen-stone-wall",
+      "slug": "frozen-stone-wall",
+      "name": "Каменная стена во льду",
+      "file": "frozen-stone-wall.png",
+      "category": "wall",
+      "color": "#8ba7b8"
+    },
+    {
+      "id": "system:tile:core:v1:wood-floor",
+      "slug": "wood-floor",
+      "name": "Деревянный пол",
+      "file": "wood-floor.png",
+      "category": "floor",
+      "color": "#986638"
+    },
+    {
+      "id": "system:tile:core:v1:grass",
+      "slug": "grass",
+      "name": "Трава",
+      "file": "grass.png",
+      "category": "floor",
+      "color": "#3e8f24"
+    },
+    {
+      "id": "system:tile:core:v1:water",
+      "slug": "water",
+      "name": "Вода",
+      "file": "water.png",
+      "category": "floor",
+      "color": "#229bd0"
+    },
+    {
+      "id": "system:tile:core:v1:lava",
+      "slug": "lava",
+      "name": "Лава",
+      "file": "lava.png",
+      "category": "floor",
+      "color": "#e04416"
+    },
+    {
+      "id": "system:tile:core:v1:ice",
+      "slug": "ice",
+      "name": "Лёд",
+      "file": "ice.png",
+      "category": "floor",
+      "color": "#9ed2ed"
+    }
+  ]
+}

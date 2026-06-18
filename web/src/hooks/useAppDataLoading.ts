@@ -19,6 +19,7 @@ import {
   PublishedContent,
   PublicationAssignmentMap,
   Scenario,
+  ScenarioGroup,
   Tag,
   TagAssignmentMap,
   TaggableTargetType,
@@ -50,7 +51,7 @@ import {
 } from '../lib/worldApi';
 import { listTags, listTargetTags } from '../lib/tagApi';
 import { listEntityLinks } from '../lib/entityLinkApi';
-import { listCharacterGroups, listItemGroups } from '../lib/cardGroupApi';
+import { listCharacterGroups, listItemGroups, listScenarioGroups } from '../lib/cardGroupApi';
 import { useStickyState } from './useStickyState';
 
 interface TagTargetRef {
@@ -77,6 +78,7 @@ const INITIAL_ITEMS: Item[] = [];
 export function useAppDataLoading({ dismissedBroadcastIds }: UseAppDataLoadingOptions) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [scenarioGroups, setScenarioGroups] = useState<ScenarioGroup[]>([]);
   const [maps, setMaps] = useState<MapData[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [characterGroups, setCharacterGroups] = useState<CharacterGroup[]>([]);
@@ -156,6 +158,7 @@ export function useAppDataLoading({ dismissedBroadcastIds }: UseAppDataLoadingOp
     const [
       campaignsResponse,
       scenariosResponse,
+      scenarioGroupsResponse,
       mapsResponse,
       charactersResponse,
       characterGroupsResponse,
@@ -172,6 +175,7 @@ export function useAppDataLoading({ dismissedBroadcastIds }: UseAppDataLoadingOp
     ] = await Promise.all([
       apiRequest<any[]>('/campaigns'),
       apiRequest<any[]>('/scenarios'),
+      listScenarioGroups(),
       apiRequest<any[]>('/maps'),
       apiRequest<any[]>('/characters'),
       listCharacterGroups(),
@@ -189,6 +193,7 @@ export function useAppDataLoading({ dismissedBroadcastIds }: UseAppDataLoadingOp
 
     setCampaigns(campaignsResponse.map(mapCampaignFromApi));
     setScenarios(scenariosResponse.map(mapScenarioSummary));
+    setScenarioGroups(scenarioGroupsResponse);
     setMaps(mapsResponse.map(mapMapFromApi));
     setCharacters(charactersResponse.map(mapCharacterFromApi));
     setCharacterGroups(characterGroupsResponse);
@@ -231,6 +236,7 @@ export function useAppDataLoading({ dismissedBroadcastIds }: UseAppDataLoadingOp
   const resetData = useCallback(() => {
     setCampaigns([]);
     setScenarios([]);
+    setScenarioGroups([]);
     setMaps([]);
     setCharacters([]);
     setCharacterGroups([]);
@@ -257,6 +263,8 @@ export function useAppDataLoading({ dismissedBroadcastIds }: UseAppDataLoadingOp
     setCampaigns,
     scenarios,
     setScenarios,
+    scenarioGroups,
+    setScenarioGroups,
     maps,
     setMaps,
     characters,

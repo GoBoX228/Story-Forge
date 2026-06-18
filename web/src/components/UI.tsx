@@ -39,7 +39,7 @@ export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & BaseI
         ...props.style,
         borderColor: isFocused ? accentColor : 'var(--border-color)',
       }}
-      className={`w-full bg-[var(--input-bg)] border-2 px-5 py-3 text-xs mono text-[var(--text-main)] focus:outline-none transition-all placeholder:text-[var(--text-muted)] ${className}`} 
+      className={`h-11 w-full bg-[var(--input-bg)] border-2 px-5 text-xs mono text-[var(--text-main)] focus:outline-none transition-all placeholder:text-[var(--text-muted)] ${className}`}
     />
   );
 };
@@ -115,7 +115,7 @@ export const Select: React.FC<SelectProps> = ({
         style={{ 
           borderColor: isOpen ? accentColor : 'var(--border-color)',
         }}
-        className={`w-full bg-[var(--input-bg)] border-2 h-10 px-4 flex items-center justify-between text-[10px] mono text-[var(--text-main)] focus:outline-none transition-all uppercase font-black hover:bg-[var(--bg-surface)] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--input-bg)] disabled:active:scale-100`}
+        className={`w-full bg-[var(--input-bg)] border-2 h-11 px-4 flex items-center justify-between text-[10px] mono text-[var(--text-main)] focus:outline-none transition-all uppercase font-black hover:bg-[var(--bg-surface)] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[var(--input-bg)] disabled:active:scale-100`}
       >
         <span className={selectedOption ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}>
           {selectedOption ? selectedOption.label : placeholder}
@@ -177,7 +177,7 @@ export const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & {
   
   const sizeStyles = {
     sm: "px-3 py-1.5 h-8",
-    md: "px-6 py-2.5 h-10",
+    md: "px-6 py-2.5 h-11",
     lg: "px-8 py-4 h-14"
   };
 
@@ -334,12 +334,12 @@ export const Badge: React.FC<{ children: React.ReactNode, color?: string }> = ({
 );
 
 export const SearchInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { accentColor?: string }> = ({ accentColor = 'var(--col-blue)', ...props }) => (
-  <div className="relative group w-full max-w-sm">
+  <div className="relative group w-full">
     <div className="absolute left-4 top-1/2 -translate-y-1/2 w-1.5 h-1.5 opacity-0 group-focus-within:opacity-100 transition-opacity" style={{ backgroundColor: accentColor }} />
     
     <input
       {...props}
-      className={`w-full bg-[var(--input-bg)] border-2 border-[var(--border-color)] pl-10 pr-12 py-3 mono text-[11px] uppercase tracking-wider text-[var(--text-main)] focus:outline-none transition-all placeholder:text-[var(--text-muted)] focus:bg-[var(--bg-surface)] ${props.className || ''}`}
+      className={`h-11 w-full bg-[var(--input-bg)] border-2 border-[var(--border-color)] pl-10 pr-12 mono text-[11px] uppercase tracking-wider text-[var(--text-main)] focus:outline-none transition-all placeholder:text-[var(--text-muted)] focus:bg-[var(--bg-surface)] ${props.className || ''}`}
       style={{ 
         borderColor: props.value ? accentColor : 'var(--border-color)',
         borderLeftWidth: '4px',

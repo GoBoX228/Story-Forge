@@ -69,7 +69,6 @@ class SecurityAuthorizationTest extends TestCase
 
         $map = Map::query()->create([
             'user_id' => $owner->id,
-            'scenario_id' => $scenario->id,
             'campaign_id' => $campaign->id,
             'name' => 'Owner Map',
             'width' => 10,
@@ -80,11 +79,9 @@ class SecurityAuthorizationTest extends TestCase
 
         $character = Character::query()->create([
             'user_id' => $owner->id,
-            'scenario_id' => $scenario->id,
             'campaign_id' => $campaign->id,
             'name' => 'Owner Character',
             'role' => 'NPC',
-            'level' => 1,
         ]);
 
         $item = Item::query()->create([

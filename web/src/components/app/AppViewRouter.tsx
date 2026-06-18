@@ -12,8 +12,7 @@ import {
   ProfileRoute,
   ScenariosRoute,
   SettingsRoute,
-  ThemeName,
-  WorldRoute
+  ThemeName
 } from './AppRouteViews';
 
 interface AppViewRouterProps {
@@ -48,8 +47,6 @@ export const AppViewRouter: React.FC<AppViewRouterProps> = ({
           return <CharactersRoute navigation={navigation} />;
         case 'assets':
           return <AssetsRoute navigation={navigation} />;
-        case 'world':
-          return <WorldRoute navigation={navigation} />;
         case 'profile':
           return <ProfileRoute />;
         case 'settings':

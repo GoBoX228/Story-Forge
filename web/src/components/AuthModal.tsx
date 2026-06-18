@@ -474,6 +474,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="USER@STORYFORGE.NET"
                 accentColor={COLORS.accentRed}
+                data-testid="auth-email"
                 required
               />
             </div>
@@ -502,6 +503,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 accentColor={COLORS.accentRed}
+                data-testid="auth-password"
                 required
               />
               <div className="mono text-[8px] uppercase text-[var(--text-muted)]">
@@ -614,7 +616,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onLogin, 
         )}
 
         <div className="pt-4 space-y-4">
-          <Button color="red" size="lg" className="w-full h-14 relative overflow-hidden" disabled={submitDisabled}>
+          <Button color="red" size="lg" className="w-full h-14 relative overflow-hidden" disabled={submitDisabled} data-testid="auth-submit">
             {isLoading ? (
               <span className="animate-pulse">ОБРАБОТКА...</span>
             ) : (

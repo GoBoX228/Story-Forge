@@ -4,7 +4,7 @@
 
 `ROADMAP.md` фиксирует текущее состояние проекта, ближайший технический фокус и отложенные задачи. README и `docs/project-baseline.md` остаются справочными документами, а roadmap используется как рабочий трекер по статусам.
 
-Технические названия файлов, классов, маршрутов, библиотек и команд не переводятся. UI-термины проекта используются на русском: `Атлас`, `Места`, `Организации`, `Хроника`, `События хроники`.
+Технические названия файлов, классов, маршрутов, библиотек и команд не переводятся. UI-термины проекта используются на русском; раздел `Атлас` и связанные термины `Места`, `Организации`, `Хроника`, `События хроники` временно скрыты из интерфейса и отложены до лучших времен.
 
 ## Легенда статусов
 
@@ -24,9 +24,9 @@
 - Docker/prod: `docker-compose.prod.yml`, Caddy reverse proxy, Next production build, Laravel production env, внутренние сервисы без публичных портов.
 - Auth: cookie-first API auth через HttpOnly refresh cookie, CSRF handshake `GET /api/auth/csrf` и `X-CSRF-TOKEN`.
 - Сценарии: legacy-модель `scenarios -> chapters -> blocks` удалена из активного UX; сценарный модуль работает graph-first через `scenario_nodes` и `scenario_transitions`.
-- Атлас: `Chronicle`, `WorldEvent`, `Location`, `Faction` остаются backend-терминами; в UI используются `Хроники`, `События хроники`, `Места`, `Организации`.
+- Атлас: `Chronicle`, `WorldEvent`, `Location`, `Faction` остаются backend-терминами и спящим заделом, но раздел `Атлас` скрыт из sidebar/router/лендинга и не входит в ближайший пользовательский фокус.
 
-Основание: `web/package.json`, `web/Dockerfile`, `web/Dockerfile.prod`, `docker-compose.yml`, `docker-compose.prod.yml`, `api/routes/api.php`, `api/database/migrations`, `web/src/components/Sidebar.tsx`, `web/src/components/WorldEditor.tsx`.
+Основание: `web/package.json`, `web/Dockerfile`, `web/Dockerfile.prod`, `docker-compose.yml`, `docker-compose.prod.yml`, `api/routes/api.php`, `api/database/migrations`, `web/src/components/Sidebar.tsx`, `web/src/components/app/AppViewRouter.tsx`, `web/src/hooks/useAppNavigation.ts`.
 
 ## Реализованные возможности
 
@@ -111,18 +111,8 @@
 
 ### Атлас и хроники
 
-- `Реализовано` Atlas Revival + Domain Rename v1: раздел `Мир` возвращен как `Атлас`; `locations`, `factions`, `events` отображаются как `Места`, `Организации`, `Хроника`.
-  Основание: `Sidebar.tsx`, `WorldEditor.tsx`.
-- `Реализовано` Atlas Typed Links UX v1: связи Атласа редактируются typed-полями, generic `EntityLinksPanel` остается для других материалов.
-  Основание: `WorldEditor.tsx`, `EntityLinksPanel.tsx`.
-- `Реализовано` Atlas Chronicle-Centered Model v1: `Хроника` - событийный слой, `Места` - контейнер карт, `Организации` - контейнер участников.
-  Основание: `WorldEditor.tsx`.
-- `Реализовано` Atlas Chronicles Timeline v1: `chronicles` стали отдельными временными линиями, `events` стали событиями точки/диапазона через `position/end_position`.
-  Основание: `2026_06_12_000001_add_chronicles_timeline.php`, `ChronicleController`, `WorldEventController`, `WorldModuleTest`.
-- `Реализовано` Chronicle Editor UX v1 + Event Campaign Cleanup: открытая хроника вынесена в отдельный экран, кампания редактируется на уровне хроники, `events.campaign_id` оставлен legacy-only.
-  Основание: `WorldEditor.tsx`, `ChronicleEditor.tsx`, `WorldModuleTest`.
-- `Реализовано` Chronicle Timeline Editor Stabilization v1: timeline canvas, ticks, lanes, drag/drop событий, minimap, zoom/fit.
-  Основание: `ChronicleEditor.tsx`, `EditorViewportControls.tsx`.
+- `Отложено` Атлас и хроники временно скрыты из пользовательского интерфейса до лучших времен. Backend-модели `Chronicle`, `WorldEvent`, `Location`, `Faction`, маршруты и старые frontend-компоненты остаются в коде как спящий задел, но sidebar, router, переходы из graph/entity links, лендинг и metadata больше не экспонируют раздел.
+  Основание: `Sidebar.tsx`, `AppViewRouter.tsx`, `useAppNavigation.ts`, `LandingPage.tsx`, `layout.tsx`, `WorldEditor.tsx`, `ChronicleEditor.tsx`.
 
 ### Публикация, жалобы, объявления и PDF
 
@@ -193,9 +183,31 @@
   Основание: `App.tsx`, `AppDataStoreContext.tsx`, `AppViewRouter.tsx`, `useAppDomainActions.ts`.
 - `Реализовано` Editor Context Adoption v1: `AppViewRouter` больше не раскладывает `data/actions` по конкретным редакторам; app-bound route adapters читают `AppDataStoreContext`, а core-редакторы остаются prop-driven. Уровень рассуждения: `Очень высокий`.
   Основание: `AppViewRouter.tsx`, `AppRouteViews.tsx`, `AppDataStoreContext.tsx`.
+- `Реализовано` Entity Library Platform v1: добавлен общий frontend foundation для библиотечных рабочих областей материалов - workspace, cards, group cards, context menu, selection, navigation и declarative actions без привязки к ассетам, сценариям или другим доменам. Уровень рассуждения: `Очень высокий`.
+  Основание: `web/src/components/entityLibrary`.
+- `Реализовано` Scenario Groups Backend v1: добавлены `ScenarioGroup`, `scenario_groups`, `scenarios.scenario_group_id`, CRUD API групп сценариев, owner-scoped проверки, фильтр сценариев по группе и сброс группы при удалении. Уровень рассуждения: `Высокий`.
+  Основание: `ScenarioGroupController`, `ScenarioGroupService`, `ScenarioGroupTest`, `2026_06_17_000001_add_scenario_groups.php`.
+- `Реализовано` Scenario Groups Frontend Data v1: добавлены frontend types, mappers, API helpers, data loading/actions и context wiring для групп сценариев. Уровень рассуждения: `Высокий`.
+  Основание: `types.ts`, `cardGroupApi.ts`, `mappers.ts`, `useAppDataLoading.ts`, `useAppDomainActions.ts`, `AppDataStoreContext.tsx`.
+- `Реализовано` Scenario Library Workspace v1: сценарии и группы перенесены из right-sidebar списка в центральную рабочую область на `EntityLibraryWorkspace`, с карточками, навигацией по группам, поиском/тегами и созданием сценариев в текущей группе. Уровень рассуждения: `Очень высокий`.
+
+- `Реализовано` Scenario Library Context Actions v1: добавлены context menu для свободной области, сценариев и групп, создание сценариев/групп, inline-переименование групп, удаление и перемещение сценариев по модели “вырезать → вставить сюда”. Уровень рассуждения: `Очень высокий`.
+  Основание: `ScenarioEditor.tsx`, `AppRouteViews.tsx`, `web/src/components/entityLibrary`.
+- `Реализовано` Scenario Library Polish v1: доведены empty states, move-buffer banner, визуальное состояние `ВЫРЕЗАНО`, keyboard polish, responsive grid и clamp context menu для библиотеки сценариев. Уровень рассуждения: `Высокий`.
+  Основание: `ScenarioEditor.tsx`, `EntityLibraryWorkspace.tsx`, `EntityLibraryContextMenu.tsx`, `EntityLibraryGroupCard.tsx`.
+- `Реализовано` Entity Library Interactions v1: общий library foundation получил multi-selection, shift-range, action targets, move-buffer, drag/drop между группами, drop-target state и keyboard handling; сценарная библиотека подключена как первый потребитель. Уровень рассуждения: `Очень высокий`.
+  Основание: `web/src/components/entityLibrary`, `ScenarioEditor.tsx`.
+- `Реализовано` Map Library Workspace v1: стартовый экран раздела карт переведен с правого списка `Архив карт` на центральную `EntityLibraryWorkspace` с карточками карт, выбором, context menu, keyboard open/delete и сохранением открытого `MapEditor` без изменений. Уровень рассуждения: `Очень высокий`.
+  Основание: `MapEditor.tsx`, `web/src/components/entityLibrary`.
+- `Реализовано` Character/Item Library Alignment v1: разделы персонажей и предметов переведены с правых групповых архивов на общий `EntityLibraryWorkspace` с группами, карточками, selection, context menu, move-buffer, drag/drop и keyboard actions без изменения модалок, API и доменной логики. Уровень рассуждения: `Очень высокий`.
+  Основание: `CharactersEditor.tsx`, `ItemsEditor.tsx`, `web/src/components/entityLibrary`.
+- `Реализовано` Assets Library Platform Migration v1: рабочие области файлов и наборов ассетов переведены на общий `EntityLibraryWorkspace`, `EntityLibraryCard`, `EntityLibraryGroupCard`, `EntityLibraryContextMenu` и shared hooks для selection, move-buffer, drag/drop и keyboard actions; upload, folders, sets, membership, edit modal, tags, links и publication остались asset-specific. Уровень рассуждения: `Очень высокий`.
+  Основание: `AssetsEditor.tsx`, `web/src/components/entityLibrary`.
 
 ## Реализовано частично
 
+- `Реализовано частично` Library E2E Smoke Tests v1: Playwright-инфраструктура, мокированные `/api/*` ответы и smoke-сценарии для библиотек добавлены, но полный e2e-прогон не стабилизирован из-за auth/dev-server bootstrap. До зелёного прогона задача остаётся частичной; продуктовый smoke временно выполняется вручную. Уровень рассуждения: `Высокий`.
+  Основание: `web/playwright.config.ts`, `web/e2e/library-smoke.spec.ts`, `web/e2e/helpers/mockApi.ts`.
 - `Реализовано частично` Collaboration/comments: таблицы `campaign_members` и `comments` есть, но полноценные модели, controllers, routes и UI еще не реализованы.
   Основание: `0002_01_01_000003_create_collaboration_publication_export_tables.php`; отсутствие `Comment` и `CampaignMember` в `api/app/Models`.
 - `Реализовано частично` Export jobs, notifications и idempotency: таблицы есть, но feature-flow, queue UI и middleware не завершены.
@@ -206,15 +218,14 @@
   Основание: `AssetsEditor.tsx`.
 - `Реализовано частично` Material groups: группы персонажей и предметов реализованы локально, но общей library/group платформы для сценариев, карт, персонажей и предметов еще нет.
   Основание: `CharacterGroupController`, `ItemGroupController`, `CharactersEditor.tsx`, `ItemsEditor.tsx`.
-- `Реализовано частично` Scenario library: CRUD сценариев и graph editor готовы, но библиотечная рабочая область сценариев, группы сценариев и карточная модель раздела еще не реализованы.
-  Основание: `ScenarioEditor.tsx`, `ScenarioListPanel.tsx`.
+- `Реализовано частично` Scenario library: v1-библиотека сценариев с группами, карточками, context menu, move-buffer, drag/drop и polish готова; будущие ручная сортировка и расширенные массовые операции остаются за рамками v1.
+  Основание: `ScenarioEditor.tsx`, `EntityLibraryWorkspace.tsx`, `ScenarioGroupController`.
 ## Активный фокус
 
 - `В работе` Постепенно разделять крупные редакторы на feature-модули без изменения backend/API.
 - `В работе` Продолжить декомпозицию крупных редакторов после стабилизации общего shell/toolbar/viewport слоя.
-- `В работе` Entity Library Platform v1: подготовить общий foundation для библиотечных рабочих областей материалов - grid, cards, empty state, context menu, selection, group navigation и item actions. Уровень рассуждения: `Очень высокий`.
 
-Заметка: локальные CSS-фиксы сценарного toolbar нежелательны. Сценарии, карты и хроники должны перейти на общий editor layout, иначе `toolbarPosition`, боковые панели и canvas sizing будут снова расходиться.
+Заметка: локальные CSS-фиксы сценарного toolbar нежелательны. Сценарии и карты должны оставаться на общем editor layout, иначе `toolbarPosition`, боковые панели и canvas sizing будут снова расходиться.
 
 Заметка: asset-specific upload/filter/file logic не переносится в общий library foundation. Ассеты остаются источником функционального паттерна, а не готовым дизайном или доменной моделью для сценариев.
 
@@ -227,15 +238,6 @@
 
 ### Library Platform
 
-- `Запланировано` Scenario Groups Backend v1: добавить `scenario_groups`, `scenarios.group_id`, CRUD API, ownership-проверки и поведение удаления группы без удаления сценариев. Уровень рассуждения: `Высокий`.
-- `Запланировано` Scenario Groups Frontend Data v1: добавить типы, мапперы, API helpers, загрузку данных, domain actions и context wiring для групп сценариев. Уровень рассуждения: `Высокий`.
-- `Запланировано` Scenario Library Workspace v1: перенести сценарии и группы из right-sidebar списка в центральную рабочую область с карточками. Уровень рассуждения: `Очень высокий`.
-- `Запланировано` Scenario Library Context Actions v1: добавить context menu для свободной области и элементов - создать сценарий, создать группу, переименовать, удалить, переместить в группу, открыть группу и вернуться назад. Уровень рассуждения: `Очень высокий`.
-- `Запланировано` Scenario Library Polish v1: довести empty states, состояния карточек, responsive layout, keyboard/selection polish и визуальные статусы сценариев. Уровень рассуждения: `Высокий`.
-- `Запланировано` Map Library Workspace v1: подключить общий library foundation к разделу карт без потери map-specific действий и редактора карты. Уровень рассуждения: `Очень высокий`.
-- `Запланировано` Character/Item Library Alignment v1: заменить локальную групповую логику персонажей и предметов общей library/group моделью. Уровень рассуждения: `Очень высокий`.
-- `Запланировано` Assets Library Platform Migration v1: аккуратно перевести ассеты на общий library foundation, сохранив upload, folders, sets, membership и asset-specific context actions. Уровень рассуждения: `Очень высокий`.
-- `Запланировано` Library E2E Smoke Tests v1: покрыть создание групп, context menu, выбор элементов, переходы по группам и базовые действия для сценариев и следующих подключенных разделов. Уровень рассуждения: `Высокий`.
 
 ### Graph vNext
 
@@ -255,11 +257,11 @@
 
 ### Atlas vNext
 
-- `Запланировано` Atlas Nested Arcs / Calendar Systems v2: вложенные арки хроники и календарные системы.
-- `Запланировано` Drag-to-position / resize ranges на timeline как отдельный UX-слой.
-- `Запланировано` Более точные relation-типы Атласа вместо общего `relationType='related'`.
-- `Запланировано` Основные/приоритетные связи: основное место, основная организация, главный сценарий события.
-- `Запланировано` Более глубокая интеграция хроник с кампаниями.
+- `Отложено` Atlas Nested Arcs / Calendar Systems v2: вложенные арки хроники и календарные системы.
+- `Отложено` Drag-to-position / resize ranges на timeline как отдельный UX-слой.
+- `Отложено` Более точные relation-типы Атласа вместо общего `relationType='related'`.
+- `Отложено` Основные/приоритетные связи: основное место, основная организация, главный сценарий события.
+- `Отложено` Более глубокая интеграция хроник с кампаниями.
 
 ### Publication и Collaboration vNext
 
@@ -273,6 +275,7 @@
 
 ## Отложено
 
+- `Отложено` Атлас и хроники: раздел скрыт из пользовательского интерфейса до лучших времен; backend/API и компоненты оставлены как технический задел без активного product focus.
 - `Отложено` Полноценное social/community ядро: communities, friends, dialogs, messages.
 - `Отложено` Community redesign: кружки интересов, роли, участники и связь публикаций с community-контекстом.
 - `Отложено` Realtime collaboration.
@@ -288,14 +291,14 @@
 
 - `Устарело` `Graph Edge Ports v1` с правилом `input = left/top`, `output = right/bottom`.
   Заменено free-side выбором сторон в `GraphCanvas.tsx::choosePortSides`.
-- `Устарело` Утверждение, что раздел `Мир` скрыт.
-  Раздел возвращен в sidebar как `Атлас`.
+- `Устарело` Утверждение, что раздел `Мир` возвращен в sidebar как `Атлас`.
+  Раздел снова скрыт из пользовательского интерфейса и отложен до лучших времен.
 - `Устарело` Формулировка про Docker frontend на `Node 24`.
   Фактически используются `web/Dockerfile` и `web/Dockerfile.prod` на `node:22-alpine`.
 - `Устарело` Формулировка про полностью чистый baseline без `add_*`/compatibility migrations.
   В проекте есть compatibility migrations `2026_05_07_*`, `2026_05_08_*`, `2026_06_12_*`.
-- `Устарело` Старый фокус “publication/comments/asset layers” как ближайший общий фокус.
-  Текущий фокус: editor componentization, Chronicle/Atlas polish и стабилизация общих editor-компонентов.
+- `Устарело` Старый фокус “publication/comments/asset layers” и `Chronicle/Atlas polish` как ближайший общий фокус.
+  Текущий фокус: editor componentization и стабилизация общих editor-компонентов без активного развития Атласа.
 - `Устарело` Right-sidebar список сценариев как целевая модель раздела.
   Целевая модель - центральная library workspace с карточками сценариев и группами.
 - `Устарело` “Папки сценариев” как файловая система.

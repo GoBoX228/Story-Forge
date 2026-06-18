@@ -12,6 +12,7 @@ use App\Models\ScenarioTransition;
 use App\Models\User;
 use Database\Seeders\GoBoxContentSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class GoBoxContentSeederTest extends TestCase
@@ -86,8 +87,8 @@ class GoBoxContentSeederTest extends TestCase
 
         $this->assertInstanceOf(ScenarioTransition::class, $reverseTransition);
         $this->assertSame('Отступить к рунам', $reverseTransition->label);
-        $this->assertSame(0, Character::query()->where('user_id', $user->id)->whereNotNull('scenario_id')->count());
-        $this->assertSame(0, Map::query()->where('user_id', $user->id)->whereNotNull('scenario_id')->count());
+        $this->assertFalse(Schema::hasColumn('characters', 'scenario_id'));
+        $this->assertFalse(Schema::hasColumn('maps', 'scenario_id'));
 
         $linkedCharacterIds = EntityLink::query()
             ->where('source_type', EntityLink::TARGET_SCENARIO)

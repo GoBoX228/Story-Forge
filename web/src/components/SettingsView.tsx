@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BaseCard } from './BaseCard';
 import { Button, SectionHeader } from './UI';
-import { Bell, CreditCard, Key, Monitor, Shield } from 'lucide-react';
+import { Bell, Key, Monitor, Shield } from 'lucide-react';
 
 interface TwoFactorChallengePayload {
   challengeToken: string;
@@ -513,21 +513,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
               )}
-            </div>
-          </BaseCard>
-
-          <BaseCard title="ПОДПИСКА" accentColor="#E63946">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <CreditCard className="text-[#E63946]" size={24} />
-                <div>
-                  <div className="mono text-sm uppercase font-black text-[var(--text-main)]">ТАРИФ МАСТЕР</div>
-                  <div className="text-[9px] text-[var(--text-muted)] uppercase mono">Активна до 14.02.2026</div>
-                </div>
-              </div>
-              <Button color="red" size="sm">
-                УПРАВЛЕНИЕ
-              </Button>
             </div>
           </BaseCard>
         </div>

@@ -29,10 +29,12 @@ use App\Http\Controllers\MapController;
 use App\Http\Controllers\PublicationController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ScenarioController;
+use App\Http\Controllers\ScenarioGroupController;
 use App\Http\Controllers\ScenarioNodeEntityLinkController;
 use App\Http\Controllers\ScenarioNodeController;
 use App\Http\Controllers\ScenarioTransitionController;
 use App\Http\Controllers\TagController;
+use App\Http\Controllers\SystemTileController;
 use App\Http\Controllers\WorldEventController;
 use Illuminate\Support\Facades\Route;
 
@@ -68,6 +70,12 @@ Route::middleware(['cookie_auth', 'active_user', 'csrf_cookie'])->group(function
     Route::get('/scenarios/{id}', [ScenarioController::class, 'show']);
     Route::patch('/scenarios/{id}', [ScenarioController::class, 'update']);
     Route::delete('/scenarios/{id}', [ScenarioController::class, 'destroy']);
+
+    Route::get('/scenario-groups', [ScenarioGroupController::class, 'index']);
+    Route::post('/scenario-groups', [ScenarioGroupController::class, 'store']);
+    Route::get('/scenario-groups/{id}', [ScenarioGroupController::class, 'show']);
+    Route::patch('/scenario-groups/{id}', [ScenarioGroupController::class, 'update']);
+    Route::delete('/scenario-groups/{id}', [ScenarioGroupController::class, 'destroy']);
 
     Route::get('/scenarios/{id}/nodes', [ScenarioNodeController::class, 'index']);
     Route::post('/scenarios/{id}/nodes', [ScenarioNodeController::class, 'store']);
@@ -111,6 +119,7 @@ Route::middleware(['cookie_auth', 'active_user', 'csrf_cookie'])->group(function
     Route::delete('/item-groups/{id}', [ItemGroupController::class, 'destroy']);
 
     Route::get('/assets', [AssetController::class, 'index']);
+    Route::get('/system-tiles', [SystemTileController::class, 'index']);
     Route::post('/assets', [AssetController::class, 'store'])->middleware('throttle:asset-upload');
     Route::get('/assets/{id}', [AssetController::class, 'show']);
     Route::patch('/assets/{id}', [AssetController::class, 'update']);

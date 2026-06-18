@@ -25,6 +25,7 @@ import {
   PublicationUpdatePayload,
   PublicationUpsertPayload,
   Scenario,
+  SystemTile,
   Tag,
   TagAssignmentMap,
   TaggableTargetType,
@@ -34,12 +35,25 @@ import {
 import { apiRequest, exportMapPdf } from '../lib/api';
 import { assetCollectionAssignmentKey, entityLinkAssignmentKey, mapMapFromApi, publicationAssignmentKey, tagAssignmentKey } from '../lib/mappers';
 import { buildAssetUsagePayload, findAssetUsageLink, isAssetUsageLink } from '../lib/assetUsage';
+import { drawMapContent, isWithinMapBoundsValue, sanitizeMapObjects } from '../lib/mapRendering';
+import { listSystemTiles } from '../lib/systemTileApi';
 import { TagFilter } from './TagPicker';
 import { AssetUsagePicker } from './AssetUsagePicker';
 import { EditorShell } from './EditorShell';
 import { EditorToolbar, EditorToolbarPosition, createEditorToolbarUtilityGroup, getNextEditorToolbarPosition } from './EditorToolbar';
 import { Modal } from './Modal';
 import { MapSettingsPanel, MapPdfOrientation, MapPdfPageSize } from './map/MapSettingsPanel';
+import { MapThumbnail } from './map/MapThumbnail';
+import {
+  EntityLibraryCard,
+  EntityLibraryContextMenu,
+  EntityLibraryMediaSlot,
+  EntityLibraryWorkspace,
+  type EntityLibraryActionSection,
+  useEntityLibraryContextMenu,
+  useEntityLibraryKeyboard,
+  useEntityLibrarySelection
+} from './entityLibrary';
 import {
   EditorCanvasSize,
   EditorMinimapItem,
@@ -98,6 +112,8 @@ const createId = (prefix: string): string => {
   return `${prefix}-${Date.now().toString(36)}-${Math.floor(Math.random() * 100000).toString(36)}`;
 };
 
+const formatLibraryDate = (value?: string): string => value ? value.split('T')[0] : '-';
+
 const createMapLayer = (type: MapLayerType, order: number, name = DEFAULT_LAYER_NAMES[type]): MapLayer => ({
   id: createId(type),
   type,
@@ -135,24 +151,6 @@ const cloneLayers = (layers: MapLayer[]): MapLayer[] =>
     ...layer,
     objects: layer.objects.map((object) => ({ ...object }))
   }));
-
-const isWithinMapBoundsValue = (x: number, y: number, map: MapData) =>
-  x >= 0 && y >= 0 && x < map.width && y < map.height;
-
-const sanitizeMapObjects = (objects: MapObject[], map: MapData): MapObject[] =>
-  objects
-    .map((obj) => ({
-      ...obj,
-      width: Math.max(1, Number(obj.width ?? 1)),
-      height: Math.max(1, Number(obj.height ?? 1)),
-      rotation: Number.isFinite(Number(obj.rotation)) ? Number(obj.rotation) : 0,
-      opacity: Math.max(0, Math.min(1, Number(obj.opacity ?? 1)))
-    }))
-    .filter((obj) => {
-      const width = Math.max(1, Math.ceil(obj.width ?? 1));
-      const height = Math.max(1, Math.ceil(obj.height ?? 1));
-      return isWithinMapBoundsValue(obj.x, obj.y, map) && obj.x + width <= map.width && obj.y + height <= map.height;
-    });
 
 const sanitizeMapLayers = (layers: MapLayer[], map: MapData): MapLayer[] =>
   layers
@@ -203,16 +201,11 @@ const createMapObject = (
   layerId: layer.id
 });
 
-const BASE_TILE_ASSETS: PaletteAsset[] = [
-  { type: 'wall', label: 'СТЕНА', color: '#888888' },
-  { type: 'floor', label: 'ПОЛ', color: '#222222' },
-  { type: 'water', label: 'ВОДА', color: '#4361EE' },
-  { type: 'lava', label: 'ЛАВА', color: '#E63946' },
-  { type: 'grass', label: 'ТРАВА', color: '#2A9D8F' },
-  { type: 'wood', label: 'ДЕРЕВО', color: '#D4A373' },
-  { type: 'npc', label: 'NPC', color: '#FFC300' },
-  { type: 'loot', label: 'ДОБЫЧА', color: '#8338EC' },
-];
+const PENDING_TILE_ASSET: PaletteAsset = {
+  type: 'system:pending',
+  label: '',
+  color: '#9aa0a6'
+};
 
 interface MapEditorProps {
   data: MapData[];
@@ -276,7 +269,8 @@ const MapEditor: React.FC<MapEditorProps> = ({
   const [selectedTagFilter, setSelectedTagFilter] = useState('');
   const [autosaveState, setAutosaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [selectedTool, setSelectedTool] = useState<ToolType>('pan');
-  const [activeAsset, setActiveAsset] = useState<PaletteAsset>(BASE_TILE_ASSETS[0]);
+  const [activeAsset, setActiveAsset] = useState<PaletteAsset>(PENDING_TILE_ASSET);
+  const [systemTiles, setSystemTiles] = useState<SystemTile[]>([]);
   const [activeLayerId, setActiveLayerId] = useState('tiles');
   const [tokenWidth, setTokenWidth] = useState(1);
   const [tokenHeight, setTokenHeight] = useState(1);
@@ -298,6 +292,43 @@ const MapEditor: React.FC<MapEditorProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageCacheRef = useRef<Record<string, HTMLImageElement>>({});
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapLibrarySelection = useEntityLibrarySelection({ mode: 'multi' });
+  const mapLibraryContextMenu = useEntityLibraryContextMenu();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void listSystemTiles()
+      .then((tiles) => {
+        if (cancelled) return;
+
+        setSystemTiles(tiles);
+        setActiveAsset((current) => {
+          if (current.type !== PENDING_TILE_ASSET.type || tiles.length === 0) {
+            return current;
+          }
+
+          const tile = tiles[0];
+
+          return {
+            type: tile.category,
+            label: tile.name,
+            color: tile.color,
+            assetId: tile.id,
+            imageUrl: tile.url,
+            sourceLabel: tile.setName
+          };
+        });
+      })
+      .catch((error) => {
+        console.error('Failed to load system tiles', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const activeMap = data.find(m => m.id === activeId);
   const activeMapId = activeMap?.id ?? null;
   const sortedLayers = useMemo(
@@ -337,12 +368,14 @@ const MapEditor: React.FC<MapEditorProps> = ({
     [activeMap, assetCollectionAssignments]
   );
   const effectiveBackgroundAssetId = activeMap?.backgroundAssetId ?? findAssetUsageLink(activeMapEntityLinks, 'map_background')?.targetId ?? null;
-  const filteredMaps = data.filter((map) => {
+  const filteredMaps = useMemo(() => data.filter((map) => {
     const matchesSearch = map.name.toLowerCase().includes(searchQuery.toLowerCase());
     const assignedTags = tagAssignments[tagAssignmentKey('map', map.id)] ?? [];
     const matchesTag = !selectedTagFilter || assignedTags.some((tag) => tag.id === selectedTagFilter);
     return matchesSearch && matchesTag;
-  });
+  }), [data, searchQuery, selectedTagFilter, tagAssignments]);
+  const visibleMapIds = useMemo(() => filteredMaps.map((map) => map.id), [filteredMaps]);
+  const visibleMapIdKey = visibleMapIds.join('|');
   const mapCanvasSize = useMemo<EditorCanvasSize>(
     () => activeMap
       ? { width: activeMap.width * activeMap.cellSize, height: activeMap.height * activeMap.cellSize }
@@ -380,18 +413,32 @@ const MapEditor: React.FC<MapEditorProps> = ({
       })));
   }, [activeMap, sortedLayers]);
 
-  const assets = useMemo<PaletteAsset[]>(() => [
-    { type: 'wall', label: 'СТЕНА', color: '#888888' },
-    { type: 'floor', label: 'ПОЛ', color: '#222222' },
-    { type: 'water', label: 'ВОДА', color: '#4361EE' },
-    { type: 'lava', label: 'ЛАВА', color: '#E63946' },
-    { type: 'grass', label: 'ТРАВА', color: '#2A9D8F' },
-    { type: 'wood', label: 'ДЕРЕВО', color: '#D4A373' },
-    { type: 'npc', label: 'NPC', color: '#FFC300' },
-    { type: 'loot', label: 'ДОБЫЧА', color: '#8338EC' },
-  ], []);
-
-  const assetById = useMemo(() => new globalThis.Map(assetsLibrary.map((asset) => [asset.id, asset])), [assetsLibrary]);
+  const systemTileAssets = useMemo<Asset[]>(
+    () => systemTiles.map((tile) => ({
+      id: tile.id,
+      userId: 'system',
+      type: 'image',
+      kind: 'tile',
+      folderId: null,
+      collectionIds: [],
+      name: tile.name,
+      path: null,
+      url: tile.url,
+      mimeType: 'image/png',
+      size: null,
+      metadata: {
+        readonly: true,
+        system: true,
+        category: tile.category,
+        setName: tile.setName
+      }
+    })),
+    [systemTiles]
+  );
+  const assetById = useMemo(
+    () => new globalThis.Map([...assetsLibrary, ...systemTileAssets].map((asset) => [asset.id, asset])),
+    [assetsLibrary, systemTileAssets]
+  );
   const collectionById = useMemo(
     () => new globalThis.Map(assetCollections.map((collection) => [collection.id, collection])),
     [assetCollections]
@@ -419,7 +466,14 @@ const MapEditor: React.FC<MapEditorProps> = ({
   }, [activeMapCollectionIds, collectionById]);
   const paletteAssets = useMemo<PaletteAsset[]>(
     () => [
-      ...assets.map((asset) => ({ ...asset, sourceLabel: 'БАЗА' })),
+      ...systemTiles.map((tile) => ({
+        type: tile.category,
+        label: tile.name,
+        color: tile.color,
+        assetId: tile.id,
+        imageUrl: tile.url,
+        sourceLabel: tile.setName
+      })),
       ...mapScopedAssets
         .filter((asset) => asset.type === 'image' && (asset.kind === 'tile' || asset.kind === 'token'))
         .map((asset) => {
@@ -439,7 +493,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
           };
         })
     ],
-    [activeMapCollectionIds.length, assets, getAssetSourceSetNames, mapScopedAssets]
+    [activeMapCollectionIds.length, getAssetSourceSetNames, mapScopedAssets, systemTiles]
   );
   const activeLayerPaletteAssets = activeLayer?.type === 'tiles'
     ? [
@@ -523,8 +577,7 @@ const MapEditor: React.FC<MapEditorProps> = ({
             width: nextMap.width,
             height: nextMap.height,
             cell_size: nextMap.cellSize,
-            data: serializeMapData(nextMap),
-            scenario_id: nextMap.scenarioId ?? null
+            data: serializeMapData(nextMap)
           })
         });
         setAutosaveState('saved');
@@ -586,16 +639,26 @@ const MapEditor: React.FC<MapEditorProps> = ({
     }
   };
 
-  const deleteMap = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const openMapById = (id: string) => {
+    setActiveId(id);
+    mapLibraryContextMenu.closeContextMenu();
+  };
+
+  const deleteMapById = async (id: string) => {
     if (!confirm('Удалить карту?')) return;
     try {
       await apiRequest(`/maps/${id}`, { method: 'DELETE' });
       onUpdate(data.filter(m => m.id !== id));
       if (activeId === id) setActiveId(null);
+      mapLibrarySelection.clearSelection();
     } catch {
       // ignore
     }
+  };
+
+  const deleteMap = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await deleteMapById(id);
   };
 
   const handleExportMapPdf = async () => {
@@ -620,6 +683,62 @@ const MapEditor: React.FC<MapEditorProps> = ({
       // ignore
     }
   };
+
+  const getMapLibraryContextSections = (): EntityLibraryActionSection[] => {
+    const context = mapLibraryContextMenu.contextMenu;
+    if (!context) return [];
+
+    if (context.kind === 'workspace') {
+      return [
+        {
+          actions: [
+            {
+              id: 'create-map',
+              label: 'Создать карту',
+              icon: <Plus size={13} />,
+              onSelect: () => void handleCreateMap()
+            }
+          ]
+        }
+      ];
+    }
+
+    if (context.kind !== 'item') return [];
+
+    return [
+      {
+        actions: [
+          {
+            id: 'open-map',
+            label: 'Открыть',
+            icon: <Grid size={13} />,
+            onSelect: () => openMapById(context.itemId)
+          }
+        ]
+      },
+      {
+        actions: [
+          {
+            id: 'delete-map',
+            label: 'Удалить',
+            icon: <Trash2 size={13} />,
+            destructive: true,
+            onSelect: () => void deleteMapById(context.itemId)
+          }
+        ]
+      }
+    ];
+  };
+
+  useEntityLibraryKeyboard({
+    enabled: !activeId,
+    contextMenuOpen: Boolean(mapLibraryContextMenu.contextMenu),
+    onCloseContextMenu: mapLibraryContextMenu.closeContextMenu,
+    selectedIds: mapLibrarySelection.selectedIds,
+    onClearSelection: mapLibrarySelection.clearSelection,
+    onOpenSelected: (mapId) => openMapById(mapId),
+    onDeleteSelected: (mapId) => void deleteMapById(mapId)
+  });
 
   const cycleToolbarPosition = () => setToolbarPosition((current) => getNextEditorToolbarPosition(current));
   const handleZoom = (delta: number) => { zoomToScale(clampMapZoom(viewport.scale + delta)); };
@@ -656,58 +775,15 @@ const MapEditor: React.FC<MapEditorProps> = ({
       }
       return image.complete && image.naturalWidth > 0 ? image : null;
     };
-    ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, mapW, mapH);
-    const renderBackgroundLayer = sortedLayers.find((layer) => layer.type === 'background');
-    const backgroundAsset = effectiveBackgroundAssetId ? assetById.get(effectiveBackgroundAssetId) : undefined;
-    if (renderBackgroundLayer?.visible !== false && backgroundAsset?.url) {
-      const image = getCanvasImage(backgroundAsset.url);
-      if (image) {
-        ctx.save();
-        ctx.globalAlpha = renderBackgroundLayer?.opacity ?? 1;
-        ctx.drawImage(image, 0, 0, mapW, mapH);
-        ctx.restore();
-      }
-    }
-
-    const drawObject = (obj: MapObject, layerOpacity: number) => {
-      const p = 1;
-      const cellX = obj.x * activeMap.cellSize + p;
-      const cellY = obj.y * activeMap.cellSize + p;
-      const cellWidth = activeMap.cellSize * Math.max(1, obj.width ?? 1) - p * 2;
-      const cellHeight = activeMap.cellSize * Math.max(1, obj.height ?? 1) - p * 2;
-      const objectAsset = obj.assetId ? assetById.get(obj.assetId) : undefined;
-      const objectImage = objectAsset?.url ? getCanvasImage(objectAsset.url) : null;
-      const objectOpacity = Math.max(0, Math.min(1, obj.opacity ?? 1)) * layerOpacity;
-      const rotation = ((obj.rotation ?? 0) * Math.PI) / 180;
-
-      ctx.save();
-      ctx.globalAlpha = objectOpacity;
-      if (rotation) {
-        ctx.translate(cellX + cellWidth / 2, cellY + cellHeight / 2);
-        ctx.rotate(rotation);
-        ctx.translate(-(cellX + cellWidth / 2), -(cellY + cellHeight / 2));
-      }
-      if (objectImage) {
-        ctx.drawImage(objectImage, cellX, cellY, cellWidth, cellHeight);
-      } else {
-        ctx.fillStyle = obj.color;
-        ctx.fillRect(cellX, cellY, cellWidth, cellHeight);
-      }
-      if (obj.type === 'wall') { ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.strokeRect(cellX, cellY, cellWidth, cellHeight); }
-      ctx.restore();
-    };
-
-    sortedLayers
-      .filter((layer) => layer.visible && layer.type === 'tiles')
-      .forEach((layer) => sanitizeMapObjects(layer.objects, activeMap).forEach((obj) => drawObject(obj, layer.opacity)));
-
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 1;
-    for (let x = 0; x <= activeMap.width; x++) { ctx.beginPath(); ctx.moveTo(x * activeMap.cellSize, 0); ctx.lineTo(x * activeMap.cellSize, mapH); ctx.stroke(); }
-    for (let y = 0; y <= activeMap.height; y++) { ctx.beginPath(); ctx.moveTo(0, y * activeMap.cellSize); ctx.lineTo(mapW, y * activeMap.cellSize); ctx.stroke(); }
-
-    sortedLayers
-      .filter((layer) => layer.visible && layer.type === 'tokens')
-      .forEach((layer) => sanitizeMapObjects(layer.objects, activeMap).forEach((obj) => drawObject(obj, layer.opacity)));
+    drawMapContent({
+      ctx,
+      map: activeMap,
+      layers: sortedLayers,
+      assetById,
+      backgroundAssetId: effectiveBackgroundAssetId,
+      getImage: getCanvasImage,
+      drawBorder: false
+    });
     if (selectedTool === 'rect' && rectStart && rectEnd) {
       const minX = Math.min(rectStart.x, rectEnd.x);
       const minY = Math.min(rectStart.y, rectEnd.y);
@@ -786,6 +862,11 @@ const MapEditor: React.FC<MapEditorProps> = ({
     setActiveId(initialMapId);
     resetViewport();
   }, [initialMapId, data, resetViewport]);
+
+  useEffect(() => {
+    if (activeId) return;
+    mapLibrarySelection.pruneSelection(visibleMapIds);
+  }, [activeId, mapLibrarySelection, visibleMapIdKey, visibleMapIds]);
 
   const getMapCoordinates = (e: React.MouseEvent) => {
     if (!activeMap) return null;
@@ -1017,7 +1098,9 @@ const MapEditor: React.FC<MapEditorProps> = ({
     setActiveAsset(asset);
     setSelectedTool('brush');
 
-    if (asset.assetId) {
+    const selectedLibraryAsset = asset.assetId ? assetById.get(asset.assetId) : undefined;
+
+    if (selectedLibraryAsset?.kind === 'token' && asset.assetId) {
       void setMapAssetUsage('map_token', asset.assetId);
       return;
     }
@@ -1072,21 +1155,148 @@ const MapEditor: React.FC<MapEditorProps> = ({
   };
 
   if (!activeId) {
+    const isMapLibraryFilteredEmpty = data.length > 0 && filteredMaps.length === 0;
+    const mapLibraryEmptyTitle = data.length === 0
+      ? 'Карт пока нет'
+      : isMapLibraryFilteredEmpty
+        ? 'Ничего не найдено'
+        : 'Карт пока нет';
+    const mapLibraryEmptyDescription = data.length === 0
+      ? 'Чтобы создать карту, нажмите правой кнопкой мыши по этой области или используйте кнопку создания.'
+      : isMapLibraryFilteredEmpty
+        ? 'Попробуйте изменить строку поиска или выбранный тег.'
+        : 'Чтобы создать карту, нажмите правой кнопкой мыши по этой области или используйте кнопку создания.';
+
     return (
-      <div className="flex h-full w-full bg-[var(--bg-main)]">
-        <div className="flex-1 flex flex-col min-w-0 bauhaus-bg relative border-r border-[var(--border-color)]">
-           <div className="px-12 pt-12 pb-6 shrink-0 z-10">
-             <div className="mx-auto w-full max-w-7xl">
-               <SectionHeader title="КАРТОГРАФИЧЕСКИЙ ЦЕХ" subtitle="ПРОЕКТИРОВАНИЕ ЛОКАЦИЙ" accentColor={ACCENT_WHITE} />
-             </div>
-           </div>
-           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center opacity-70"><Button variant="secondary" color="white" onClick={handleCreateMap}><Plus size={16} /> СОЗДАТЬ КАРТУ</Button></div>
+      <div className="flex h-full w-full flex-col bg-[var(--bg-main)] bauhaus-bg">
+        <div className="shrink-0 px-8 pb-5 pt-7">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+            <SectionHeader
+              title="Картографический цех"
+              subtitle="Проектирование локаций"
+              accentColor={ACCENT_WHITE}
+            />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="min-w-[260px] flex-1">
+                <SearchInput
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Название..."
+                  accentColor={ACCENT_WHITE}
+                />
+              </div>
+              <div className="min-w-[220px]">
+                <TagFilter
+                  tags={tags}
+                  value={selectedTagFilter}
+                  onChange={setSelectedTagFilter}
+                  accentColor={ACCENT_WHITE}
+                />
+              </div>
+              <div className="flex-1" />
+              <Button variant="secondary" color="white" onClick={handleCreateMap}>
+                <Plus size={16} /> Создать карту
+              </Button>
+            </div>
+          </div>
         </div>
-        <div className="w-80 bg-[var(--bg-surface)] border-l-4 border-[var(--border-color)] flex flex-col p-8 space-y-10 z-10 overflow-y-auto">
-          <h2 className="text-4xl font-black uppercase tracking-tighter text-[var(--text-main)] glitch-text leading-none">АРХИВ КАРТ</h2>
-          <SearchInput value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="НАЗВАНИЕ..." accentColor={ACCENT_WHITE}/>
-          <TagFilter tags={tags} value={selectedTagFilter} onChange={setSelectedTagFilter} accentColor={ACCENT_WHITE} />
-          <div className="flex-1 overflow-y-auto -mx-4 px-4 space-y-1">{filteredMaps.map(map => (<button key={map.id} onClick={() => setActiveId(map.id)} className="w-full text-left p-4 border border-[var(--border-color)] hover:border-[var(--text-main)] hover:bg-[var(--bg-main)] transition-all group relative bg-[var(--bg-surface)]"><div className="flex justify-between items-start"><div className="mono text-[11px] font-black uppercase text-[var(--text-main)] mb-2 group-hover:text-[var(--text-main)] transition-colors truncate pr-6">{map.name}</div></div><div className="flex justify-between items-center border-t border-[var(--border-color)] pt-2 mt-2"><span className="mono text-[9px] text-[var(--text-muted)]">{map.width}x{map.height}</span><div className="flex items-center gap-1 mono text-[9px] text-[var(--text-muted)]"><Grid size={10} /> {map.objects.length} OBJECTS</div></div><div className="absolute right-2 top-2 p-2 opacity-0 group-hover:opacity-100 transition-opacity text-[var(--text-muted)] hover:text-[var(--col-red)]" onClick={(e) => deleteMap(map.id, e)}><Trash2 size={12} /></div></button>))}</div>
+        <div className="min-h-0 flex-1 px-8 pb-8 pt-3">
+          <div className="mx-auto flex h-full w-full max-w-7xl flex-col">
+            <EntityLibraryWorkspace<MapData>
+              items={filteredMaps}
+              getItemId={(map) => map.id}
+              selectedIds={mapLibrarySelection.selectedIds}
+              surface="transparent"
+              framed
+              className="min-h-[420px] flex-1"
+              gridClassName=""
+              onSelectItem={(mapId, _map, event) => mapLibrarySelection.selectFromEvent(mapId, event, visibleMapIds)}
+              onOpenItem={(mapId) => openMapById(mapId)}
+              onClearSelection={mapLibrarySelection.clearSelection}
+              onWorkspaceContextMenu={(context) => {
+                mapLibraryContextMenu.setContextMenu(context);
+              }}
+              onItemContextMenu={(mapId, _map, event) => {
+                if (!mapLibrarySelection.isSelected(mapId)) mapLibrarySelection.replaceSelection(mapId);
+                mapLibraryContextMenu.openItemMenu(event, mapId, null);
+              }}
+              renderItem={(map, state) => {
+                const dateLabel = formatLibraryDate(map.updatedAt ?? map.createdAt);
+                const mapEntityLinks = entityLinks[entityLinkAssignmentKey('map', map.id)] ?? [];
+                const thumbnailBackgroundAssetId = map.backgroundAssetId ?? findAssetUsageLink(mapEntityLinks, 'map_background')?.targetId ?? null;
+                return (
+                  <EntityLibraryCard
+                    title={map.name}
+                    accentColor={ACCENT_WHITE}
+                    selected={state.selected}
+                    cut={state.cut}
+                    dragging={state.dragging}
+                    headerExtra={
+                      <button
+                        type="button"
+                        onClick={(event) => deleteMap(map.id, event)}
+                        className="p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--col-red)]"
+                        title="Удалить карту"
+                        aria-label="Удалить карту"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    }
+                  >
+                    <div className="flex flex-col gap-5">
+                      <div className="space-y-4">
+                        <EntityLibraryMediaSlot
+                          emptyLabel="МИНИАТЮРА КАРТЫ"
+                          accentColor={ACCENT_WHITE}
+                        >
+                          <MapThumbnail
+                            map={map}
+                            assetById={assetById}
+                            backgroundAssetId={thumbnailBackgroundAssetId}
+                          />
+                        </EntityLibraryMediaSlot>
+                        <div className="flex items-center gap-2 mono text-[10px] uppercase font-black text-[var(--text-main)]">
+                          <Grid size={13} />
+                          <span>{map.width} x {map.height}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="border border-[var(--border-color)] bg-[var(--bg-main)]/30 px-3 py-2">
+                            <div className="mono text-[8px] uppercase font-black text-[var(--text-muted)]">Объекты</div>
+                            <div className="mono text-lg font-black text-[var(--text-main)]">{map.objects.length}</div>
+                          </div>
+                          <div className="border border-[var(--border-color)] bg-[var(--bg-main)]/30 px-3 py-2">
+                            <div className="mono text-[8px] uppercase font-black text-[var(--text-muted)]">Слои</div>
+                            <div className="mono text-lg font-black text-[var(--text-main)]">{map.layers.length}</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-3 border-t border-[var(--border-color)] pt-4">
+                        <div className="flex items-center justify-between gap-3 mono text-[9px] uppercase text-[var(--text-muted)]">
+                          <span>{dateLabel}</span>
+                          <span className="font-black text-[var(--text-main)]">MAP</span>
+                        </div>
+                      </div>
+                    </div>
+                  </EntityLibraryCard>
+                );
+              }}
+              emptyTitle={mapLibraryEmptyTitle}
+              emptyDescription={mapLibraryEmptyDescription}
+              emptyAction={
+                isMapLibraryFilteredEmpty ? null : (
+                  <Button variant="secondary" color="white" onClick={handleCreateMap}>
+                    <Plus size={16} /> Создать карту
+                  </Button>
+                )
+              }
+            />
+            <EntityLibraryContextMenu
+              context={mapLibraryContextMenu.contextMenu}
+              sections={getMapLibraryContextSections()}
+              onClose={mapLibraryContextMenu.closeContextMenu}
+              accentColor={ACCENT_WHITE}
+            />
+          </div>
         </div>
       </div>
     );
