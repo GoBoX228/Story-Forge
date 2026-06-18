@@ -123,6 +123,33 @@ const STAT_HINTS: Record<StatKey, string> = {
 };
 
 const EMPTY_CHARACTER: Partial<Character> = { name: '', role: 'NPC', race: 'ЧЕЛОВЕК', description: '', baseStats: { ...EMPTY_STATS }, inventory: [] };
+const DRAFT_TAG_PREFIX = 'draft-tag:';
+
+const normalizeDraftTagName = (name: string): string => name.trim().replace(/\s+/g, ' ');
+const draftTagId = (name: string): string => `${DRAFT_TAG_PREFIX}${encodeURIComponent(normalizeDraftTagName(name).toLowerCase())}`;
+const isDraftTagId = (id: string): boolean => id.startsWith(DRAFT_TAG_PREFIX);
+const draftTagFromName = (name: string): Tag => {
+  const normalized = normalizeDraftTagName(name);
+  return {
+    id: draftTagId(normalized),
+    userId: null,
+    name: normalized,
+    slug: normalized.toLowerCase()
+  };
+};
+
+const uniqueDraftTagNames = (names: string[]): string[] => {
+  const seen = new Set<string>();
+  return names
+    .map(normalizeDraftTagName)
+    .filter(Boolean)
+    .filter((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
 
 const CharactersEditor: React.FC<CharactersEditorProps> = ({
   data,
@@ -158,6 +185,11 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Character>>(EMPTY_CHARACTER);
+  const [draftAssetUsage, setDraftAssetUsage] = useState<{ portrait: string | null; token: string | null }>({
+    portrait: null,
+    token: null
+  });
+  const [draftTags, setDraftTags] = useState<Tag[]>([]);
   const initialCharacterAppliedRef = useRef<string | null>(null);
   const librarySelection = useEntityLibrarySelection({ mode: 'multi' });
   const libraryNavigation = useEntityLibraryNavigation();
@@ -205,7 +237,11 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     role: 'portrait' | 'token',
     assetId: string | null
   ) => {
-    if (!editingId) return;
+    if (!editingId) {
+      setDraftAssetUsage((current) => ({ ...current, [role]: assetId }));
+      return;
+    }
+
     const links = linksForCharacter(editingId);
     const existing = findAssetUsageLink(links, role);
 
@@ -227,13 +263,56 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
 
   const inventorySlots = 12;
 
-  const handleOpenEdit = (char: Character) => { setEditingId(char.id); setFormData({ ...char }); setIsModalOpen(true); };
+  const replaceDraftTags = async (tagIds: string[], newTags: string[] = []): Promise<Tag[]> => {
+    const existingTags = tagIds
+      .filter((id) => !isDraftTagId(id))
+      .map((id) => tags.find((tag) => tag.id === id))
+      .filter((tag): tag is Tag => Boolean(tag));
+    const retainedDraftNames = tagIds
+      .filter(isDraftTagId)
+      .map((id) => draftTags.find((tag) => tag.id === id)?.name)
+      .filter((name): name is string => Boolean(name));
+    const nextDraftTags = uniqueDraftTagNames([...retainedDraftNames, ...newTags]).map(draftTagFromName);
+    const nextTags = [...existingTags, ...nextDraftTags];
+
+    setDraftTags(nextTags);
+
+    return nextTags;
+  };
+
+  const applyCreateDrafts = async (characterId: string) => {
+    if (draftAssetUsage.portrait) {
+      await onCreateMaterialLink('character', characterId, buildAssetUsagePayload(draftAssetUsage.portrait, 'portrait'));
+    }
+    if (draftAssetUsage.token) {
+      await onCreateMaterialLink('character', characterId, buildAssetUsagePayload(draftAssetUsage.token, 'token'));
+    }
+
+    const existingTagIds = draftTags.filter((tag) => !isDraftTagId(tag.id)).map((tag) => tag.id);
+    const newTagNames = draftTags.filter((tag) => isDraftTagId(tag.id)).map((tag) => tag.name);
+    if (existingTagIds.length > 0 || newTagNames.length > 0) {
+      await onReplaceTargetTags('character', characterId, existingTagIds, newTagNames);
+    }
+  };
+
+  const resetCreateDrafts = () => {
+    setDraftAssetUsage({ portrait: null, token: null });
+    setDraftTags([]);
+  };
+
+  const handleOpenEdit = (char: Character) => {
+    resetCreateDrafts();
+    setEditingId(char.id);
+    setFormData({ ...char });
+    setIsModalOpen(true);
+  };
   const handleOpenCreate = () => {
     setEditingId(null);
     setFormData({
       ...EMPTY_CHARACTER,
       groupId: currentGroupId
     });
+    resetCreateDrafts();
     setIsModalOpen(true);
   };
 
@@ -243,6 +322,7 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
     const target = data.find((character) => character.id === initialCharacterId);
     if (!target) return;
     initialCharacterAppliedRef.current = initialCharacterId;
+    resetCreateDrafts();
     setEditingId(target.id);
     setFormData({ ...target });
     setIsModalOpen(true);
@@ -274,7 +354,11 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
           body: JSON.stringify(payload)
         });
         const mapped = mapCharacterFromApi(created);
+        setEditingId(mapped.id);
+        setFormData({ ...mapped });
         onUpdate([...data, mapped]);
+        await applyCreateDrafts(mapped.id);
+        resetCreateDrafts();
       }
       setIsModalOpen(false);
     } catch {
@@ -745,41 +829,35 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
                 onChange={(collectionIds) => onReplaceAssetCollections('character', editingId, collectionIds)}
               />
             )}
-            {editingId && (
-              <div className="mono text-[9px] uppercase text-[var(--text-muted)]">{assetSourceLabelForCharacter(formData)}</div>
-            )}
-            {editingId && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <AssetUsagePicker
-                  label="Портрет"
-                  assets={assets}
-                  value={findAssetUsageLink(linksForCharacter(editingId), 'portrait')?.targetId ?? null}
-                  allowedKinds={['portrait']}
-                  collectionIds={effectiveCollectionIdsForCharacter(formData)}
-                  accentColor={SECTION_ACCENT}
-                  onChange={(assetId) => setCharacterAssetUsage('portrait', assetId)}
-                />
-                <AssetUsagePicker
-                  label="Токен"
-                  assets={assets}
-                  value={findAssetUsageLink(linksForCharacter(editingId), 'token')?.targetId ?? null}
-                  allowedKinds={['token']}
-                  collectionIds={effectiveCollectionIdsForCharacter(formData)}
-                  accentColor={SECTION_ACCENT}
-                  onChange={(assetId) => setCharacterAssetUsage('token', assetId)}
-                />
-              </div>
-            )}
-            {editingId && (
-              <TagPicker
-                allTags={tags}
-                selectedTags={tagAssignments[tagAssignmentKey('character', editingId)] ?? []}
+            <div className="mono text-[9px] uppercase text-[var(--text-muted)]">{assetSourceLabelForCharacter(formData)}</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <AssetUsagePicker
+                label="Портрет"
+                assets={assets}
+                value={editingId ? findAssetUsageLink(linksForCharacter(editingId), 'portrait')?.targetId ?? null : draftAssetUsage.portrait}
+                allowedKinds={['portrait']}
+                collectionIds={effectiveCollectionIdsForCharacter(formData)}
                 accentColor={SECTION_ACCENT}
-                onReplaceTags={(tagIds, newTags) => onReplaceTargetTags('character', editingId, tagIds, newTags)}
-                onUpdateTag={onUpdateTag}
-                onDeleteTag={onDeleteTag}
+                onChange={(assetId) => setCharacterAssetUsage('portrait', assetId)}
               />
-            )}
+              <AssetUsagePicker
+                label="Токен"
+                assets={assets}
+                value={editingId ? findAssetUsageLink(linksForCharacter(editingId), 'token')?.targetId ?? null : draftAssetUsage.token}
+                allowedKinds={['token']}
+                collectionIds={effectiveCollectionIdsForCharacter(formData)}
+                accentColor={SECTION_ACCENT}
+                onChange={(assetId) => setCharacterAssetUsage('token', assetId)}
+              />
+            </div>
+            <TagPicker
+              allTags={tags}
+              selectedTags={editingId ? tagAssignments[tagAssignmentKey('character', editingId)] ?? [] : draftTags}
+              accentColor={SECTION_ACCENT}
+              onReplaceTags={editingId ? (tagIds, newTags) => onReplaceTargetTags('character', editingId, tagIds, newTags) : replaceDraftTags}
+              onUpdateTag={editingId ? onUpdateTag : undefined}
+              onDeleteTag={editingId ? onDeleteTag : undefined}
+            />
             {editingId && (
               <PublicationPanel
                 targetType="character"

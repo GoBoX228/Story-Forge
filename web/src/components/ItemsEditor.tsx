@@ -84,6 +84,33 @@ const STAT_OPTIONS: StatKey[] = ['АТК', 'ЗАЩ', 'СИЛ', 'ЛОВ', 'ВЫН
 const ITEM_TYPE_OPTIONS = [{ value: 'Оружие', label: 'ОРУЖИЕ' }, { value: 'Снаряжение', label: 'СНАРЯЖЕНИЕ' }, { value: 'Артефакт', label: 'АРТЕФАКТ' }, { value: 'Расходник', label: 'РАСХОДНИК' }, { value: 'Прочее', label: 'ПРОЧЕЕ' }];
 const RARITY_OPTIONS = [{ value: 'Обычный', label: 'ОБЫЧНЫЙ' }, { value: 'Необычный', label: 'НЕОБЫЧНЫЙ' }, { value: 'Редкий', label: 'РЕДКИЙ' }, { value: 'Эпический', label: 'ЭПИЧЕСКИЙ' }, { value: 'Легендарный', label: 'ЛЕГЕНДАРНЫЙ' }];
 const EMPTY_ITEM: Partial<Item> = { name: '', type: 'Оружие', rarity: 'Обычный', description: '', modifiers: [], weight: 0, value: 0 };
+const DRAFT_TAG_PREFIX = 'draft-tag:';
+
+const normalizeDraftTagName = (name: string): string => name.trim().replace(/\s+/g, ' ');
+const draftTagId = (name: string): string => `${DRAFT_TAG_PREFIX}${encodeURIComponent(normalizeDraftTagName(name).toLowerCase())}`;
+const isDraftTagId = (id: string): boolean => id.startsWith(DRAFT_TAG_PREFIX);
+const draftTagFromName = (name: string): Tag => {
+  const normalized = normalizeDraftTagName(name);
+  return {
+    id: draftTagId(normalized),
+    userId: null,
+    name: normalized,
+    slug: normalized.toLowerCase()
+  };
+};
+
+const uniqueDraftTagNames = (names: string[]): string[] => {
+  const seen = new Set<string>();
+  return names
+    .map(normalizeDraftTagName)
+    .filter(Boolean)
+    .filter((name) => {
+      const key = name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+};
 
 const ItemsEditor: React.FC<ItemsEditorProps> = ({
   data,
@@ -122,6 +149,8 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   const [sortOrder, setSortOrder] = useState<string>('NAME_ASC');
   const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState<Partial<Item>>(EMPTY_ITEM);
+  const [draftItemImageId, setDraftItemImageId] = useState<string | null>(null);
+  const [draftTags, setDraftTags] = useState<Tag[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const initialItemAppliedRef = useRef<string | null>(null);
@@ -159,7 +188,11 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
   };
 
   const setItemAssetUsage = async (assetId: string | null) => {
-    if (!editingId) return;
+    if (!editingId) {
+      setDraftItemImageId(assetId);
+      return;
+    }
+
     const links = linksForItem(editingId);
     const existing = findAssetUsageLink(links, 'item_image');
 
@@ -185,9 +218,17 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
       ...EMPTY_ITEM,
       groupId: currentGroupId
     });
+    setDraftItemImageId(null);
+    setDraftTags([]);
     setIsModalOpen(true);
   };
-  const openEditModal = (item: Item) => { setEditingId(item.id); setFormData({ ...item }); setIsModalOpen(true); };
+  const openEditModal = (item: Item) => {
+    setDraftItemImageId(null);
+    setDraftTags([]);
+    setEditingId(item.id);
+    setFormData({ ...item });
+    setIsModalOpen(true);
+  };
 
   useEffect(() => {
     if (!initialItemId) return;
@@ -195,10 +236,41 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
     const target = data.find((item) => item.id === initialItemId);
     if (!target) return;
     initialItemAppliedRef.current = initialItemId;
+    setDraftItemImageId(null);
+    setDraftTags([]);
     setEditingId(target.id);
     setFormData({ ...target });
     setIsModalOpen(true);
   }, [data, initialItemId]);
+
+  const replaceDraftTags = async (tagIds: string[], newTags: string[] = []): Promise<Tag[]> => {
+    const existingTags = tagIds
+      .filter((id) => !isDraftTagId(id))
+      .map((id) => tags.find((tag) => tag.id === id))
+      .filter((tag): tag is Tag => Boolean(tag));
+    const retainedDraftNames = tagIds
+      .filter(isDraftTagId)
+      .map((id) => draftTags.find((tag) => tag.id === id)?.name)
+      .filter((name): name is string => Boolean(name));
+    const nextDraftTags = uniqueDraftTagNames([...retainedDraftNames, ...newTags]).map(draftTagFromName);
+    const nextTags = [...existingTags, ...nextDraftTags];
+
+    setDraftTags(nextTags);
+
+    return nextTags;
+  };
+
+  const applyCreateDrafts = async (itemId: string) => {
+    if (draftItemImageId) {
+      await onCreateMaterialLink('item', itemId, buildAssetUsagePayload(draftItemImageId, 'item_image'));
+    }
+
+    const existingTagIds = draftTags.filter((tag) => !isDraftTagId(tag.id)).map((tag) => tag.id);
+    const newTagNames = draftTags.filter((tag) => isDraftTagId(tag.id)).map((tag) => tag.name);
+    if (existingTagIds.length > 0 || newTagNames.length > 0) {
+      await onReplaceTargetTags('item', itemId, existingTagIds, newTagNames);
+    }
+  };
 
   const buildPayload = (): Omit<Item, 'id'> => ({
     name: String(formData.name ?? '').trim().toUpperCase(),
@@ -249,7 +321,12 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
           onUpdate(data.map(item => item.id === editingId ? { ...payload, id: editingId } : item));
         }
       } else if (onCreateItem) {
-        await onCreateItem(payload);
+        const created = await onCreateItem(payload);
+        setEditingId(created.id);
+        setFormData({ ...created });
+        await applyCreateDrafts(created.id);
+        setDraftItemImageId(null);
+        setDraftTags([]);
       } else {
         onUpdate([...data, { ...payload, id: Math.random().toString(36).substr(2, 9) }]);
       }
@@ -709,30 +786,24 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
               onChange={(collectionIds) => onReplaceAssetCollections('item', editingId, collectionIds)}
             />
           )}
-          {editingId && (
-            <div className="mono text-[9px] uppercase text-[var(--text-muted)]">{assetSourceLabelForItem(formData)}</div>
-          )}
-          {editingId && (
-            <AssetUsagePicker
-              label="Изображение предмета"
-              assets={assets}
-              value={findAssetUsageLink(linksForItem(editingId), 'item_image')?.targetId ?? null}
-              allowedKinds={['item_image']}
-              collectionIds={effectiveCollectionIdsForItem(formData)}
-              accentColor={currentRarityAccent}
-              onChange={setItemAssetUsage}
-            />
-          )}
-          {editingId && (
-            <TagPicker
-              allTags={tags}
-              selectedTags={tagAssignments[tagAssignmentKey('item', editingId)] ?? []}
-              accentColor={currentRarityAccent}
-              onReplaceTags={(tagIds, newTags) => onReplaceTargetTags('item', editingId, tagIds, newTags)}
-              onUpdateTag={onUpdateTag}
-              onDeleteTag={onDeleteTag}
-            />
-          )}
+          <div className="mono text-[9px] uppercase text-[var(--text-muted)]">{assetSourceLabelForItem(formData)}</div>
+          <AssetUsagePicker
+            label="Изображение предмета"
+            assets={assets}
+            value={editingId ? findAssetUsageLink(linksForItem(editingId), 'item_image')?.targetId ?? null : draftItemImageId}
+            allowedKinds={['item_image']}
+            collectionIds={effectiveCollectionIdsForItem(formData)}
+            accentColor={currentRarityAccent}
+            onChange={setItemAssetUsage}
+          />
+          <TagPicker
+            allTags={tags}
+            selectedTags={editingId ? tagAssignments[tagAssignmentKey('item', editingId)] ?? [] : draftTags}
+            accentColor={currentRarityAccent}
+            onReplaceTags={editingId ? (tagIds, newTags) => onReplaceTargetTags('item', editingId, tagIds, newTags) : replaceDraftTags}
+            onUpdateTag={editingId ? onUpdateTag : undefined}
+            onDeleteTag={editingId ? onDeleteTag : undefined}
+          />
           {editingId && (
             <PublicationPanel
               targetType="item"

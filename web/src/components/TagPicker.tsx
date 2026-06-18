@@ -137,14 +137,16 @@ export const TagPicker: React.FC<TagPickerProps> = ({
                   #{tag.name}
                 </span>
               )}
-              {renamingTagId === tag.id ? (
-                <button type="button" onClick={() => void saveRename()} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
-                  <Plus size={11} />
-                </button>
-              ) : (
-                <button type="button" onClick={() => startRename(tag)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
-                  <Edit3 size={10} />
-                </button>
+              {onUpdateTag && (
+                renamingTagId === tag.id ? (
+                  <button type="button" onClick={() => void saveRename()} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
+                    <Plus size={11} />
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => startRename(tag)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
+                    <Edit3 size={10} />
+                  </button>
+                )
               )}
               <button type="button" onClick={() => void removeTag(tag.id)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
                 <X size={11} />
