@@ -31,7 +31,6 @@ import {
   Database,
   Download,
   FileText,
-  HardDrive,
   Lock,
   Map as MapIcon,
   Megaphone,
@@ -40,7 +39,6 @@ import {
   RefreshCw,
   Server,
   Shield,
-  Terminal,
   Trash2,
   Unlock,
   Users,
@@ -407,20 +405,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onContentDele
     }
   };
 
-  const createSystemDump = () => {
-    const payload = {
-      generated_at: new Date().toISOString(),
-      overview,
-      users,
-      reports,
-      content,
-      logs,
-      broadcasts,
-    };
-    downloadData(`kuznica-admin-dump-${Date.now()}.json`, 'application/json', JSON.stringify(payload, null, 2));
-    showNotice('Снимок экспортирован');
-  };
-
   const userRows = useMemo(() => {
     return users.map((user) => {
       const draft = userDrafts[String(user.id)] ?? { role: user.role, status: user.status };
@@ -559,42 +543,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ currentUser, onContentDele
               </div>
 
               <div className="space-y-6">
-                <BaseCard title="БЫСТРЫЕ ДЕЙСТВИЯ" accentColor="var(--col-red)" className="!h-auto">
-                  <div className="space-y-3 pb-2">
-                    <Button
-                      className="w-full justify-start"
-                      color="red"
-                      inverted
-                      onClick={() => showNotice('РЕЖИМ ЧП АКТИВИРОВАН', 'WARN')}
-                    >
-                      <Shield size={16} className="mr-2" />
-                      РЕЖИМ ЧП
-                    </Button>
-                    <Button
-                      className="w-full justify-start"
-                      color="yellow"
-                      inverted
-                      onClick={() => showNotice('РЕГИСТРАЦИИ ЗАМОРОЖЕНЫ', 'WARN')}
-                    >
-                      <Lock size={16} className="mr-2" />
-                      ЗАМОРОЗКА РЕГИСТРАЦИЙ
-                    </Button>
-                    <Button className="w-full justify-start" color="purple" inverted onClick={createSystemDump}>
-                      <HardDrive size={16} className="mr-2" />
-                      СОЗДАТЬ БЭКАП
-                    </Button>
-                    <Button
-                      className="w-full justify-start"
-                      color="grey"
-                      inverted
-                      onClick={() => showNotice('КЭШ ОЧИЩЕН', 'SUCCESS')}
-                    >
-                      <Terminal size={16} className="mr-2" />
-                      ОЧИСТИТЬ КЭШ
-                    </Button>
-                  </div>
-                </BaseCard>
-
                 <BaseCard title="СВОДКА" accentColor="var(--col-blue)" className="!h-auto">
                   <div className="mono text-[10px] uppercase space-y-2 pb-2">
                     <div className="flex justify-between">

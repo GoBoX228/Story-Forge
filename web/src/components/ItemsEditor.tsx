@@ -31,6 +31,7 @@ import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink } from '.
 import { TagFilter, TagPicker } from './TagPicker';
 import { AssetUsagePicker } from './AssetUsagePicker';
 import { AssetCollectionTargetPicker } from './AssetCollectionTargetPicker';
+import { AssetCollectionTargetSelect } from './AssetCollectionTargetSelect';
 import { PublicationPanel } from './PublicationPanel';
 import { ClipboardPaste, Coins, Edit3, FolderOpen, FolderPlus, Pencil, Scale, Scissors, Trash2, X, Zap, Plus } from 'lucide-react';
 import {
@@ -600,6 +601,15 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
                 Все предметы
               </button>
             )}
+            {!libraryIsRoot && currentItemGroup && (
+              <AssetCollectionTargetSelect
+                label="Набор ассетов группы"
+                collections={assetCollections}
+                value={collectionIdsForItemGroup(currentItemGroup.id)}
+                accentColor={SECTION_ACCENT}
+                onChange={(collectionIds) => onReplaceAssetCollections('item_group', currentItemGroup.id, collectionIds)}
+              />
+            )}
             <div className="flex-1" />
             <Button color="blue" onClick={openCreateModal}><Plus size={18} /> СОЗДАТЬ ПРЕДМЕТ</Button>
           </div>
@@ -768,15 +778,6 @@ const ItemsEditor: React.FC<ItemsEditorProps> = ({
             <div className="space-y-3">{(formData.modifiers && formData.modifiers.length > 0) ? (formData.modifiers.map((mod, idx) => (<div key={idx} className="flex gap-4 items-center animate-appear relative" style={{ zIndex: 100 - idx }}><div className="flex-[3]"><Select value={mod.stat} onChange={val => updateModifier(idx, 'stat', val as StatKey)} accentColor={currentRarityAccent} options={STAT_OPTIONS.map(opt => ({ value: opt, label: opt }))}/></div><div className="flex-1"><Input type="number" className="h-10 px-3 text-center border-2 font-black" value={mod.value} onChange={e => updateModifier(idx, 'value', parseInt(e.target.value) || 0)} accentColor={currentRarityAccent}/></div><button onClick={() => removeModifier(idx)} className="w-10 h-10 shrink-0 border-2 border-[var(--border-color)] flex items-center justify-center hover:border-[var(--col-red)] hover:text-[var(--col-red)] transition-all bg-[var(--bg-main)] active:scale-90 text-[var(--text-muted)]"><Trash2 size={16} /></button></div>))) : (<div className="py-8 border-2 border-dashed flex flex-col items-center justify-center gap-2 bauhaus-bg" style={{ borderColor: `color-mix(in srgb, ${currentRarityAccent} 20%, transparent)` }}><Zap size={16} className="text-[var(--text-muted)]" /><p className="mono text-[9px] uppercase font-black tracking-[0.2em] text-[var(--text-muted)] text-center px-4 leading-relaxed">СПИСОК МОДИФИКАТОРОВ ПУСТ.<br/>НАЖМИТЕ «ДОБАВИТЬ» ДЛЯ НАСТРОЙКИ ХАРАКТЕРИСТИК.</p></div>)}</div>
           </div>
           <div className="grid grid-cols-2 gap-6 border-t border-[var(--border-color)] pt-8 mt-4"><div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Вес (КГ)</label><Input type="number" step="0.1" className="h-10 border-2 font-black" value={formData.weight} onChange={e => setFormData({...formData, weight: parseFloat(e.target.value) || 0})} accentColor={currentRarityAccent} /></div><div className="space-y-1.5"><label className="mono text-[10px] uppercase block font-black tracking-[0.2em] text-[var(--text-muted)]">Цена (GP)</label><Input type="number" className="h-10 border-2 font-black" value={formData.value} onChange={e => setFormData({...formData, value: parseInt(e.target.value) || 0})} accentColor={currentRarityAccent} /></div></div>
-          {editingId && formData.groupId && (
-            <AssetCollectionTargetPicker
-              label="Наборы ассетов группы"
-              collections={assetCollections}
-              value={collectionIdsForItemGroup(formData.groupId)}
-              accentColor={currentRarityAccent}
-              onChange={(collectionIds) => onReplaceAssetCollections('item_group', formData.groupId!, collectionIds)}
-            />
-          )}
           {editingId && !formData.groupId && collectionIdsForItem(editingId).length > 0 && (
             <AssetCollectionTargetPicker
               label="Прямые наборы карточки"

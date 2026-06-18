@@ -31,6 +31,7 @@ import { buildAssetUsagePayload, findAssetForUsage, findAssetUsageLink } from '.
 import { TagFilter, TagPicker } from './TagPicker';
 import { AssetUsagePicker } from './AssetUsagePicker';
 import { AssetCollectionTargetPicker } from './AssetCollectionTargetPicker';
+import { AssetCollectionTargetSelect } from './AssetCollectionTargetSelect';
 import { PublicationPanel } from './PublicationPanel';
 import {
   ClipboardPaste,
@@ -628,6 +629,15 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
                 Все персонажи
               </button>
             )}
+            {!libraryIsRoot && currentCharacterGroup && (
+              <AssetCollectionTargetSelect
+                label="Набор ассетов группы"
+                collections={assetCollections}
+                value={collectionIdsForCharacterGroup(currentCharacterGroup.id)}
+                accentColor={SECTION_ACCENT}
+                onChange={(collectionIds) => onReplaceAssetCollections('character_group', currentCharacterGroup.id, collectionIds)}
+              />
+            )}
             <div className="flex-1" />
             <Button color="yellow" onClick={handleOpenCreate}><UserPlus size={16} /> НОВЫЙ ГЕРОЙ</Button>
           </div>
@@ -811,15 +821,6 @@ const CharactersEditor: React.FC<CharactersEditorProps> = ({
               </div>
             </div>
             <div className="space-y-1.5"><label className="mono text-[9px] uppercase font-black text-[var(--text-muted)]">История</label><TextArea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="h-24" accentColor={SECTION_ACCENT} /></div>
-            {editingId && formData.groupId && (
-              <AssetCollectionTargetPicker
-                label="Наборы ассетов персонажа"
-                collections={assetCollections}
-                value={collectionIdsForCharacterGroup(formData.groupId)}
-                accentColor={SECTION_ACCENT}
-                onChange={(collectionIds) => onReplaceAssetCollections('character_group', formData.groupId!, collectionIds)}
-              />
-            )}
             {editingId && !formData.groupId && collectionIdsForCharacter(editingId).length > 0 && (
               <AssetCollectionTargetPicker
                 label="Прямые наборы карточки"
