@@ -39,19 +39,8 @@ class SystemTileCatalogTest extends TestCase
             'https://story-forge.test/system/tiles/core/v1/water.png',
             $catalog->resolveUrl('system:tile:core:v1:water', 'https://story-forge.test')
         );
-        $this->assertStringStartsWith(
-            'file://',
-            (string) $catalog->resolveLocalUri('system:tile:core:v1:water')
-        );
-        $this->assertStringEndsWith(
-            '/system/tiles/core/v1/water.png',
-            (string) $catalog->resolveLocalUri('system:tile:core:v1:water')
-        );
         $this->assertNull(
             $catalog->resolveUrl('system:tile:core:v1:../../secret', 'https://story-forge.test')
-        );
-        $this->assertNull(
-            $catalog->resolveLocalUri('system:tile:core:v1:../../secret')
         );
     }
 }

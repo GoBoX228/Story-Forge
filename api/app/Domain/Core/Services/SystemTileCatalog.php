@@ -41,21 +41,6 @@ class SystemTileCatalog
         return is_array($tile) ? $this->tileUrl($tile, $baseUrl) : null;
     }
 
-    public function resolveLocalUri(string $id): ?string
-    {
-        $tile = $this->tileById($id);
-        if (!is_array($tile)) {
-            return null;
-        }
-
-        $path = $this->tilePath($tile);
-        if (!is_file($path)) {
-            return null;
-        }
-
-        return $this->fileUri($path);
-    }
-
     /**
      * @return array<string, mixed>
      */
@@ -102,21 +87,4 @@ class SystemTileCatalog
         return is_array($tile) ? $tile : null;
     }
 
-    /**
-     * @param array<string, mixed> $tile
-     */
-    private function tilePath(array $tile): string
-    {
-        return public_path('system/tiles/core/v1/' . basename((string) ($tile['file'] ?? '')));
-    }
-
-    private function fileUri(string $path): string
-    {
-        $normalized = str_replace('\\', '/', $path);
-        if (preg_match('/^[A-Za-z]:\//', $normalized) === 1) {
-            $normalized = '/' . $normalized;
-        }
-
-        return 'file://' . str_replace('%2F', '/', rawurlencode($normalized));
-    }
 }

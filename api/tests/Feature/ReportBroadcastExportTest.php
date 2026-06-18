@@ -969,8 +969,7 @@ class ReportBroadcastExportTest extends TestCase
                         && str_contains($html, 'System Water')
                         && str_contains($html, 'https://example.test/storage/background.png')
                         && str_contains($html, 'https://example.test/storage/tile.png')
-                        && str_contains($html, 'file://')
-                        && str_contains($html, '/system/tiles/core/v1/water.png')
+                        && str_contains($html, rtrim((string) config('app.url'), '/') . '/system/tiles/core/v1/water.png')
                         && !str_contains($html, 'Hidden Tile')
                         && !str_contains($html, 'https://example.test/storage/foreign.png');
                 }), \Mockery::type('string'), \Mockery::type('string'))

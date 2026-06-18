@@ -14,9 +14,6 @@ class GenerateMapPdfAction
             ->showBackground()
             ->margins(0, 0, 0, 0)
             ->noSandbox()
-            ->addChromiumArguments([
-                'allow-file-access-from-files',
-            ])
             ->setChromePath(env('CHROME_PATH', '/usr/bin/chromium'))
             ->pdf();
     }
